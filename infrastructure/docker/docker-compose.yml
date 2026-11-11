@@ -1,0 +1,58 @@
+name: ipkrh
+
+services:
+  postgres:
+    image: postgres:16-alpine
+    container_name: ipkrh-postgres
+    restart: unless-stopped
+    environment:
+      POSTGRES_DB: ${POSTGRES_DB:?POSTGRES_DB must be set in .env}
+      POSTGRES_USER: ${POSTGRES_USER:?POSTGRES_USER must be set in .env}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?POSTGRES_PASSWORD must be set in .env}
+    ports:
+      - "127.0.0.1:${POSTGRES_PORT:-5432}:5432"
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U \"$${POSTGRES_USER}\" -d \"$${POSTGRES_DB}\""]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 10s
+    networks:
+      - ipkrh_network
+
+  chromadb:
+    image: chromadb/chroma:latest
+    container_name: ipkrh-chromadb
+    restart: unless-stopped
+    ports:
+      - "127.0.0.1:${CHROMA_PORT:-8001}:8000"
+    volumes:
+      - chroma_data:/data
+    # Note: chromadb/chroma:latest (chroma 1.4.4) does not include built-in token auth;
+    # access is restricted locally via 127.0.0.1 binding and the internal Docker network.
+    # For shared/production deployments, enforce CHROMA_AUTH_TOKEN via a reverse proxy.
+    healthcheck:
+      test:
+        [
+          "CMD-SHELL",
+          "bash -c 'exec 3<>/dev/tcp/127.0.0.1/8000 && printf \"GET /api/v2/heartbeat HTTP/1.0\\r\\nHost: localhost\\r\\n\\r\\n\" >&3 && cat <&3 | grep -q \"nanosecond heartbeat\"'",
+        ]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 10s
+    networks:
+      - ipkrh_network
+
+networks:
+  ipkrh_network:
+    name: ipkrh_network
+    driver: bridge
+
+volumes:
+  postgres_data:
+    name: ipkrh_postgres_data
+  chroma_data:
+    name: ipkrh_chroma_data
