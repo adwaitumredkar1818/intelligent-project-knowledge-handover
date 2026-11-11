@@ -1,0 +1,72 @@
+[project]
+name = "ipkrh-backend"
+version = "0.1.0"
+description = "Backend and worker runtime for the Intelligent Project Knowledge Reconstruction & Handover Platform."
+readme = "../README.md"
+requires-python = ">=3.11,<3.12"
+
+# Core Phase 1.2 runtime baseline (installed in backend/.venv)
+dependencies = [
+    "fastapi>=0.115.0,<1.0.0",
+    "uvicorn[standard]>=0.32.0,<1.0.0",
+    "pydantic>=2.9.0,<3.0.0",
+    "pydantic-settings>=2.6.0,<3.0.0",
+    "sqlalchemy>=2.0.36,<3.0.0",
+    "psycopg[binary]>=3.2.0,<4.0.0",
+    "alembic>=1.14.0,<2.0.0",
+    "httpx>=0.27.0,<1.0.0",
+    "python-dotenv>=1.0.1,<2.0.0",
+    "pyjwt>=2.9.0,<3.0.0",
+    "pwdlib[argon2]>=0.2.1,<1.0.0",
+]
+
+# Separated optional dependency groups for later implementation phases.
+# Do NOT install heavyweight or phase-specific groups until their phase begins.
+[project.optional-dependencies]
+documents = [
+    "pymupdf>=1.24.0,<2.0.0",
+    "python-docx>=1.1.2,<2.0.0",
+    "python-multipart>=0.0.12,<1.0.0",
+]
+embeddings-rag = [
+    "chromadb-client>=1.0.0,<2.0.0",
+]
+integrations-security = [
+    "cryptography>=43.0.0",
+]
+worker = [
+    # Lightweight worker relies primarily on SQLAlchemy 2.x + Psycopg 3 in base dependencies.
+    # Add targeted worker utilities here only when needed (no Redis or Celery).
+]
+dev = [
+    "pytest>=8.3.0,<9.0.0",
+    "ruff>=0.8.0,<1.0.0",
+    "mypy>=1.13.0,<2.0.0",
+]
+
+[tool.ruff]
+target-version = "py311"
+line-length = 100
+src = ["."]
+
+[tool.ruff.lint]
+select = ["E", "F", "I", "B", "UP", "S"]
+
+[tool.ruff.lint.isort]
+known-first-party = ["app", "tests"]
+
+[tool.ruff.lint.per-file-ignores]
+"tests/*.py" = ["S101", "S105", "S106"]
+"tests/**/*.py" = ["S101", "S105", "S106"]
+
+[tool.mypy]
+python_version = "3.11"
+mypy_path = "."
+strict = true
+plugins = ["pydantic.mypy"]
+exclude = ["^\\.venv/"]
+
+[tool.pytest.ini_options]
+pythonpath = ["."]
+testpaths = ["tests"]
+addopts = "-q"
