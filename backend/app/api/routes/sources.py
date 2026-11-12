@@ -62,6 +62,11 @@ class SourceConnectionItemResponse(BaseSchema):
     created_at: datetime
 
 
+class SourceConnectionListResponse(BaseSchema):
+    items: list[SourceConnectionItemResponse]
+    total: int
+
+
 class CreateSourceMappingRequest(BaseSchema):
     source_connection_id: uuid.UUID
     external_resource_id: str
@@ -173,6 +178,39 @@ def create_organisation_source(
         is_shared=payload.is_shared,
         created_at=conn.created_at,
     )
+
+
+@router.get(
+    "/organisations/{organisation_id}/sources",
+    response_model=SourceConnectionListResponse,
+    status_code=status.HTTP_200_OK,
+    summary="List connected sources for an organisation",
+)
+def list_organisation_sources(
+    organisation_id: uuid.UUID,
+    principal: Annotated[AuthenticatedPrincipal, Depends(get_current_principal)],
+    session=Depends(get_db_session),
+) -> SourceConnectionListResponse:
+    from sqlalchemy import select
+
+    stmt = select(SourceConnection).where(
+        SourceConnection.organisation_id == organisation_id,
+        SourceConnection.status == "active",
+    )
+    connections = session.execute(stmt).scalars().all()
+    items = [
+        SourceConnectionItemResponse(
+            id=c.id,
+            organisation_id=c.organisation_id,
+            provider=c.provider,
+            display_name=c.display_name,
+            status=c.status,
+            is_shared=bool((c.metadata_json or {}).get("is_shared", False)),
+            created_at=c.created_at,
+        )
+        for c in connections
+    ]
+    return SourceConnectionListResponse(items=items, total=len(items))
 
 
 @router.patch(
