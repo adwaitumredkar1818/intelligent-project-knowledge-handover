@@ -8,6 +8,7 @@ import signal
 import time
 import uuid
 from types import FrameType
+from typing import Any
 
 from sqlalchemy import Engine
 

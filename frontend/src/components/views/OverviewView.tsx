@@ -125,23 +125,23 @@ export function OverviewView() {
           </div>
           <div className="flex items-baseline gap-2">
             <span className="text-2xl font-bold text-[#25334B]">
-              {overview?.readiness.overall_readiness_pct ?? 0}%
+              {overview?.readiness?.overall_readiness_pct ?? 0}%
             </span>
             <span className="text-[11px] font-semibold text-[#249E91] uppercase">
-              {overview?.readiness.status || "In Preparation"}
+              {overview?.readiness?.status || "In Preparation"}
             </span>
           </div>
           {/* Progress bar */}
           <div className="w-full bg-[#E8EEF5] h-1.5 rounded-full mt-3 overflow-hidden">
             <div
               className="bg-[#249E91] h-full rounded-full transition-all duration-500"
-              style={{ width: `${overview?.readiness.overall_readiness_pct ?? 0}%` }}
+              style={{ width: `${overview?.readiness?.overall_readiness_pct ?? 0}%` }}
             />
           </div>
           <div className="mt-2.5 text-[11px] text-[#69778D] flex items-center justify-between">
             <span>Target: {activeProject.target_handover_date ? new Date(activeProject.target_handover_date).toLocaleDateString() : "Flexible"}</span>
-            {overview?.readiness.days_remaining !== null && (
-              <span>{overview?.readiness.days_remaining}d remaining</span>
+            {overview?.readiness?.days_remaining != null && (
+              <span>{overview.readiness.days_remaining}d remaining</span>
             )}
           </div>
         </div>
@@ -154,14 +154,14 @@ export function OverviewView() {
           </div>
           <div className="flex items-baseline gap-2">
             <span className="text-2xl font-bold text-[#25334B]">
-              {overview?.sources.connected_count ?? 0}
+              {overview?.sources?.connected_count ?? 0}
             </span>
             <span className="text-[11px] text-[#69778D]">active mappings</span>
           </div>
           <div className="mt-4 pt-2 border-t border-[#DCE3EB] flex items-center justify-between text-[11px] text-[#69778D]">
-            <span>Synced: {overview?.sources.active_count ?? 0}</span>
-            <span className={overview?.sources.failed_count ? "text-rose-600 font-semibold" : ""}>
-              Issues: {overview?.sources.failed_count ?? 0}
+            <span>Synced: {overview?.sources?.active_count ?? 0}</span>
+            <span className={overview?.sources?.failed_count ? "text-rose-600 font-semibold" : ""}>
+              Issues: {overview?.sources?.failed_count ?? 0}
             </span>
           </div>
         </div>
@@ -174,10 +174,10 @@ export function OverviewView() {
           </div>
           <div className="flex items-baseline gap-2">
             <span className="text-2xl font-bold text-[#25334B]">
-              {overview?.evidence.total_evidence_items ?? 0}
+              {overview?.evidence?.total_evidence_items ?? 0}
             </span>
             <span className="text-[11px] text-[#249E91] font-medium">
-              {overview?.evidence.indexed_chunks_count ?? 0} chunks
+              {overview?.evidence?.indexed_chunks_count ?? 0} chunks
             </span>
           </div>
           <div className="mt-4 pt-2 border-t border-[#DCE3EB] flex items-center justify-between text-[11px] text-[#69778D]">
@@ -194,7 +194,7 @@ export function OverviewView() {
           </div>
           <div className="flex items-baseline gap-2">
             <span className="text-2xl font-bold text-[#25334B]">
-              {(overview?.knowledge.decisions_count ?? 0) + (overview?.knowledge.tasks_count ?? 0) + (overview?.knowledge.risks_count ?? 0)}
+              {(overview?.knowledge?.decisions_count ?? 0) + (overview?.knowledge?.tasks_count ?? 0) + (overview?.knowledge?.risks_count ?? 0)}
             </span>
             <span className="text-[11px] text-[#69778D]">extracted entities</span>
           </div>

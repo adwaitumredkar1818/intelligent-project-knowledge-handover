@@ -163,7 +163,79 @@ export const api = {
       return request<Project>(`/projects/${projectId}`);
     },
     async getOverview(projectId: string): Promise<ProjectOverview> {
-      return request<ProjectOverview>(`/projects/${projectId}/overview`);
+      const raw = await request<any>(`/projects/${projectId}/overview`);
+      if (raw && raw.readiness && raw.sources) {
+        return raw as ProjectOverview;
+      }
+      const summary = raw?.project_summary || {};
+      const connSources = raw?.connected_sources || {};
+      const evidOverview = raw?.evidence_overview || {};
+      const knowOverview = raw?.knowledge_overview || {};
+      const attention = raw?.attention_required || raw?.attention_items || [];
+      const activity = raw?.recent_activity || [];
+
+      const totalEvid = evidOverview.total_records || 0;
+      const totalSources = connSources.total_sources || 0;
+      let readinessPct = 10;
+      if (totalSources > 0) readinessPct += 20;
+      if (totalEvid > 0) readinessPct += 30;
+      if ((knowOverview.decisions_count || 0) > 0 || (knowOverview.tasks_count || 0) > 0) {
+        readinessPct += 40;
+      }
+      readinessPct = Math.min(readinessPct, 100);
+
+      const targetDate = summary.target_completion_date || null;
+      let daysRemaining: number | null = null;
+      if (targetDate) {
+        const diffMs = new Date(targetDate).getTime() - Date.now();
+        daysRemaining = Math.max(0, Math.ceil(diffMs / (1000 * 60 * 60 * 24)));
+      }
+
+      return {
+        project_id: summary.project_id || projectId,
+        project_name: summary.name || "",
+        status: summary.status || "active",
+        target_handover_date: targetDate,
+        readiness: {
+          overall_readiness_pct: readinessPct,
+          status: readinessPct >= 80 ? "Ready for Review" : readinessPct >= 40 ? "Reconstruction Active" : "In Preparation",
+          target_date: targetDate,
+          days_remaining: daysRemaining,
+        },
+        sources: {
+          connected_count: totalSources,
+          active_count: (connSources.active_providers || []).length,
+          failed_count: connSources.health_status === "error" || connSources.health_status === "failed" ? 1 : 0,
+          total_resources: totalSources,
+        },
+        evidence: {
+          total_evidence_items: totalEvid,
+          indexed_chunks_count: evidOverview.document_count || totalEvid,
+          last_ingested_at: null,
+          providers_breakdown: evidOverview.by_provider || {},
+        },
+        knowledge: {
+          decisions_count: knowOverview.decisions_count || 0,
+          tasks_count: knowOverview.tasks_count || 0,
+          risks_count: knowOverview.risks_count || 0,
+          responsibilities_count: knowOverview.responsibilities_count || 0,
+          dependencies_count: knowOverview.dependencies_count || 0,
+          availability: knowOverview.availability || "available",
+        },
+        attention_items: attention.map((a: any) => ({
+          id: a.id || String(Math.random()),
+          type: a.type || "notice",
+          message: a.message || "",
+          resource_id: a.resource_id || null,
+        })),
+        recent_activity: activity.map((ac: any) => ({
+          id: ac.id || String(Math.random()),
+          event_type: ac.event_type || "activity",
+          description: ac.description || "",
+          actor_name: ac.actor_name || null,
+          timestamp: ac.timestamp || new Date().toISOString(),
+        })),
+      };
     },
   },
 
