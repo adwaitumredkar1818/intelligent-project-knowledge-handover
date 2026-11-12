@@ -102,3 +102,61 @@ class RevocationReason(StrEnum):
     USER_DISABLED = "user_disabled"
     REVOKED_BY_USER = "revoked_by_user"
     ADMIN_REVOKED = "admin_revoked"
+
+
+class SourceProvider(StrEnum):
+    """Supported external and local evidence sources."""
+
+    GITHUB = "github"
+    JIRA = "jira"
+    SLACK = "slack"
+    PDF = "pdf"
+    DOCX = "docx"
+
+
+class SourceConnectionStatus(StrEnum):
+    """Lifecycle states for external OAuth connections."""
+
+    CONNECTED = "connected"
+    NEEDS_REAUTH = "needs_reauth"
+    DISCONNECTED = "disconnected"
+    ERROR = "error"
+
+
+class SyncStatus(StrEnum):
+    """Synchronization states for mapped external resources."""
+
+    IDLE = "idle"
+    SYNCING = "syncing"
+    COMPLETED = "completed"
+    FAILED = "failed"
+
+
+class EvidenceProcessingStatus(StrEnum):
+    """Processing and extraction lifecycle states for evidence items."""
+
+    PENDING = "pending"
+    PROCESSING = "processing"
+    EXTRACTED = "extracted"
+    INDEXED = "indexed"
+    FAILED = "failed"
+
+
+class EvidenceVerificationStatus(StrEnum):
+    """Verification queue states for evidence and knowledge claims."""
+
+    UNVERIFIED = "unverified"
+    CANDIDATE = "candidate"
+    VERIFIED = "verified"
+    CONFLICTED = "conflicted"
+    REJECTED = "rejected"
+
+
+class JobStatus(StrEnum):
+    """Background worker job execution states."""
+
+    QUEUED = "queued"
+    RUNNING = "running"
+    COMPLETED = "completed"
+    FAILED = "failed"
+

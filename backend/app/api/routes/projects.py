@@ -18,12 +18,16 @@ from app.schemas.organisation import RemoveMembershipResponse
 from app.schemas.project import (
     AddProjectMemberRequest,
     CreateProjectRequest,
+    ProjectActivityListResponse,
     ProjectListResponse,
     ProjectMemberListResponse,
     ProjectMemberResponse,
+    ProjectOverviewResponse,
     ProjectResponse,
+    ProjectTransitionResponse,
     UpdateProjectMemberRoleRequest,
     UpdateProjectRequest,
+    UpsertProjectTransitionRequest,
 )
 from app.services.project import ProjectService
 from app.services.rbac import OrganisationContext, ProjectContext
@@ -35,13 +39,13 @@ router = APIRouter(tags=["projects"])
     "/organisations/{organisation_id}/projects",
     response_model=ProjectResponse,
     status_code=status.HTTP_201_CREATED,
-    summary="Create a project workspace inside an organisation (requires project.create)",
+    summary="Create a project workspace inside an organisation (requires permissions)",
 )
 def create_project(
     payload: CreateProjectRequest,
     org_ctx: Annotated[
         OrganisationContext,
-        Depends(require_organisation_permission("project.create")),
+        Depends(require_organisation_permission("organisation.projects.create")),
     ],
     project_service: Annotated[ProjectService, Depends(get_project_service)],
 ) -> ProjectResponse:
@@ -210,3 +214,65 @@ def remove_project_member(
 ) -> RemoveMembershipResponse:
     """Revoke a user's active membership in the project workspace."""
     return project_service.remove_project_member(ctx=project_ctx, target_user_id=user_id)
+
+
+@router.get(
+    "/projects/{project_id}/overview",
+    response_model=ProjectOverviewResponse,
+    status_code=status.HTTP_200_OK,
+    summary="Get aggregated dashboard overview for the project (requires project.read)",
+)
+def get_project_overview(
+    project_ctx: Annotated[ProjectContext, Depends(resolve_project_read_context)],
+    project_service: Annotated[ProjectService, Depends(get_project_service)],
+) -> ProjectOverviewResponse:
+    """Compile aggregated project metrics, sources, evidence, and recent activity."""
+    return project_service.get_project_overview(project_ctx)
+
+
+@router.get(
+    "/projects/{project_id}/activity",
+    response_model=ProjectActivityListResponse,
+    status_code=status.HTTP_200_OK,
+    summary="Get recent audit and activity stream for the project (requires project.read)",
+)
+def get_project_activity(
+    project_ctx: Annotated[ProjectContext, Depends(resolve_project_read_context)],
+    project_service: Annotated[ProjectService, Depends(get_project_service)],
+    limit: Annotated[int, Query(ge=1, le=100)] = 20,
+    offset: Annotated[int, Query(ge=0)] = 0,
+) -> ProjectActivityListResponse:
+    """Retrieve chronological event feed of actions inside this project workspace."""
+    return project_service.get_project_activity(ctx=project_ctx, limit=limit, offset=offset)
+
+
+@router.get(
+    "/projects/{project_id}/transition",
+    response_model=ProjectTransitionResponse | None,
+    status_code=status.HTTP_200_OK,
+    summary="Get transition configuration for the project (requires project.read)",
+)
+def get_project_transition(
+    project_ctx: Annotated[ProjectContext, Depends(resolve_project_read_context)],
+    project_service: Annotated[ProjectService, Depends(get_project_service)],
+) -> ProjectTransitionResponse | None:
+    """Retrieve configured departing member, successor, and capture scope."""
+    return project_service.get_project_transition(project_ctx)
+
+
+@router.put(
+    "/projects/{project_id}/transition",
+    response_model=ProjectTransitionResponse,
+    status_code=status.HTTP_200_OK,
+    summary="Configure transition participants and parameters (requires project.transition.manage)",
+)
+def upsert_project_transition(
+    payload: UpsertProjectTransitionRequest,
+    project_ctx: Annotated[
+        ProjectContext,
+        Depends(require_project_permission("project.transition.manage")),
+    ],
+    project_service: Annotated[ProjectService, Depends(get_project_service)],
+) -> ProjectTransitionResponse:
+    """Upsert departing member, incoming successor, and knowledge capture scope."""
+    return project_service.upsert_project_transition(ctx=project_ctx, payload=payload)

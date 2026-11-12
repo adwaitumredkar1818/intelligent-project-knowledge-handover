@@ -146,6 +146,7 @@ class ProjectMemberResponse(BaseSchema):
     email: str
     role_name: str
     status: str
+    responsibility_description: str | None = None
     assigned_by_id: uuid.UUID | None
     joined_at: datetime
     created_at: datetime
@@ -164,6 +165,7 @@ class AddProjectMemberRequest(BaseSchema):
 
     user_id: uuid.UUID
     role_name: str = Field(min_length=1, max_length=64)
+    responsibility_description: str | None = Field(default=None, max_length=2000)
 
     @field_validator("role_name")
     @classmethod
@@ -175,8 +177,149 @@ class UpdateProjectMemberRoleRequest(BaseSchema):
     """Request payload to change a project member's project-scoped role."""
 
     role_name: str = Field(min_length=1, max_length=64)
+    responsibility_description: str | None = Field(default=None, max_length=2000)
 
     @field_validator("role_name")
     @classmethod
     def _validate_role_name(cls, value: str) -> str:
         return _clean_role_name(value)
+
+
+class ProjectParticipantSummary(BaseSchema):
+    """Minimal projection for transition participants."""
+
+    id: uuid.UUID
+    full_name: str
+    email: str
+
+
+class ProjectTransitionResponse(BaseSchema):
+    """Configured transition participants and scope for knowledge capture."""
+
+    id: uuid.UUID
+    project_id: uuid.UUID
+    departing_user: ProjectParticipantSummary
+    successor_user: ProjectParticipantSummary
+    workflow_stage: str
+    handover_scope: str | None
+    source_scope: list[str] | None
+    capture_start_date: date | None
+    capture_end_date: date | None
+    context_notes: str | None
+    created_at: datetime
+    updated_at: datetime
+
+
+class UpsertProjectTransitionRequest(BaseSchema):
+    """Request payload to configure transition participants and capture parameters."""
+
+    departing_user_id: uuid.UUID
+    successor_user_id: uuid.UUID
+    workflow_stage: str = Field(default="planning", min_length=2, max_length=64)
+    handover_scope: str | None = Field(default=None, max_length=4000)
+    source_scope: list[str] | None = None
+    capture_start_date: date | None = None
+    capture_end_date: date | None = None
+    context_notes: str | None = Field(default=None, max_length=4000)
+
+    @model_validator(mode="after")
+    def _validate_transition(self) -> UpsertProjectTransitionRequest:
+        if self.departing_user_id == self.successor_user_id:
+            raise ValueError("Departing member and successor must be distinct users.")
+        if (
+            self.capture_start_date is not None
+            and self.capture_end_date is not None
+            and self.capture_end_date < self.capture_start_date
+        ):
+            raise ValueError("Capture end date must not precede capture start date.")
+        return self
+
+
+class ProjectSummaryCard(BaseSchema):
+    """High-level summary card for the Project Overview dashboard."""
+
+    project_id: uuid.UUID
+    name: str
+    status: str
+    workflow_stage: str
+    owner: ProjectParticipantSummary
+    departing_member: ProjectParticipantSummary | None
+    successor: ProjectParticipantSummary | None
+    start_date: date | None
+    target_completion_date: date | None
+
+
+class ConnectedSourcesSummaryCard(BaseSchema):
+    """Connected sources card for the Project Overview dashboard."""
+
+    total_sources: int
+    active_providers: list[str]
+    health_status: str
+    last_synced_at: datetime | None
+
+
+class EvidenceOverviewCard(BaseSchema):
+    """Evidence metrics card for the Project Overview dashboard."""
+
+    total_records: int
+    by_provider: dict[str, int]
+    by_status: dict[str, int]
+    document_count: int
+
+
+class KnowledgeOverviewCard(BaseSchema):
+    """Reconstructed knowledge card with explicit module availability indicator."""
+
+    decisions_count: int = 0
+    tasks_count: int = 0
+    risks_count: int = 0
+    responsibilities_count: int = 0
+    dependencies_count: int = 0
+    availability: str = "not_implemented"
+
+
+class AttentionItemCard(BaseSchema):
+    """Actionable attention item on the Project Overview dashboard."""
+
+    id: str
+    type: str
+    message: str
+    resource_id: str | None = None
+
+
+class ProjectActivityCard(BaseSchema):
+    """Activity feed item representing recent project actions."""
+
+    id: str
+    event_type: str
+    description: str
+    actor_name: str | None = None
+    timestamp: datetime
+
+
+class TeamOwnershipCard(BaseSchema):
+    """Team member knowledge ownership entry."""
+
+    user_id: uuid.UUID
+    full_name: str
+    role_name: str
+    responsibility_description: str | None = None
+
+
+class ProjectOverviewResponse(BaseSchema):
+    """Unified payload serving the central Project Dashboard (Overview)."""
+
+    project_summary: ProjectSummaryCard
+    connected_sources: ConnectedSourcesSummaryCard
+    evidence_overview: EvidenceOverviewCard
+    knowledge_overview: KnowledgeOverviewCard
+    attention_required: list[AttentionItemCard]
+    recent_activity: list[ProjectActivityCard]
+    team_ownership: list[TeamOwnershipCard]
+
+
+class ProjectActivityListResponse(BaseSchema):
+    """Paginated activity feed for a project workspace."""
+
+    items: list[ProjectActivityCard]
+    total: int

@@ -10,8 +10,10 @@ from sqlalchemy import and_, func, or_, select, update
 from sqlalchemy.engine import CursorResult
 from sqlalchemy.orm import Session, selectinload
 
+from app.models.audit import AuditLog
 from app.models.enums import ProjectMembershipStatus, ProjectStatus, ProjectVisibility
-from app.models.project import Project, ProjectMembership
+from app.models.evidence import DocumentFile, EvidenceItem, ProjectSourceMapping
+from app.models.project import Project, ProjectMembership, ProjectTransition
 from app.models.rbac import Role, RolePermission
 
 
@@ -183,6 +185,7 @@ class ProjectRepository:
         role_id: uuid.UUID,
         assigned_by_id: uuid.UUID | None,
         joined_at: datetime | None = None,
+        responsibility_description: str | None = None,
     ) -> ProjectMembership:
         membership = ProjectMembership(
             project_id=project_id,
@@ -190,12 +193,148 @@ class ProjectRepository:
             role_id=role_id,
             status=ProjectMembershipStatus.ACTIVE.value,
             assigned_by_id=assigned_by_id,
+            responsibility_description=responsibility_description,
         )
         if joined_at is not None:
             membership.joined_at = joined_at
         self._session.add(membership)
         self._session.flush()
         return membership
+
+    def update_membership(
+        self,
+        membership: ProjectMembership,
+        *,
+        role_id: uuid.UUID | None = None,
+        responsibility_description: str | None = None,
+    ) -> ProjectMembership:
+        if role_id is not None:
+            membership.role_id = role_id
+        if responsibility_description is not None:
+            membership.responsibility_description = responsibility_description.strip() or None
+        self._session.flush()
+        return membership
+
+    def get_transition(self, project_id: uuid.UUID) -> ProjectTransition | None:
+        stmt = (
+            select(ProjectTransition)
+            .where(ProjectTransition.project_id == project_id)
+            .options(
+                selectinload(ProjectTransition.departing_user),
+                selectinload(ProjectTransition.successor_user),
+            )
+        )
+        return self._session.scalar(stmt)
+
+    def upsert_transition(
+        self,
+        *,
+        project_id: uuid.UUID,
+        departing_user_id: uuid.UUID,
+        successor_user_id: uuid.UUID,
+        workflow_stage: str,
+        handover_scope: str | None,
+        source_scope: list[str] | None,
+        capture_start_date: date | None,
+        capture_end_date: date | None,
+        context_notes: str | None,
+    ) -> ProjectTransition:
+        transition = self.get_transition(project_id)
+        if transition is None:
+            transition = ProjectTransition(
+                project_id=project_id,
+                departing_user_id=departing_user_id,
+                successor_user_id=successor_user_id,
+                workflow_stage=workflow_stage,
+                handover_scope=handover_scope,
+                source_scope=source_scope,
+                capture_start_date=capture_start_date,
+                capture_end_date=capture_end_date,
+                context_notes=context_notes,
+            )
+            self._session.add(transition)
+        else:
+            transition.departing_user_id = departing_user_id
+            transition.successor_user_id = successor_user_id
+            transition.workflow_stage = workflow_stage
+            transition.handover_scope = handover_scope
+            transition.source_scope = source_scope
+            transition.capture_start_date = capture_start_date
+            transition.capture_end_date = capture_end_date
+            transition.context_notes = context_notes
+        self._session.flush()
+        return transition
+
+    def get_project_activity(
+        self,
+        *,
+        project_id: uuid.UUID,
+        limit: int = 10,
+        offset: int = 0,
+    ) -> tuple[list[AuditLog], int]:
+        base = select(AuditLog).where(AuditLog.project_id == project_id)
+        total = int(self._session.scalar(select(func.count()).select_from(base.subquery())) or 0)
+        stmt = (
+            base.options(selectinload(AuditLog.actor_user))
+            .order_by(AuditLog.created_at.desc())
+            .offset(offset)
+            .limit(limit)
+        )
+        return list(self._session.scalars(stmt).all()), total
+
+    def get_source_metrics(self, project_id: uuid.UUID) -> dict[str, Any]:
+        stmt = select(ProjectSourceMapping).where(
+            ProjectSourceMapping.project_id == project_id,
+            ProjectSourceMapping.is_active.is_(True),
+        ).options(selectinload(ProjectSourceMapping.source_connection))
+        mappings = list(self._session.scalars(stmt).all())
+        total_sources = len(mappings)
+        active_providers = sorted(
+            list({m.source_connection.provider for m in mappings if m.source_connection})
+        )
+        last_synced = None
+        for m in mappings:
+            if m.last_synced_at and (last_synced is None or m.last_synced_at > last_synced):
+                last_synced = m.last_synced_at
+        has_error = any(m.sync_status == "failed" for m in mappings)
+        if has_error:
+            health_status = "needs_attention"
+        elif total_sources > 0:
+            health_status = "healthy"
+        else:
+            health_status = "not_configured"
+        return {
+            "total_sources": total_sources,
+            "active_providers": active_providers,
+            "health_status": health_status,
+            "last_synced_at": last_synced,
+            "mappings": mappings,
+        }
+
+    def get_evidence_metrics(self, project_id: uuid.UUID) -> dict[str, Any]:
+        stmt = select(EvidenceItem).where(EvidenceItem.project_id == project_id)
+        items = list(self._session.scalars(stmt).all())
+        by_provider: dict[str, int] = {}
+        by_status: dict[str, int] = {}
+        for item in items:
+            by_provider[item.provider] = by_provider.get(item.provider, 0) + 1
+            by_status[item.processing_status] = by_status.get(item.processing_status, 0) + 1
+
+        doc_count_stmt = (
+            select(func.count())
+            .select_from(DocumentFile)
+            .join(EvidenceItem, DocumentFile.evidence_item_id == EvidenceItem.id)
+            .where(EvidenceItem.project_id == project_id)
+        )
+        doc_count = int(self._session.scalar(doc_count_stmt) or 0)
+
+        return {
+            "total_records": len(items),
+            "by_provider": by_provider,
+            "by_status": by_status,
+            "document_count": doc_count,
+            "items": items,
+        }
 
     def revoke_all_for_user_in_organisation(
         self,

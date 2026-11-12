@@ -1,13 +1,19 @@
 # AGENTS.md — Permanent Project Governance & Engineering Instructions
 
-This document defines mandatory project rules, architectural boundaries, and engineering standards for all contributors and AI coding agents working on the **Intelligent Project Knowledge Reconstruction & Handover Platform**.
+This document defines mandatory project rules, architectural boundaries, and engineering standards for all contributors and AI coding agents working on **The Handover** (**Intelligent Project Knowledge Reconstruction & Handover Platform**).
 
 ---
 
-## 1. Project Mission & Core Workflow
+## 1. Product Identity, Mission & Core Workflow
 
-- **Objective**: Prevent critical organisational knowledge from being lost when employees leave or transition responsibilities by connecting authorised organisational sources and reconstructing fragmented project knowledge into structured, evidence-backed, human-reviewable information.
-- **Core Workflow**: `CONNECT → RECONSTRUCT → VERIFY → REVIEW → HANDOVER`
+- **Product Name**: **The Handover**
+- **Formal Product Description**: **An Intelligent Project Knowledge Reconstruction & Handover Platform**
+- **Product Tagline**: **Prevent Critical Knowledge From Leaving With People.**
+- **Mission**: Prevent critical organisational knowledge from being lost when employees, researchers, developers, volunteers, or student team members leave a project or transition responsibilities. The platform connects authorised organisational sources and uploaded documents, reconstructs fragmented project knowledge into structured records with full provenance, surfaces conflicts and gaps, supports human verification, and produces auditable, role-appropriate handover packages.
+- **Core Workflow**:
+  ```text
+  CONNECT ──▶ RECONSTRUCT ──▶ VERIFY ──▶ REVIEW ──▶ HANDOVER
+  ```
 - **Knowledge Categories to Identify**:
   1. Decisions and their rationale
   2. Technical and architectural knowledge
@@ -20,17 +26,53 @@ This document defines mandatory project rules, architectural boundaries, and eng
 
 ---
 
-## 2. Canonical Product Terminology
+## 2. Canonical Product Terminology & Module Architecture
 
-Always use these exact module names across code, UI labels, API contracts, and documentation:
+The platform consists of seven canonical product modules organized into six persistent navigation areas:
 
-1. **Project Workspace**
-2. **Evidence Workspace**
-3. **Knowledge Intelligence**
-4. **Relationship Explorer**
-5. **Verification Center**
-6. **Handover Workspace**
-7. **Project Knowledge Assistant**
+### Navigation Areas & Product Modules
+1. **WORKSPACE**
+   - **Overview**: High-level aggregated project metrics, handover readiness, connected sources, recent activity, attention required.
+   - **Projects**: Multi-tenant project workspace creation, selection, configuration, and archival.
+   - **Team Members**: Project membership, roles, responsibilities, and transition participant definitions.
+2. **PROJECT INTELLIGENCE**
+   - **Evidence Center / Evidence Workspace**: Three-panel evidence hub (Panel A: Connected Sources, Panel B: Evidence Library, Panel C: Evidence Details).
+   - **Knowledge Intelligence**: Reconstructed knowledge across the 8 domains with evidence attribution.
+   - **Relationship Explorer**: Interactive graph/relational visualization of dependencies, decisions, and ownership.
+3. **VALIDATION**
+   - **Verification Center**: Human review queue for candidate findings, evidence validation, and verification states.
+   - **Conflicts**: Detection, inspection, and resolution of contradictory facts across sources.
+4. **KNOWLEDGE TRANSFER**
+   - **Handover Workspace**: Compilation, checklists, approval workflows, and role-appropriate handover generation.
+   - **Generated Handovers**: Versioned, approved handover packages and receipt acknowledgements.
+5. **AI ASSISTANT**
+   - **Project Knowledge Assistant**: Permission-filtered, hybrid RAG assistant with strict source citations and uncertainty disclosure.
+6. **ADMINISTRATION**
+   - **Connected Sources**: Global source connection status, re-authorisation, and credential management.
+   - **Audit Logs**: Immutable PostgreSQL audit trail of all sensitive operations.
+   - **Settings**: System, organisation, and project configurations.
+
+### Current Implementation Scope
+- **Module 1 — Project Workspace**: Fully implemented backend (projects, members, transition participants, overview aggregation, recent activity, RBAC).
+- **Module 2 — Evidence Workspace**: Fully implemented backend (sources, document upload, OCR, extraction lifecycle, evidence library, evidence details, sync jobs, source ACLs).
+- **Remaining Modules**: Architecturally defined and supported in data schemas, but not falsely represented as fully implemented in this phase.
+
+---
+
+## 3. Mandatory Development Directives
+
+1. **Backend-First Development**: We build the entire backend first, including APIs, schemas, and data contracts needed by the future frontend. The frontend development is deferred until the backend is completed and verified.
+2. **Project Membership != Source Access (Critical Rule)**:
+   - Project membership and source access are distinct permissions.
+   - A user being a member of a project does NOT automatically grant access to view private GitHub repositories or restricted Jira issues connected by another user.
+   - The backend must strictly enforce external source ACLs at read time before returning evidence or entering retrieval context. Fail closed if permissions cannot be established.
+3. **No Fabricated Production Data (Zero Fabrication)**:
+   - Never represent synthetic or fabricated data as real connected organisational evidence.
+   - No fake users, organisations, repositories, Jira projects, or source records.
+4. **Preserve Existing Implementations & Infrastructure**:
+   - Inspect existing models, tables, and services before building.
+   - Reuse existing code; do not create duplicate parallel systems or discard migration history.
+   - Do not rename repository, database, or core packages without explicit authorization.
 
 ---
 

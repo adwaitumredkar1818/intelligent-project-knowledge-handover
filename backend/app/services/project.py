@@ -21,21 +21,33 @@ from app.models.enums import (
     RoleName,
     RoleScopeType,
 )
-from app.models.project import Project, ProjectMembership
+from app.models.project import Project, ProjectMembership, ProjectTransition
 from app.repositories.organisation import OrganisationRepository
 from app.repositories.project import ProjectRepository
 from app.repositories.rbac import RbacRepository
 from app.schemas.organisation import RemoveMembershipResponse
 from app.schemas.project import (
     AddProjectMemberRequest,
+    AttentionItemCard,
+    ConnectedSourcesSummaryCard,
     CreateProjectRequest,
+    EvidenceOverviewCard,
+    KnowledgeOverviewCard,
+    ProjectActivityCard,
+    ProjectActivityListResponse,
     ProjectListResponse,
     ProjectMemberListResponse,
     ProjectMemberResponse,
+    ProjectOverviewResponse,
+    ProjectParticipantSummary,
     ProjectResponse,
+    ProjectSummaryCard,
     ProjectSummaryResponse,
+    ProjectTransitionResponse,
+    TeamOwnershipCard,
     UpdateProjectMemberRoleRequest,
     UpdateProjectRequest,
+    UpsertProjectTransitionRequest,
 )
 from app.services.audit import AuditService
 from app.services.rbac import OrganisationContext, ProjectContext, RbacService
@@ -108,10 +120,38 @@ def _build_project_member_response(membership: ProjectMembership) -> ProjectMemb
         email=membership.user.email,
         role_name=membership.role.name,
         status=membership.status,
+        responsibility_description=membership.responsibility_description,
         assigned_by_id=membership.assigned_by_id,
         joined_at=membership.joined_at,
         created_at=membership.created_at,
         updated_at=membership.updated_at,
+    )
+
+
+def _build_project_transition_response(
+    transition: ProjectTransition,
+) -> ProjectTransitionResponse:
+    return ProjectTransitionResponse(
+        id=transition.id,
+        project_id=transition.project_id,
+        departing_user=ProjectParticipantSummary(
+            id=transition.departing_user.id,
+            full_name=transition.departing_user.full_name,
+            email=transition.departing_user.email,
+        ),
+        successor_user=ProjectParticipantSummary(
+            id=transition.successor_user.id,
+            full_name=transition.successor_user.full_name,
+            email=transition.successor_user.email,
+        ),
+        workflow_stage=transition.workflow_stage,
+        handover_scope=transition.handover_scope,
+        source_scope=transition.source_scope,
+        capture_start_date=transition.capture_start_date,
+        capture_end_date=transition.capture_end_date,
+        context_notes=transition.context_notes,
+        created_at=transition.created_at,
+        updated_at=transition.updated_at,
     )
 
 
@@ -564,6 +604,7 @@ class ProjectService:
                 role_id=target_role.id,
                 assigned_by_id=ctx.principal.user.id,
                 joined_at=utc_now(),
+                responsibility_description=payload.responsibility_description,
             )
             self._audit.record_event(
                 event_type="project.member.added",
@@ -636,6 +677,8 @@ class ProjectService:
         previous_role = membership.role.name
         membership.role_id = target_role.id
         membership.role = target_role
+        if "responsibility_description" in payload.model_fields_set:
+            membership.responsibility_description = payload.responsibility_description
         self._audit.record_event(
             event_type="project.member.role_changed",
             resource_type="project_membership",
@@ -707,4 +750,221 @@ class ProjectService:
             message="Project member removed and project access revoked immediately.",
             user_id=target_user_id,
             revoked_project_memberships=1,
+        )
+
+    def get_project_transition(self, ctx: ProjectContext) -> ProjectTransitionResponse | None:
+        """Retrieve configured transition participants and parameters."""
+        self._require_active_organisation_and_project(ctx=ctx)
+        transition = self._project_repo.get_transition(ctx.project.id)
+        if transition is None:
+            return None
+        return _build_project_transition_response(transition)
+
+    def upsert_project_transition(
+        self,
+        *,
+        ctx: ProjectContext,
+        payload: UpsertProjectTransitionRequest,
+    ) -> ProjectTransitionResponse:
+        """Configure or update transition participants for the project."""
+        self._require_active_organisation_and_project(ctx=ctx)
+        if payload.departing_user_id == payload.successor_user_id:
+            raise BadRequestError(
+                "Departing member and successor must be distinct users.",
+                code="DISTINCT_PARTICIPANTS_REQUIRED",
+            )
+        self._require_active_org_member(
+            organisation_id=ctx.organisation.id,
+            user_id=payload.departing_user_id,
+        )
+        self._require_active_org_member(
+            organisation_id=ctx.organisation.id,
+            user_id=payload.successor_user_id,
+        )
+
+        transition = self._project_repo.upsert_transition(
+            project_id=ctx.project.id,
+            departing_user_id=payload.departing_user_id,
+            successor_user_id=payload.successor_user_id,
+            workflow_stage=payload.workflow_stage,
+            handover_scope=payload.handover_scope,
+            source_scope=payload.source_scope,
+            capture_start_date=payload.capture_start_date,
+            capture_end_date=payload.capture_end_date,
+            context_notes=payload.context_notes,
+        )
+        self._audit.record_event(
+            event_type="project.transition.configured",
+            resource_type="project_transition",
+            actor_user_id=ctx.principal.user.id,
+            organisation_id=ctx.organisation.id,
+            project_id=ctx.project.id,
+            resource_id=str(transition.id),
+            metadata={
+                "departing_user_id": str(payload.departing_user_id),
+                "successor_user_id": str(payload.successor_user_id),
+                "workflow_stage": payload.workflow_stage,
+            },
+            message=f"Configured transition participants for project '{ctx.project.id}'.",
+        )
+        self._db.commit()
+        loaded = self._project_repo.get_transition(ctx.project.id)
+        if loaded is None:
+            raise NotFoundError(
+                "Transition configuration was not found.",
+                code="TRANSITION_NOT_FOUND",
+            )
+        return _build_project_transition_response(loaded)
+
+    def get_project_overview(self, ctx: ProjectContext) -> ProjectOverviewResponse:
+        """Compile aggregated dashboard metrics for the project workspace."""
+        self._require_active_organisation_and_project(ctx=ctx)
+        project = ctx.project
+        transition = self._project_repo.get_transition(project.id)
+        source_metrics = self._project_repo.get_source_metrics(project.id)
+        evidence_metrics = self._project_repo.get_evidence_metrics(project.id)
+        members, _ = self._project_repo.list_memberships(project_id=project.id, limit=100)
+        recent_audit, _ = self._project_repo.get_project_activity(
+            project_id=project.id,
+            limit=10,
+        )
+
+        departing_summary = (
+            ProjectParticipantSummary(
+                id=transition.departing_user.id,
+                full_name=transition.departing_user.full_name,
+                email=transition.departing_user.email,
+            )
+            if transition and transition.departing_user
+            else None
+        )
+        successor_summary = (
+            ProjectParticipantSummary(
+                id=transition.successor_user.id,
+                full_name=transition.successor_user.full_name,
+                email=transition.successor_user.email,
+            )
+            if transition and transition.successor_user
+            else None
+        )
+
+        summary_card = ProjectSummaryCard(
+            project_id=project.id,
+            name=project.name,
+            status=project.status,
+            workflow_stage=transition.workflow_stage if transition else "planning",
+            owner=ProjectParticipantSummary(
+                id=project.owner.id,
+                full_name=project.owner.full_name,
+                email=project.owner.email,
+            ),
+            departing_member=departing_summary,
+            successor=successor_summary,
+            start_date=project.start_date,
+            target_completion_date=project.target_completion_date,
+        )
+
+        sources_card = ConnectedSourcesSummaryCard(
+            total_sources=source_metrics["total_sources"],
+            active_providers=source_metrics["active_providers"],
+            health_status=source_metrics["health_status"],
+            last_synced_at=source_metrics["last_synced_at"],
+        )
+
+        evidence_card = EvidenceOverviewCard(
+            total_records=evidence_metrics["total_records"],
+            by_provider=evidence_metrics["by_provider"],
+            by_status=evidence_metrics["by_status"],
+            document_count=evidence_metrics["document_count"],
+        )
+
+        knowledge_card = KnowledgeOverviewCard(
+            decisions_count=0,
+            tasks_count=0,
+            risks_count=0,
+            responsibilities_count=0,
+            dependencies_count=0,
+            availability="not_implemented",
+        )
+
+        attention_items: list[AttentionItemCard] = []
+        for mapping in source_metrics.get("mappings", []):
+            if mapping.sync_status == "failed":
+                attention_items.append(
+                    AttentionItemCard(
+                        id=f"sync-err-{mapping.id}",
+                        type="source_sync_failure",
+                        message=(
+                            f"Sync failed for {mapping.external_resource_name}: "
+                            f"{mapping.sync_error or 'Unknown error'}"
+                        ),
+                        resource_id=str(mapping.id),
+                    )
+                )
+
+        activity_cards = [
+            ProjectActivityCard(
+                id=str(log.id),
+                event_type=log.event_type,
+                description=(
+                    log.event_metadata.get("message", log.event_type)
+                    if log.event_metadata and isinstance(log.event_metadata, dict)
+                    else log.event_type
+                ),
+                actor_name=log.actor_user.full_name if log.actor_user else None,
+                timestamp=log.created_at,
+            )
+            for log in recent_audit
+        ]
+
+        ownership_cards = [
+            TeamOwnershipCard(
+                user_id=m.user_id,
+                full_name=m.user.full_name,
+                role_name=m.role.name,
+                responsibility_description=m.responsibility_description,
+            )
+            for m in members
+        ]
+
+        return ProjectOverviewResponse(
+            project_summary=summary_card,
+            connected_sources=sources_card,
+            evidence_overview=evidence_card,
+            knowledge_overview=knowledge_card,
+            attention_required=attention_items,
+            recent_activity=activity_cards,
+            team_ownership=ownership_cards,
+        )
+
+    def get_project_activity(
+        self,
+        *,
+        ctx: ProjectContext,
+        limit: int = 20,
+        offset: int = 0,
+    ) -> ProjectActivityListResponse:
+        """Return paginated project audit activity stream."""
+        self._require_active_organisation_and_project(ctx=ctx)
+        logs, total = self._project_repo.get_project_activity(
+            project_id=ctx.project.id,
+            limit=limit,
+            offset=offset,
+        )
+        return ProjectActivityListResponse(
+            items=[
+                ProjectActivityCard(
+                    id=str(log.id),
+                    event_type=log.event_type,
+                    description=(
+                        log.event_metadata.get("message", log.event_type)
+                        if log.event_metadata and isinstance(log.event_metadata, dict)
+                        else log.event_type
+                    ),
+                    actor_name=log.actor_user.full_name if log.actor_user else None,
+                    timestamp=log.created_at,
+                )
+                for log in logs
+            ],
+            total=total,
         )

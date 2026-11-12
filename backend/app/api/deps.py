@@ -26,6 +26,7 @@ from app.repositories.system import SystemRepository
 from app.repositories.user import UserRepository
 from app.services.audit import AuditService
 from app.services.auth import AuthService
+from app.services.evidence import EvidenceService
 from app.services.health import HealthService
 from app.services.organisation import OrganisationService
 from app.services.project import ProjectService
@@ -190,6 +191,14 @@ def get_project_service(
         rbac_service=rbac_service,
         audit_service=audit_service,
     )
+
+
+def get_evidence_service(
+    settings: Settings = Depends(get_app_settings),  # noqa: B008
+    db_session: Session = Depends(get_db_session),  # noqa: B008
+) -> EvidenceService:
+    """Construct EvidenceService for the current request scope."""
+    return EvidenceService(db=db_session, settings=settings)
 
 
 def get_current_principal(
