@@ -104,16 +104,6 @@ class RevocationReason(StrEnum):
     ADMIN_REVOKED = "admin_revoked"
 
 
-class SourceProvider(StrEnum):
-    """Supported external and local evidence sources."""
-
-    GITHUB = "github"
-    JIRA = "jira"
-    SLACK = "slack"
-    PDF = "pdf"
-    DOCX = "docx"
-
-
 class EvidenceSourceType(StrEnum):
     """Canonical origin platforms/channels supported by the unified evidence ledger."""
 
@@ -272,35 +262,6 @@ class SourceConnectionStatus(StrEnum):
     REAUTH_REQUIRED = "reauth_required"
     DISCONNECTED = "disconnected"
     ERROR = "error"
-
-
-class SyncStatus(StrEnum):
-    """Synchronization states for mapped external resources."""
-
-    IDLE = "idle"
-    SYNCING = "syncing"
-    COMPLETED = "completed"
-    FAILED = "failed"
-
-
-class EvidenceProcessingStatus(StrEnum):
-    """Processing and extraction lifecycle states for evidence items."""
-
-    PENDING = "pending"
-    PROCESSING = "processing"
-    EXTRACTED = "extracted"
-    INDEXED = "indexed"
-    FAILED = "failed"
-
-
-class EvidenceVerificationStatus(StrEnum):
-    """Verification queue states for evidence and knowledge claims."""
-
-    UNVERIFIED = "unverified"
-    CANDIDATE = "candidate"
-    VERIFIED = "verified"
-    CONFLICTED = "conflicted"
-    REJECTED = "rejected"
 
 
 class UserSourceAuthorisationStatus(StrEnum):

@@ -12,7 +12,8 @@ from sqlalchemy.orm import Session, selectinload
 
 from app.models.audit import AuditLog
 from app.models.enums import ProjectMembershipStatus, ProjectStatus, ProjectVisibility
-from app.models.evidence import DocumentFile, EvidenceItem, ProjectSourceMapping
+from app.models.evidence import EvidenceItem
+from app.models.integration import ProjectSourceMapping
 from app.models.project import Project, ProjectMembership, ProjectTransition
 from app.models.rbac import Role, RolePermission
 
@@ -285,7 +286,7 @@ class ProjectRepository:
     def get_source_metrics(self, project_id: uuid.UUID) -> dict[str, Any]:
         stmt = select(ProjectSourceMapping).where(
             ProjectSourceMapping.project_id == project_id,
-            ProjectSourceMapping.is_active.is_(True),
+            ProjectSourceMapping.status == "active",
         ).options(selectinload(ProjectSourceMapping.source_connection))
         mappings = list(self._session.scalars(stmt).all())
         total_sources = len(mappings)
@@ -296,7 +297,7 @@ class ProjectRepository:
         for m in mappings:
             if m.last_synced_at and (last_synced is None or m.last_synced_at > last_synced):
                 last_synced = m.last_synced_at
-        has_error = any(m.sync_status == "failed" for m in mappings)
+        has_error = any(m.last_sync_status == "failed" for m in mappings)
         if has_error:
             health_status = "needs_attention"
         elif total_sources > 0:
@@ -312,21 +313,21 @@ class ProjectRepository:
         }
 
     def get_evidence_metrics(self, project_id: uuid.UUID) -> dict[str, Any]:
-        stmt = select(EvidenceItem).where(EvidenceItem.project_id == project_id)
+        stmt = select(EvidenceItem).where(
+            EvidenceItem.project_id == project_id,
+            EvidenceItem.deleted_at.is_(None),
+        )
         items = list(self._session.scalars(stmt).all())
         by_provider: dict[str, int] = {}
         by_status: dict[str, int] = {}
+        doc_count = 0
         for item in items:
-            by_provider[item.provider] = by_provider.get(item.provider, 0) + 1
-            by_status[item.processing_status] = by_status.get(item.processing_status, 0) + 1
-
-        doc_count_stmt = (
-            select(func.count())
-            .select_from(DocumentFile)
-            .join(EvidenceItem, DocumentFile.evidence_item_id == EvidenceItem.id)
-            .where(EvidenceItem.project_id == project_id)
-        )
-        doc_count = int(self._session.scalar(doc_count_stmt) or 0)
+            provider = getattr(item, "source_provider", None) or "unknown"
+            status = getattr(item, "processing_status", None) or "unknown"
+            by_provider[provider] = by_provider.get(provider, 0) + 1
+            by_status[status] = by_status.get(status, 0) + 1
+            if getattr(item, "source_type", None) == "document_upload":
+                doc_count += 1
 
         return {
             "total_records": len(items),
