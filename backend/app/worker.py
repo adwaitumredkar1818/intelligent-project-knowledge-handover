@@ -1,148 +1,237 @@
-"""Lightweight PostgreSQL background worker process for asynchronous sync and extraction jobs."""
+"""Lightweight PostgreSQL-backed Python background worker process entrypoint."""
 
 from __future__ import annotations
 
 import argparse
 import logging
 import signal
-import sys
-import threading
 import time
-from datetime import UTC, datetime
 from types import FrameType
 
-from sqlalchemy import select
-from sqlalchemy.orm import Session, sessionmaker
+from sqlalchemy import Engine
 
 from app.core.config import Settings, get_settings
+from app.core.logging import configure_logging
 from app.db.session import create_db_engine, create_session_factory
-from app.models.enums import JobStatus
-from app.models.evidence import SourceSyncJob
-from app.services.evidence import EvidenceService
+from app.services.chunking import ChunkingService
+from app.services.document_extraction import DocumentExtractionService
+from app.services.embedding import OllamaEmbeddingService
+from app.services.indexing_worker import IndexingWorkerService
+from app.services.ingestion_worker import IngestionWorkerService
+from app.services.integrations.sync_worker import SourceSyncWorkerService
+from app.services.llm import OllamaLLMClient
+from app.services.ocr import OllamaGLMOCRService
+from app.services.reconstruction_worker import ReconstructionWorkerService
+from app.services.storage import LocalPrivateStorageBackend
+from app.services.token_encryption import LocalTokenEncryptionService
+from app.services.vector_store import ChromaV2HttpVectorStore
 
-logging.basicConfig(
-    level=logging.INFO,
-    format="%(asctime)s [%(levelname)s] [%(name)s] %(message)s",
-)
 logger = logging.getLogger("app.worker")
 
 
-class SyncWorker:
-    """PostgreSQL-backed worker leasing and processing queued sync and extraction jobs."""
+class CompositeWorkerService:
+    """Sequential composite worker polling extraction, sync, indexing & reconstruction queues."""
 
     def __init__(
         self,
-        poll_interval_seconds: float = 2.0,
-        session_factory: sessionmaker[Session] | None = None,
-        settings: Settings | None = None,
+        *,
+        ingestion_worker: IngestionWorkerService,
+        sync_worker: SourceSyncWorkerService,
+        indexing_worker: IndexingWorkerService | None = None,
+        reconstruction_worker: ReconstructionWorkerService | None = None,
     ) -> None:
-        self._settings = settings or get_settings()
-        self._engine = create_db_engine(self._settings) if session_factory is None else None
-        self._session_factory = session_factory or create_session_factory(self._engine)  # type: ignore[arg-type]
-        self._poll_interval = poll_interval_seconds
-        self._running = True
+        self.ingestion_worker = ingestion_worker
+        self.sync_worker = sync_worker
+        self.indexing_worker = indexing_worker
+        self.reconstruction_worker = reconstruction_worker
 
-        # Signal handling (only on main thread)
-        if threading.current_thread() is threading.main_thread():
-            try:
-                signal.signal(signal.SIGINT, self._handle_signal)
-                signal.signal(signal.SIGTERM, self._handle_signal)
-            except (ValueError, AttributeError):
-                pass
+    @property
+    def worker_id(self) -> str:
+        """Primary worker identifier recorded on claimed leases."""
+        return self.ingestion_worker.worker_id
 
-    def _handle_signal(self, signum: int, frame: FrameType | None) -> None:
-        logger.info("Worker received termination signal %d. Shutting down gracefully...", signum)
-        self._running = False
-
-    def lease_next_job(self, db: Session) -> SourceSyncJob | None:
-        """Atomically select and lease a single queued job using SKIP LOCKED on PostgreSQL."""
-        stmt = (
-            select(SourceSyncJob)
-            .where(SourceSyncJob.status == JobStatus.QUEUED.value)
-            .order_by(SourceSyncJob.created_at.asc())
-            .limit(1)
-        )
-        # Using with_for_update(skip_locked=True) prevents race conditions
-        # across worker processes on PostgreSQL
-        if db.bind is not None and db.bind.dialect.name == "postgresql":
-            stmt = stmt.with_for_update(skip_locked=True)
-
-        job = db.execute(stmt).scalar_one_or_none()
-        if job is not None and job.source_mapping_id is not None:
-            now = datetime.now(UTC)
-            job.status = JobStatus.RUNNING.value
-            job.started_at = now
-            db.commit()
-            logger.info("Leased sync job %s for mapping %s", job.id, job.source_mapping_id)
-        return job
-
-    def process_job(self, db: Session, job: SourceSyncJob) -> bool:
-        """Execute the sync workflow for the leased job."""
-        if job.source_mapping_id is None:
-            return False
-        service = EvidenceService(db=db, settings=self._settings)
-        logger.info("Processing sync job %s (type: %s)", job.id, job.job_type)
-
-        try:
-            records_count = service.execute_mapping_sync(
-                mapping_id=job.source_mapping_id,
-                job_id=job.id,
-            )
-            logger.info("Completed job %s: ingested %d records", job.id, records_count)
+    def process_next_job(self) -> bool:
+        """Claim one job across ingestion, sync, indexing, and knowledge extraction queues."""
+        if self.ingestion_worker.process_next_job():
             return True
-        except Exception as exc:
-            logger.error("Job %s execution failed: %s", job.id, exc, exc_info=True)
-            return False
+        if self.sync_worker.process_next_job():
+            return True
+        if self.indexing_worker is not None and self.indexing_worker.process_next_job():
+            return True
+        if (
+            self.reconstruction_worker is not None
+            and self.reconstruction_worker.process_next_job()
+        ):
+            return True
+        return False
 
-    def run_once(self) -> int:
-        """Execute one polling pass; returns number of processed jobs."""
-        with self._session_factory() as db:
-            job = self.lease_next_job(db)
-            if job is not None:
-                self.process_job(db, job)
-                return 1
-            return 0
+    def drain_pending_jobs(self, *, max_jobs: int = 100) -> int:
+        """Drain both queues sequentially up to `max_jobs` total executions."""
+        processed = 0
+        while processed < max_jobs:
+            if not self.process_next_job():
+                break
+            processed += 1
+        return processed
 
-    def run(self) -> None:
-        """Start the continuous worker polling loop."""
-        logger.info("The Handover Lightweight Background Worker started.")
-        while self._running:
-            try:
-                processed = self.run_once()
-                if processed == 0:
-                    time.sleep(self._poll_interval)
-            except Exception as exc:
-                logger.error("Unexpected worker loop error: %s", exc, exc_info=True)
-                time.sleep(self._poll_interval)
 
-        if self._engine is not None:
-            self._engine.dispose()
-        logger.info("Worker process stopped cleanly.")
+def build_worker_service(
+    settings: Settings,
+    *,
+    worker_id: str | None = None,
+) -> tuple[CompositeWorkerService, Engine]:
+    """Assemble isolated engine, storage, encryption, OCR adapter, and composite workers."""
+    engine = create_db_engine(settings)
+    session_factory = create_session_factory(engine)
+    storage = LocalPrivateStorageBackend(
+        root_path=settings.security.upload_storage_path,
+        file_encryption_key=settings.security.file_encryption_key.get_secret_value(),
+    )
+    ocr_service = OllamaGLMOCRService(
+        base_url=settings.ollama.base_url,
+        model=settings.ollama.ocr_model,
+        num_ctx=settings.ollama.ocr_num_ctx,
+        num_predict=settings.ollama.ocr_num_predict,
+        timeout_seconds=settings.ollama.ocr_timeout_seconds,
+    )
+    extraction = DocumentExtractionService(
+        ocr_service=ocr_service,
+        ingestion_settings=settings.ingestion,
+    )
+    ingestion_worker = IngestionWorkerService(
+        session_factory=session_factory,
+        storage_backend=storage,
+        extraction_service=extraction,
+        ingestion_settings=settings.ingestion,
+        worker_id=worker_id,
+    )
+    token_encryption = LocalTokenEncryptionService(
+        token_encryption_key=settings.security.token_encryption_key.get_secret_value(),
+    )
+    sync_worker = SourceSyncWorkerService(
+        session_factory=session_factory,
+        settings=settings,
+        token_encryption=token_encryption,
+        worker_id=f"{worker_id}-sync" if worker_id else None,
+    )
+    chunking_service = ChunkingService(settings=settings.chunking)
+    embedding_service = OllamaEmbeddingService(
+        base_url=settings.ollama.base_url,
+        model=settings.ollama.embedding_model,
+        batch_size=settings.embedding.batch_size,
+        expected_dimensions=settings.embedding.expected_dimensions,
+        timeout_seconds=settings.embedding.timeout_seconds,
+    )
+    chroma_token = (
+        settings.chroma.auth_token.get_secret_value()
+        if settings.chroma.auth_token is not None
+        else None
+    )
+    vector_store = ChromaV2HttpVectorStore(
+        base_url=settings.chroma.base_url,
+        tenant=settings.chroma.tenant,
+        database=settings.chroma.database,
+        collection_prefix=settings.chroma.collection_prefix,
+        embedding_model=settings.ollama.embedding_model,
+        index_version=settings.chroma.index_version,
+        expected_dimensions=settings.embedding.expected_dimensions,
+        auth_token=chroma_token,
+        request_timeout_seconds=settings.chroma.request_timeout_seconds,
+    )
+    indexing_worker = IndexingWorkerService(
+        session_factory=session_factory,
+        chunking_service=chunking_service,
+        embedding_service=embedding_service,
+        vector_store=vector_store,
+        ingestion_settings=settings.ingestion,
+        extraction_settings=settings.extraction,
+        llm_model_name=settings.ollama.llm_model,
+        worker_id=f"{worker_id}-index" if worker_id else None,
+    )
+    llm_client = OllamaLLMClient(
+        base_url=settings.ollama.base_url,
+        model=settings.ollama.llm_model,
+        num_ctx=settings.ollama.llm_num_ctx,
+        num_predict=settings.ollama.llm_num_predict,
+        temperature=settings.ollama.llm_temperature,
+        timeout_seconds=settings.ollama.llm_timeout_seconds,
+        think=settings.ollama.llm_think,
+    )
+    reconstruction_worker = ReconstructionWorkerService(
+        session_factory=session_factory,
+        llm_client=llm_client,
+        extraction_settings=settings.extraction,
+        ingestion_settings=settings.ingestion,
+        worker_id=f"{worker_id}-know" if worker_id else None,
+    )
+    return (
+        CompositeWorkerService(
+            ingestion_worker=ingestion_worker,
+            sync_worker=sync_worker,
+            indexing_worker=indexing_worker,
+            reconstruction_worker=reconstruction_worker,
+        ),
+        engine,
+    )
+
+
+def run_worker(*, once: bool = False, max_jobs: int = 100) -> int:
+    """Run the PostgreSQL polling loop cleanly until stopped or drained (`once=True`)."""
+    settings = get_settings()
+    configure_logging(settings.log_level)
+    worker, engine = build_worker_service(settings)
+    stop_requested = False
+
+    def _handle_stop(signum: int, _frame: FrameType | None) -> None:
+        nonlocal stop_requested
+        logger.info("Worker received shutdown signal (%s).", signum)
+        stop_requested = True
+
+    signal.signal(signal.SIGINT, _handle_stop)
+    signal.signal(signal.SIGTERM, _handle_stop)
+
+    logger.info(
+        "Started IPKRH lightweight document ingestion worker.",
+        extra={"worker_id": worker.worker_id, "once": once},
+    )
+
+    total_processed = 0
+    try:
+        if once:
+            total_processed = worker.drain_pending_jobs(max_jobs=max_jobs)
+            logger.info("Single-pass worker finished.", extra={"processed_jobs": total_processed})
+            return total_processed
+
+        poll_interval = settings.ingestion.worker_poll_interval_seconds
+        while not stop_requested:
+            did_work = worker.process_next_job()
+            if did_work:
+                total_processed += 1
+            else:
+                time.sleep(poll_interval)
+    finally:
+        dispose = getattr(engine, "dispose", None)
+        if callable(dispose):
+            dispose()
+        logger.info("Stopped ingestion worker cleanly.", extra={"processed_jobs": total_processed})
+    return total_processed
 
 
 def main() -> None:
-    """CLI entrypoint for running the worker."""
-    parser = argparse.ArgumentParser(description="The Handover Background Worker")
+    parser = argparse.ArgumentParser(description="IPKRH PostgreSQL background ingestion worker.")
     parser.add_argument(
         "--once",
         action="store_true",
-        help="Run a single job lease cycle and exit",
+        help="Drain currently claimable queued jobs once and exit cleanly.",
     )
     parser.add_argument(
-        "--interval",
-        type=float,
-        default=2.0,
-        help="Polling interval in seconds (default 2.0)",
+        "--max-jobs",
+        type=int,
+        default=100,
+        help="Maximum jobs processed when running with --once.",
     )
     args = parser.parse_args()
-
-    worker = SyncWorker(poll_interval_seconds=args.interval)
-    if args.once:
-        count = worker.run_once()
-        logger.info("One-shot worker completed %d job(s)", count)
-        sys.exit(0)
-    else:
-        worker.run()
+    run_worker(once=bool(args.once), max_jobs=max(1, int(args.max_jobs)))
 
 
 if __name__ == "__main__":

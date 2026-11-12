@@ -2,7 +2,7 @@
 
 An intelligent, evidence-grounded platform that prevents critical organisational knowledge from being lost when employees leave or transition responsibilities. It connects authorised organisational sources and documents, reconstructs fragmented knowledge into structured records with full provenance, surfaces conflicts and gaps, supports human verification, and produces auditable handover packages.
 
-> **Repository Status:** Phase 2.2 (Platform Authentication, Identity & RBAC Complete) — Docker infrastructure (**PostgreSQL** and **ChromaDB**), native Windows **Ollama** readiness, the Next.js TypeScript runtime (`frontend/`), the FastAPI backend foundation (`backend/app/`, `infrastructure/database/migrations/`), and platform authentication, refresh-session rotation, user lifecycle, and scope-separated RBAC (`0002_auth_identity_rbac`) are implemented and verified. Organisations, project workspaces, integrations, ingestion, and AI/RAG endpoints belong to subsequent phases.
+> **Repository Status:** Phase 2.6 (AI Knowledge Reconstruction & Structured Intelligence Extraction Complete) — Docker infrastructure (**PostgreSQL** and **ChromaDB**), native Windows **Ollama** readiness, the Next.js TypeScript runtime (`frontend/`), the FastAPI backend foundation (`backend/app/`, `infrastructure/database/migrations/`), platform authentication & RBAC (`0002_auth_identity_rbac`), multi-tenant organisations & project workspaces (`0003_org_project_workspaces`), encrypted PDF/DOCX document ingestion & GLM OCR (`0004_evidence_ingestion`), delegated per-user GitHub & Jira OAuth 2.0 connectors & sync execution (`0005_source_integrations`), chunking, PG `TSVECTOR`/`GIN` full-text search, `nomic-embed-text` (768-dim) embeddings, ChromaDB HTTP v2 secondary vector indexing, `IndexingWorkerService`, and permission-filtered hybrid search/reindex APIs (`0006_evidence_chunks_and_fts`), and replaceable `StructuredLLMClient` (`OllamaLLMClient` / `qwen3:8b` with `OLLAMA_LLM_THINK=false`), 6-category `NO EVIDENCE -> NO CLAIM` knowledge extraction, conservative corroboration deduplication, staleness invalidation, `ReconstructionWorkerService` (`CompositeWorkerService`), and ACL-enforced `/knowledge/*` endpoints (`0007_knowledge_reconstruction`) are implemented and verified. Knowledge relationships, verification review workflows, handover generation, and assistant synthesis belong to subsequent phases.
 
 ---
 
@@ -65,13 +65,13 @@ The platform structures reconstructed project knowledge across eight core domain
 ```text
 .
 ├── frontend/                   # Next.js / React / TypeScript / Tailwind / shadcn-compatible shell (Phase 1.2 ready)
-├── backend/                    # FastAPI backend (`app/`), platform auth/RBAC, Pydantic Settings, Alembic INI & tests (Phase 2.2 ready)
+├── backend/                    # FastAPI backend (`app/`), auth/RBAC, workspaces, uploads, GitHub/Jira integrations, chunking/hybrid retrieval & composite worker (`worker.py`)
 ├── infrastructure/
 │   ├── docker/                 # Docker Compose configuration (PostgreSQL & ChromaDB active)
-│   └── database/               # Alembic migration environment & revisions (`0001_initial_baseline`, `0002_auth_identity_rbac`)
+│   └── database/               # Alembic migrations (`0001` baseline .. `0006` chunks/FTS, `0007` knowledge reconstruction)
 ├── documentation/
 │   ├── architecture/           # System, data flow, database, AI/RAG, and security specs
-│   ├── api/                    # API conventions & implemented health, auth, user & RBAC endpoints
+│   ├── api/                    # API conventions & implemented health, auth, workspace, evidence, integration & retrieval endpoints
 │   └── development/            # Environment setup, integration readiness, and phased roadmap
 ├── scripts/                    # Operational and evaluation scripts (planned Phase 1.3+)
 ├── .env.example                # Documented environment variable template
@@ -100,7 +100,7 @@ The platform structures reconstructed project knowledge across eight core domain
 
 ---
 
-## Local Development Quickstart (Phase 2.2)
+## Local Development Quickstart (Phase 2.6)
 
 ### 1. Environment Configuration
 Copy [`.env.example`](.env.example) to `.env` and populate strong local secrets (`POSTGRES_PASSWORD`, `JWT_SECRET_KEY`, `TOKEN_ENCRYPTION_KEY`, `FILE_ENCRYPTION_KEY`). Keep optional external integrations disabled (`*_ENABLED=false`) until needed, and **never commit `.env`**.

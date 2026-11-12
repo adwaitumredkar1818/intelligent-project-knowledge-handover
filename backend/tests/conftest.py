@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import uuid
 from collections.abc import Iterator
 from contextlib import contextmanager
 from dataclasses import dataclass
@@ -9,6 +10,7 @@ from typing import Any
 
 import pytest
 from fastapi import FastAPI
+from fastapi.testclient import TestClient
 from sqlalchemy import Engine, create_engine, event
 from sqlalchemy.orm import Session, sessionmaker
 from sqlalchemy.pool import StaticPool
@@ -121,3 +123,83 @@ def isolated_auth_app(
         yield ctx
     finally:
         ctx.engine.dispose()
+
+
+DEFAULT_TEST_PASSWORD = "Handover!Workspace2026#Secure"
+
+
+@dataclass(frozen=True, slots=True)
+class RegisteredUserSession:
+    """Registered and logged-in user credentials for isolated API tests."""
+
+    user_id: uuid.UUID
+    email: str
+    full_name: str
+    access_token: str
+
+    @property
+    def headers(self) -> dict[str, str]:
+        return {"Authorization": f"Bearer {self.access_token}"}
+
+
+def register_and_login_user(
+    client: TestClient,
+    *,
+    email: str,
+    full_name: str,
+    password: str = DEFAULT_TEST_PASSWORD,
+) -> RegisteredUserSession:
+    """Register a platform account and return its active Bearer session."""
+    reg = client.post(
+        "/api/v1/auth/register",
+        json={"full_name": full_name, "email": email, "password": password},
+    )
+    if reg.status_code != 201:
+        raise AssertionError(f"Failed test user registration ({reg.status_code}): {reg.text}")
+    reg_user = reg.json()["user"]
+
+    login = client.post(
+        "/api/v1/auth/login",
+        json={"email": email, "password": password},
+    )
+    if login.status_code != 200:
+        raise AssertionError(f"Failed test user login ({login.status_code}): {login.text}")
+    login_data = login.json()
+
+    return RegisteredUserSession(
+        user_id=uuid.UUID(reg_user["id"]),
+        email=reg_user["email"],
+        full_name=reg_user["full_name"],
+        access_token=login_data["access_token"],
+    )
+
+
+def invite_and_accept_member(
+    client: TestClient,
+    *,
+    organisation_id: str,
+    inviter_headers: dict[str, str],
+    invitee: RegisteredUserSession,
+    role_name: str = "org_member",
+) -> None:
+    """Invite an existing user into an organisation and accept via development token."""
+    invite_resp = client.post(
+        f"/api/v1/organisations/{organisation_id}/invitations",
+        headers=inviter_headers,
+        json={"email": invitee.email, "role_name": role_name},
+    )
+    if invite_resp.status_code != 201:
+        raise AssertionError(
+            f"Failed invitation creation ({invite_resp.status_code}): {invite_resp.text}"
+        )
+    token = invite_resp.json()["development_invitation_token"]
+    if not isinstance(token, str) or not token:
+        raise AssertionError("Expected development_invitation_token in test environment.")
+    accept_resp = client.post(
+        f"/api/v1/invitations/{token}/accept",
+        headers=invitee.headers,
+    )
+    if accept_resp.status_code != 200:
+        raise AssertionError(
+            f"Failed invitation acceptance ({accept_resp.status_code}): {accept_resp.text}"
+        )

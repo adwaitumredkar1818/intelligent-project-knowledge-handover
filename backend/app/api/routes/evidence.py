@@ -1,163 +1,166 @@
-"""Evidence Library (Panel B) and Evidence Details (Panel C) routes with ACL enforcement."""
+"""FastAPI HTTP endpoints for Phase 2.4A Evidence Foundation & Document Ingestion."""
 
 from __future__ import annotations
 
 import uuid
 from typing import Annotated
 
-from fastapi import (
-    APIRouter,
-    Depends,
-    File,
-    Query,
-    Response,
-    UploadFile,
-    status,
-)
+from fastapi import APIRouter, Depends, File, Query, Response, UploadFile, status
 
 from app.api.deps import (
+    get_app_settings,
     get_current_principal,
     get_evidence_service,
     require_project_permission,
 )
-from app.models.enums import EvidenceProcessingStatus, SourceProvider
+from app.core.config import Settings
+from app.core.exceptions import PayloadTooLargeError
 from app.schemas.evidence import (
+    BackgroundJobResponse,
     DocumentUploadResponse,
-    EvidenceItemDetail,
-    EvidenceLibraryMetricsResponse,
+    EvidenceDetailResponse,
     EvidenceListResponse,
 )
 from app.services.evidence import EvidenceService
 from app.services.rbac import AuthenticatedPrincipal, ProjectContext
 
-router = APIRouter(tags=["evidence"])
+router = APIRouter(tags=["Evidence"])
+
+_READ_CHUNK_BYTES = 1024 * 1024
 
 
-# -----------------------------------------------------------------------------
-# Document Upload (PDF & DOCX Extraction)
-# -----------------------------------------------------------------------------
+async def _read_bounded_upload(upload: UploadFile, *, max_bytes: int) -> bytes:
+    """Stream multipart upload in bounded chunks to reject oversized bodies early."""
+    chunks: list[bytes] = []
+    total_read = 0
+    while True:
+        chunk = await upload.read(_READ_CHUNK_BYTES)
+        if not chunk:
+            break
+        total_read += len(chunk)
+        if total_read > max_bytes:
+            raise PayloadTooLargeError(
+                "Uploaded document exceeds the configured maximum upload size.",
+                code="FILE_TOO_LARGE",
+            )
+        chunks.append(chunk)
+    return b"".join(chunks)
+
+
 @router.post(
-    "/projects/{project_id}/evidence/upload",
+    "/projects/{project_id}/evidence/documents",
     response_model=DocumentUploadResponse,
     status_code=status.HTTP_201_CREATED,
-    summary="Upload and extract a PDF or DOCX document (requires project.evidence.upload)",
+    summary="Upload a PDF or DOCX document as project evidence",
 )
-async def upload_document_evidence(
-    project_id: uuid.UUID,
+async def upload_project_document(
+    response: Response,
     file: Annotated[UploadFile, File(...)],
     project_ctx: Annotated[
         ProjectContext,
-        Depends(require_project_permission("project.evidence.upload")),
+        Depends(
+            require_project_permission(
+                "project.evidence.contribute",
+                require_explicit_membership=True,
+            )
+        ),
     ],
-    principal: Annotated[AuthenticatedPrincipal, Depends(get_current_principal)],
+    settings: Annotated[Settings, Depends(get_app_settings)],
     evidence_service: Annotated[EvidenceService, Depends(get_evidence_service)],
 ) -> DocumentUploadResponse:
-    """Upload a PDF or DOCX file, encrypt at rest, extract structure, and record evidence."""
-    content = await file.read()
-    filename = file.filename or "uploaded_document.dat"
-
-    return evidence_service.upload_document(
-        project_id=project_id,
-        user_id=principal.user_id,
-        filename=filename,
-        content=content,
+    """Validate, encrypt, deduplicate (within project), persist provenance, and queue extraction."""
+    raw_bytes = await _read_bounded_upload(
+        file,
+        max_bytes=settings.ingestion.max_upload_size_bytes,
     )
+    result = evidence_service.upload_document(
+        project_ctx=project_ctx,
+        filename=file.filename,
+        declared_mime_type=file.content_type,
+        raw_bytes=raw_bytes,
+    )
+    response.status_code = status.HTTP_201_CREATED if result.created else status.HTTP_200_OK
+    return result.payload
 
 
-# -----------------------------------------------------------------------------
-# Panel B: Evidence Library
-# -----------------------------------------------------------------------------
 @router.get(
     "/projects/{project_id}/evidence",
     response_model=EvidenceListResponse,
     status_code=status.HTTP_200_OK,
-    summary="Search, filter, and list project evidence items (requires project.evidence.read)",
+    summary="List evidence items inside an authorised project",
 )
-def list_evidence_library(
-    project_id: uuid.UUID,
+def list_project_evidence(
     project_ctx: Annotated[
         ProjectContext,
-        Depends(require_project_permission("project.evidence.read")),
+        Depends(require_project_permission("project.read")),
     ],
-    principal: Annotated[AuthenticatedPrincipal, Depends(get_current_principal)],
     evidence_service: Annotated[EvidenceService, Depends(get_evidence_service)],
-    q: Annotated[str | None, Query(description="Search by keyword, author, or original ID")] = None,
-    provider: Annotated[SourceProvider | None, Query(description="Filter by provider")] = None,
-    processing_status: Annotated[
-        EvidenceProcessingStatus | None,
-        Query(alias="status", description="Filter by status"),
-    ] = None,
-    limit: Annotated[int, Query(ge=1, le=100)] = 50,
-    offset: Annotated[int, Query(ge=0)] = 0,
+    processing_status: str | None = Query(default=None),
+    source_type: str | None = Query(default=None),
+    category: str | None = Query(default=None),
+    limit: int = Query(default=20, ge=1, le=100),
+    offset: int = Query(default=0, ge=0),
 ) -> EvidenceListResponse:
-    """Retrieve filtered evidence items with strict source ACL pre-filtering."""
-    return evidence_service.list_evidence(
-        project_id=project_id,
-        user_id=principal.user_id,
-        search_query=q,
-        provider=provider,
-        status=processing_status,
+    """List non-deleted evidence summaries for the authorised project workspace."""
+    return evidence_service.list_project_evidence(
+        project_ctx=project_ctx,
+        processing_status=processing_status,
+        source_type=source_type,
+        category=category,
         limit=limit,
         offset=offset,
     )
 
 
 @router.get(
-    "/projects/{project_id}/evidence/metrics",
-    response_model=EvidenceLibraryMetricsResponse,
-    status_code=status.HTTP_200_OK,
-    summary="Get aggregated evidence summary metrics for a project (project.evidence.read)",
-)
-def get_evidence_metrics(
-    project_id: uuid.UUID,
-    project_ctx: Annotated[
-        ProjectContext,
-        Depends(require_project_permission("project.evidence.read")),
-    ],
-    evidence_service: Annotated[EvidenceService, Depends(get_evidence_service)],
-) -> EvidenceLibraryMetricsResponse:
-    """Return total records, breakdown by source, bytes stored, and sync status."""
-    return evidence_service.get_evidence_metrics(project_id=project_id)
-
-
-# -----------------------------------------------------------------------------
-# Panel C: Evidence Details & Secure Document Download
-# -----------------------------------------------------------------------------
-@router.get(
     "/evidence/{evidence_id}",
-    response_model=EvidenceItemDetail,
+    response_model=EvidenceDetailResponse,
     status_code=status.HTTP_200_OK,
-    summary="Fetch full evidence details and extracted chunks (enforces strict Source ACL)",
+    summary="Retrieve evidence provenance, separated extracted content, and jobs",
 )
 def get_evidence_detail(
     evidence_id: uuid.UUID,
     principal: Annotated[AuthenticatedPrincipal, Depends(get_current_principal)],
     evidence_service: Annotated[EvidenceService, Depends(get_evidence_service)],
-) -> EvidenceItemDetail:
-    """Retrieve full evidence item with content and chunks; fails closed if unauthorized."""
+) -> EvidenceDetailResponse:
+    """Fetch a single evidence item after strict tenant, project, and ACL checks."""
     return evidence_service.get_evidence_detail(
         evidence_id=evidence_id,
-        user_id=principal.user_id,
+        principal=principal,
     )
 
 
-@router.get(
-    "/evidence/{evidence_id}/download",
-    status_code=status.HTTP_200_OK,
-    summary="Download decrypted document file content (enforces strict Source ACL)",
+@router.delete(
+    "/evidence/{evidence_id}",
+    status_code=status.HTTP_204_NO_CONTENT,
+    summary="Logically delete an evidence item and remove its private stored payload",
 )
-def download_document(
+def delete_evidence_item(
     evidence_id: uuid.UUID,
     principal: Annotated[AuthenticatedPrincipal, Depends(get_current_principal)],
     evidence_service: Annotated[EvidenceService, Depends(get_evidence_service)],
 ) -> Response:
-    """Decrypt and stream stored document file with correct Content-Disposition."""
-    raw_bytes, filename, mime_type = evidence_service.download_document_file(
+    """Logically delete an evidence item after parent-org, project, and role/ownership checks."""
+    evidence_service.delete_evidence(
         evidence_id=evidence_id,
-        user_id=principal.user_id,
+        principal=principal,
     )
-    headers = {
-        "Content-Disposition": f'attachment; filename="{filename}"',
-        "Content-Length": str(len(raw_bytes)),
-    }
-    return Response(content=raw_bytes, media_type=mime_type, headers=headers)
+    return Response(status_code=status.HTTP_204_NO_CONTENT)
+
+
+@router.post(
+    "/evidence/{evidence_id}/reprocess",
+    response_model=BackgroundJobResponse,
+    status_code=status.HTTP_202_ACCEPTED,
+    summary="Queue document extraction reprocessing for a failed or partial item",
+)
+def reprocess_evidence_item(
+    evidence_id: uuid.UUID,
+    principal: Annotated[AuthenticatedPrincipal, Depends(get_current_principal)],
+    evidence_service: Annotated[EvidenceService, Depends(get_evidence_service)],
+) -> BackgroundJobResponse:
+    """Enqueue a clean retry job using the preserved encrypted upload object."""
+    return evidence_service.reprocess_evidence(
+        evidence_id=evidence_id,
+        principal=principal,
+    )

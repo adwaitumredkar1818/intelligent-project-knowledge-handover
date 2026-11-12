@@ -39,7 +39,7 @@ router = APIRouter(tags=["projects"])
     "/organisations/{organisation_id}/projects",
     response_model=ProjectResponse,
     status_code=status.HTTP_201_CREATED,
-    summary="Create a project workspace inside an organisation (requires permissions)",
+    summary="Create a project workspace (requires organisation.projects.create)",
 )
 def create_project(
     payload: CreateProjectRequest,

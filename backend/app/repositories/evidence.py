@@ -1,496 +1,376 @@
-"""Repository for Evidence Workspace models (connections, mappings, items, files, jobs)."""
+"""Data-access repository for unified evidence items and separated extracted content."""
 
 from __future__ import annotations
 
 import uuid
-from datetime import UTC, datetime
+from datetime import datetime
 from typing import Any
 
-from sqlalchemy import func, or_, select
-from sqlalchemy.orm import Session, selectinload
+from sqlalchemy import and_, delete, func, or_, select
+from sqlalchemy.orm import Session, joinedload, selectinload
 
 from app.models.enums import (
     EvidenceProcessingStatus,
-    EvidenceVerificationStatus,
-    JobStatus,
-    SourceConnectionStatus,
-    SourceProvider,
-    SyncStatus,
+    EvidenceSourceType,
+    SourcePermissionVerificationStatus,
 )
-from app.models.evidence import (
-    DocumentFile,
-    EvidenceContent,
-    EvidenceItem,
-    ProjectSourceMapping,
-    SourceConnection,
-    SourceSyncJob,
-)
+from app.models.evidence import EvidenceContent, EvidenceItem, EvidencePageContent
+from app.models.integration import SourceAccessPolicy
+from app.services.document_extraction import ExtractedPageData
 
 
 class EvidenceRepository:
-    """Encapsulates SQLAlchemy database interactions for Evidence Workspace."""
+    """Repository encapsulating tenant-scoped evidence ledger persistence."""
 
-    def __init__(self, db: Session) -> None:
-        self._db = db
+    def __init__(self, session: Session) -> None:
+        self._session = session
 
-    # -------------------------------------------------------------------------
-    # Panel A: Source Connections & Mappings
-    # -------------------------------------------------------------------------
-    def create_source_connection(
+    def get_by_id(
         self,
+        evidence_id: uuid.UUID,
         *,
-        organisation_id: uuid.UUID,
-        connected_by_id: uuid.UUID,
-        provider: SourceProvider,
-        account_identifier: str,
-        encrypted_access_token: str,
-        scopes: list[str] | None = None,
-    ) -> SourceConnection:
-        """Persist a new source connection with encrypted credentials."""
-        now = datetime.now(UTC)
-        conn = SourceConnection(
-            organisation_id=organisation_id,
-            connected_by_id=connected_by_id,
-            provider=provider.value if isinstance(provider, SourceProvider) else str(provider),
-            account_identifier=account_identifier,
-            encrypted_access_token=encrypted_access_token,
-            scopes=scopes or [],
-            connection_status=SourceConnectionStatus.CONNECTED.value,
-            created_at=now,
-            updated_at=now,
-        )
-        self._db.add(conn)
-        self._db.flush()
-        return conn
-
-    def get_source_connection_by_id(self, connection_id: uuid.UUID) -> SourceConnection | None:
-        """Fetch a source connection by primary key."""
-        stmt = select(SourceConnection).where(SourceConnection.id == connection_id)
-        return self._db.execute(stmt).scalar_one_or_none()
-
-    def list_source_connections_for_org(
-        self,
-        organisation_id: uuid.UUID,
-        user_id: uuid.UUID | None = None,
-    ) -> list[SourceConnection]:
-        """List connections for an organisation, optionally filtered by user access."""
-        stmt = select(SourceConnection).where(
-            SourceConnection.organisation_id == organisation_id,
-            SourceConnection.connection_status != SourceConnectionStatus.DISCONNECTED.value,
-        )
-        if user_id is not None:
-            # Accessible if user connected it, or if it is marked as shared in scopes
-            stmt = stmt.where(
-                or_(
-                    SourceConnection.connected_by_id == user_id,
-                    SourceConnection.scopes.contains(["shared:organisation"]),
-                    SourceConnection.scopes.contains(["shared:project"]),
-                )
-            )
-        stmt = stmt.order_by(SourceConnection.created_at.desc())
-        return list(self._db.execute(stmt).scalars().all())
-
-    def update_source_connection(
-        self,
-        connection: SourceConnection,
-        *,
-        scopes: list[str] | None = None,
-        connection_status: str | None = None,
-        last_health_check_at: datetime | None = None,
-    ) -> SourceConnection:
-        """Update source connection attributes."""
-        if scopes is not None:
-            connection.scopes = scopes
-        if connection_status is not None:
-            connection.connection_status = connection_status
-        if last_health_check_at is not None:
-            connection.last_health_check_at = last_health_check_at
-
-        connection.updated_at = datetime.now(UTC)
-        self._db.add(connection)
-        self._db.flush()
-        return connection
-
-    def create_project_source_mapping(
-        self,
-        *,
-        project_id: uuid.UUID,
-        source_connection_id: uuid.UUID,
-        external_resource_id: str,
-        external_resource_name: str,
-        external_metadata: dict[str, Any] | None = None,
-    ) -> ProjectSourceMapping:
-        """Link an external source container (repo/board) to a project workspace."""
-        now = datetime.now(UTC)
-        mapping = ProjectSourceMapping(
-            project_id=project_id,
-            source_connection_id=source_connection_id,
-            external_resource_id=external_resource_id,
-            external_resource_name=external_resource_name,
-            external_metadata=external_metadata or {},
-            sync_status=SyncStatus.IDLE.value,
-            is_active=True,
-            created_at=now,
-            updated_at=now,
-        )
-        self._db.add(mapping)
-        self._db.flush()
-        return mapping
-
-    def get_mapping_by_id(self, mapping_id: uuid.UUID) -> ProjectSourceMapping | None:
-        """Fetch project source mapping with its connection eagerly loaded."""
-        stmt = (
-            select(ProjectSourceMapping)
-            .options(selectinload(ProjectSourceMapping.source_connection))
-            .where(ProjectSourceMapping.id == mapping_id)
-        )
-        return self._db.execute(stmt).scalar_one_or_none()
-
-    def get_mapping_by_resource(
-        self,
-        project_id: uuid.UUID,
-        external_resource_id: str,
-    ) -> ProjectSourceMapping | None:
-        """Check if an external container is already mapped to this project."""
-        stmt = select(ProjectSourceMapping).where(
-            ProjectSourceMapping.project_id == project_id,
-            ProjectSourceMapping.external_resource_id == external_resource_id,
-        )
-        return self._db.execute(stmt).scalar_one_or_none()
-
-    def list_mappings_for_project(self, project_id: uuid.UUID) -> list[ProjectSourceMapping]:
-        """List all active container mappings for a project workspace."""
-        stmt = (
-            select(ProjectSourceMapping)
-            .options(selectinload(ProjectSourceMapping.source_connection))
-            .where(ProjectSourceMapping.project_id == project_id)
-            .order_by(ProjectSourceMapping.created_at.desc())
-        )
-        return list(self._db.execute(stmt).scalars().all())
-
-    def update_mapping(
-        self,
-        mapping: ProjectSourceMapping,
-        *,
-        sync_status: str | None = None,
-        last_synced_at: datetime | None = None,
-        sync_error: str | None = None,
-    ) -> ProjectSourceMapping:
-        """Update mapping sync outcome and statistics."""
-        if sync_status is not None:
-            mapping.sync_status = sync_status
-        if last_synced_at is not None:
-            mapping.last_synced_at = last_synced_at
-        mapping.sync_error = sync_error
-        mapping.updated_at = datetime.now(UTC)
-        self._db.add(mapping)
-        self._db.flush()
-        return mapping
-
-    # -------------------------------------------------------------------------
-    # Panel B & C: Evidence Items & Contents
-    # -------------------------------------------------------------------------
-    def create_evidence_item(
-        self,
-        *,
-        project_id: uuid.UUID,
-        source_mapping_id: uuid.UUID | None = None,
-        provider: str,
-        record_type: str,
-        external_source_id: str,
-        source_url: str | None = None,
-        title: str,
-        author: str | None = None,
-        source_created_at: datetime | None = None,
-        content_hash: str,
-        raw_metadata: dict[str, Any] | None = None,
-        processing_status: str = EvidenceProcessingStatus.EXTRACTED.value,
-        verification_status: str = EvidenceVerificationStatus.UNVERIFIED.value,
-    ) -> EvidenceItem:
-        """Persist a new atomic evidence item."""
-        now = datetime.now(UTC)
-        item = EvidenceItem(
-            project_id=project_id,
-            source_mapping_id=source_mapping_id,
-            provider=provider,
-            record_type=record_type,
-            external_source_id=external_source_id,
-            source_url=source_url,
-            title=title,
-            author=author,
-            source_created_at=source_created_at,
-            ingested_at=now,
-            content_hash=content_hash,
-            raw_metadata=raw_metadata or {},
-            processing_status=processing_status,
-            verification_status=verification_status,
-            created_at=now,
-            updated_at=now,
-        )
-        self._db.add(item)
-        self._db.flush()
-        return item
-
-    def get_evidence_item_by_id(self, item_id: uuid.UUID) -> EvidenceItem | None:
-        """Fetch evidence item by ID with related contents, file, and mapping."""
+        include_deleted: bool = False,
+    ) -> EvidenceItem | None:
         stmt = (
             select(EvidenceItem)
             .options(
-                selectinload(EvidenceItem.contents),
-                selectinload(EvidenceItem.document_file),
-                selectinload(EvidenceItem.source_mapping).selectinload(
-                    ProjectSourceMapping.source_connection
-                ),
+                joinedload(EvidenceItem.project),
+                joinedload(EvidenceItem.organisation),
+                joinedload(EvidenceItem.source_access_policy),
             )
-            .where(EvidenceItem.id == item_id)
+            .where(EvidenceItem.id == evidence_id)
         )
-        return self._db.execute(stmt).scalar_one_or_none()
+        if not include_deleted:
+            stmt = stmt.where(
+                EvidenceItem.deleted_at.is_(None),
+                EvidenceItem.processing_status != EvidenceProcessingStatus.DELETED.value,
+            )
+        return self._session.execute(stmt).unique().scalar_one_or_none()
 
-    def get_evidence_by_external_id(
+    def get_by_id_detail(
         self,
-        project_id: uuid.UUID,
-        external_source_id: str,
+        evidence_id: uuid.UUID,
+        *,
+        include_deleted: bool = False,
     ) -> EvidenceItem | None:
-        """Find an evidence item by its external source key within a project."""
-        stmt = select(EvidenceItem).where(
-            EvidenceItem.project_id == project_id,
-            EvidenceItem.external_source_id == external_source_id,
+        stmt = (
+            select(EvidenceItem)
+            .options(
+                joinedload(EvidenceItem.project),
+                joinedload(EvidenceItem.organisation),
+                joinedload(EvidenceItem.source_access_policy),
+                joinedload(EvidenceItem.content),
+                selectinload(EvidenceItem.pages),
+                selectinload(EvidenceItem.jobs),
+            )
+            .where(EvidenceItem.id == evidence_id)
         )
-        return self._db.execute(stmt).scalar_one_or_none()
+        if not include_deleted:
+            stmt = stmt.where(
+                EvidenceItem.deleted_at.is_(None),
+                EvidenceItem.processing_status != EvidenceProcessingStatus.DELETED.value,
+            )
+        return self._session.execute(stmt).unique().scalar_one_or_none()
 
-    def list_evidence_items(
+    def find_active_duplicate(
         self,
         *,
         project_id: uuid.UUID,
-        search_query: str | None = None,
-        provider: str | None = None,
+        content_hash: str,
+    ) -> EvidenceItem | None:
+        """Look up an active duplicate inside ONE project boundary only."""
+        stmt = (
+            select(EvidenceItem)
+            .where(
+                EvidenceItem.project_id == project_id,
+                EvidenceItem.content_hash == content_hash,
+                EvidenceItem.deleted_at.is_(None),
+                EvidenceItem.processing_status != EvidenceProcessingStatus.DELETED.value,
+            )
+            .limit(1)
+        )
+        return self._session.execute(stmt).scalar_one_or_none()
+
+    def find_active_by_source_external_id(
+        self,
+        *,
+        project_id: uuid.UUID,
+        source_type: str,
+        source_external_id: str,
+    ) -> EvidenceItem | None:
+        """Look up an active external-source evidence record inside one project scope."""
+        stmt = (
+            select(EvidenceItem)
+            .options(
+                joinedload(EvidenceItem.content),
+                selectinload(EvidenceItem.pages),
+                joinedload(EvidenceItem.source_access_policy),
+            )
+            .where(
+                EvidenceItem.project_id == project_id,
+                EvidenceItem.source_type == source_type,
+                EvidenceItem.source_external_id == source_external_id,
+                EvidenceItem.deleted_at.is_(None),
+                EvidenceItem.processing_status != EvidenceProcessingStatus.DELETED.value,
+            )
+            .limit(1)
+        )
+        return self._session.execute(stmt).unique().scalar_one_or_none()
+
+    def list_active_external_by_mapping(
+        self,
+        *,
+        project_id: uuid.UUID,
+        source_type: str,
+        mapping_id: uuid.UUID,
+    ) -> list[EvidenceItem]:
+        """Return active external evidence items previously ingested for one source mapping."""
+        stmt = select(EvidenceItem).where(
+            EvidenceItem.project_id == project_id,
+            EvidenceItem.source_type == source_type,
+            EvidenceItem.deleted_at.is_(None),
+            EvidenceItem.processing_status != EvidenceProcessingStatus.DELETED.value,
+        )
+        mapping_str = str(mapping_id)
+        return [
+            item
+            for item in self._session.execute(stmt).scalars().all()
+            if str((item.metadata_json or {}).get("mapping_id") or "") == mapping_str
+        ]
+
+    def _allowed_policy_ids_for_viewer(
+        self,
+        *,
+        project_id: uuid.UUID,
+        viewer_user_id: uuid.UUID | None,
+    ) -> tuple[list[uuid.UUID], list[uuid.UUID]]:
+        if viewer_user_id is None:
+            return [], []
+        policies = list(
+            self._session.execute(
+                select(SourceAccessPolicy).where(SourceAccessPolicy.project_id == project_id)
+            )
+            .scalars()
+            .all()
+        )
+        viewer_str = str(viewer_user_id)
+        allowed_ids: list[uuid.UUID] = []
+        revoked_ids: list[uuid.UUID] = []
+        for policy in policies:
+            if policy.sync_permission_status == SourcePermissionVerificationStatus.REVOKED.value:
+                revoked_ids.append(policy.id)
+                continue
+            if viewer_str in (policy.allowed_user_ids or []):
+                allowed_ids.append(policy.id)
+        return allowed_ids, revoked_ids
+
+    def list_for_project(
+        self,
+        *,
+        project_id: uuid.UUID,
         processing_status: str | None = None,
+        source_type: str | None = None,
+        category: str | None = None,
+        viewer_user_id: uuid.UUID | None = None,
+        has_project_manage: bool = False,
+        enforce_source_acl: bool = True,
         limit: int = 50,
         offset: int = 0,
     ) -> tuple[list[EvidenceItem], int]:
-        """Query and paginate evidence items with filtering and search."""
-        base_query = select(EvidenceItem).where(EvidenceItem.project_id == project_id)
-
-        if provider is not None:
-            base_query = base_query.where(EvidenceItem.provider == provider)
+        filters: list[Any] = [
+            EvidenceItem.project_id == project_id,
+            EvidenceItem.deleted_at.is_(None),
+            EvidenceItem.processing_status != EvidenceProcessingStatus.DELETED.value,
+        ]
         if processing_status is not None:
-            base_query = base_query.where(EvidenceItem.processing_status == processing_status)
-        if search_query:
-            term = f"%{search_query.strip()}%"
-            base_query = base_query.where(
-                or_(
-                    EvidenceItem.title.ilike(term),
-                    EvidenceItem.external_source_id.ilike(term),
-                    EvidenceItem.author.ilike(term),
+            filters.append(EvidenceItem.processing_status == processing_status)
+        if source_type is not None:
+            filters.append(EvidenceItem.source_type == source_type)
+        if category is not None:
+            filters.append(EvidenceItem.category == category)
+
+        if enforce_source_acl:
+            allowed_policy_ids, revoked_policy_ids = self._allowed_policy_ids_for_viewer(
+                project_id=project_id,
+                viewer_user_id=viewer_user_id,
+            )
+            public_clause = (
+                and_(
+                    EvidenceItem.acl_scope == "project_members",
+                    or_(
+                        EvidenceItem.source_access_policy_id.is_(None),
+                        EvidenceItem.source_access_policy_id.notin_(revoked_policy_ids),
+                    ),
                 )
+                if revoked_policy_ids
+                else EvidenceItem.acl_scope == "project_members"
             )
+            acl_clauses: list[Any] = [public_clause]
+            if allowed_policy_ids:
+                acl_clauses.append(
+                    and_(
+                        EvidenceItem.acl_scope == "source_restricted",
+                        EvidenceItem.source_access_policy_id.in_(allowed_policy_ids),
+                    )
+                )
+            if has_project_manage:
+                acl_clauses.append(
+                    and_(
+                        EvidenceItem.acl_scope == "source_restricted",
+                        EvidenceItem.source_type == EvidenceSourceType.DOCUMENT_UPLOAD.value,
+                        EvidenceItem.source_access_policy_id.is_(None),
+                        EvidenceItem.source_connection_id.is_(None),
+                    )
+                )
+            elif viewer_user_id is not None:
+                acl_clauses.append(
+                    and_(
+                        EvidenceItem.acl_scope == "source_restricted",
+                        EvidenceItem.source_type == EvidenceSourceType.DOCUMENT_UPLOAD.value,
+                        EvidenceItem.source_access_policy_id.is_(None),
+                        EvidenceItem.source_connection_id.is_(None),
+                        EvidenceItem.uploaded_by_user_id == viewer_user_id,
+                    )
+                )
+            filters.append(or_(*acl_clauses))
 
-        # Count total
-        count_stmt = select(func.count()).select_from(base_query.subquery())
-        total = self._db.execute(count_stmt).scalar_one()
-
-        # Fetch page with eagerly loaded relations
-        items_stmt = (
-            base_query.options(
-                selectinload(EvidenceItem.document_file),
-                selectinload(EvidenceItem.contents),
-                selectinload(EvidenceItem.source_mapping).selectinload(
-                    ProjectSourceMapping.source_connection
-                ),
-            )
-            .order_by(EvidenceItem.created_at.desc())
-            .offset(offset)
-            .limit(limit)
+        total = int(
+            self._session.execute(
+                select(func.count()).select_from(EvidenceItem).where(*filters)
+            ).scalar_one()
         )
-        items = list(self._db.execute(items_stmt).scalars().all())
-
+        items = list(
+            self._session.execute(
+                select(EvidenceItem)
+                .options(selectinload(EvidenceItem.jobs))
+                .where(*filters)
+                .order_by(EvidenceItem.created_at.desc(), EvidenceItem.id.desc())
+                .limit(limit)
+                .offset(offset)
+            )
+            .scalars()
+            .all()
+        )
         return items, total
 
-    def get_evidence_metrics(self, project_id: uuid.UUID) -> dict[str, Any]:
-        """Aggregate breakdown metrics across evidence records in a project."""
-        total = (
-            self._db.execute(
-                select(func.count(EvidenceItem.id)).where(EvidenceItem.project_id == project_id)
-            ).scalar_one()
-            or 0
-        )
-
-        prov_stmt = (
-            select(EvidenceItem.provider, func.count(EvidenceItem.id))
-            .where(EvidenceItem.project_id == project_id)
-            .group_by(EvidenceItem.provider)
-        )
-        by_prov = {str(row[0]): int(row[1]) for row in self._db.execute(prov_stmt).all()}
-
-        stat_stmt = (
-            select(EvidenceItem.processing_status, func.count(EvidenceItem.id))
-            .where(EvidenceItem.project_id == project_id)
-            .group_by(EvidenceItem.processing_status)
-        )
-        by_stat = {str(row[0]): int(row[1]) for row in self._db.execute(stat_stmt).all()}
-
-        # Total bytes from document files
-        bytes_stmt = (
-            select(func.coalesce(func.sum(DocumentFile.file_size_bytes), 0))
-            .select_from(DocumentFile)
-            .join(EvidenceItem, DocumentFile.evidence_item_id == EvidenceItem.id)
-            .where(EvidenceItem.project_id == project_id)
-        )
-        total_bytes = int(self._db.execute(bytes_stmt).scalar_one() or 0)
-
-        # Recent sync timestamp
-        sync_stmt = (
-            select(func.max(ProjectSourceMapping.last_synced_at))
-            .where(ProjectSourceMapping.project_id == project_id)
-        )
-        last_synced = self._db.execute(sync_stmt).scalar_one()
-
-        docs_count = by_prov.get("pdf", 0) + by_prov.get("docx", 0)
-
-        return {
-            "total_items": total,
-            "total_documents": docs_count,
-            "total_code_artifacts": by_prov.get("github", 0),
-            "total_tickets": by_prov.get("jira", 0),
-            "total_bytes": total_bytes,
-            "last_synced_at": last_synced,
-            "total_by_provider": by_prov,
-            "total_by_status": by_stat,
-        }
-
-    # -------------------------------------------------------------------------
-    # Document Files & Content
-    # -------------------------------------------------------------------------
-    def create_document_file(
+    def create_evidence_item(
         self,
         *,
-        evidence_item_id: uuid.UUID,
-        uploaded_by_id: uuid.UUID,
-        original_filename: str,
-        file_format: str,
-        mime_type: str,
-        file_size_bytes: int,
-        storage_path: str,
-        sha256_hash: str,
-        page_count: int | None = None,
-        ocr_applied: bool = False,
-    ) -> DocumentFile:
-        """Record physical document storage metadata."""
-        now = datetime.now(UTC)
-        doc = DocumentFile(
-            evidence_item_id=evidence_item_id,
-            uploaded_by_id=uploaded_by_id,
+        evidence_id: uuid.UUID | None = None,
+        organisation_id: uuid.UUID,
+        project_id: uuid.UUID,
+        uploaded_by_user_id: uuid.UUID | None,
+        source_type: str,
+        source_provider: str,
+        category: str,
+        source_external_id: str,
+        source_url: str | None,
+        source_author_identity: str | None,
+        title: str,
+        original_filename: str | None,
+        mime_type: str | None,
+        file_size_bytes: int | None,
+        content_hash: str,
+        storage_provider: str | None,
+        storage_object_key: str | None,
+        encryption_algorithm: str | None,
+        encryption_key_id: str | None,
+        source_connection_id: uuid.UUID | None = None,
+        source_access_policy_id: uuid.UUID | None = None,
+        acl_scope: str = "project_members",
+        source_created_at: datetime | None,
+        source_updated_at: datetime | None,
+        extracted_at: datetime | None = None,
+        last_synced_at: datetime | None = None,
+        processing_status: str,
+        extraction_method: str | None = None,
+        page_count: int | None,
+        error_code: str | None = None,
+        error_message: str | None = None,
+        metadata_json: dict[str, Any],
+    ) -> EvidenceItem:
+        item = EvidenceItem(
+            id=evidence_id or uuid.uuid4(),
+            organisation_id=organisation_id,
+            project_id=project_id,
+            uploaded_by_user_id=uploaded_by_user_id,
+            source_type=source_type,
+            source_provider=source_provider,
+            category=category,
+            source_external_id=source_external_id,
+            source_url=source_url,
+            source_author_identity=source_author_identity,
+            title=title,
             original_filename=original_filename,
-            file_format=file_format,
             mime_type=mime_type,
             file_size_bytes=file_size_bytes,
-            storage_path=storage_path,
-            sha256_hash=sha256_hash,
+            content_hash=content_hash,
+            storage_provider=storage_provider,
+            storage_object_key=storage_object_key,
+            encryption_algorithm=encryption_algorithm,
+            encryption_key_id=encryption_key_id,
+            source_connection_id=source_connection_id,
+            source_access_policy_id=source_access_policy_id,
+            acl_scope=acl_scope,
+            source_created_at=source_created_at,
+            source_updated_at=source_updated_at,
+            extracted_at=extracted_at,
+            last_synced_at=last_synced_at,
+            processing_status=processing_status,
+            extraction_method=extraction_method,
             page_count=page_count,
-            ocr_applied=ocr_applied,
-            created_at=now,
+            error_code=error_code,
+            error_message=error_message,
+            metadata_json=metadata_json,
         )
-        self._db.add(doc)
-        self._db.flush()
-        return doc
+        self._session.add(item)
+        self._session.flush()
+        return item
 
-    def get_document_file_by_id(self, file_id: uuid.UUID) -> DocumentFile | None:
-        """Fetch a document file record by ID."""
-        stmt = select(DocumentFile).where(DocumentFile.id == file_id)
-        return self._db.execute(stmt).scalar_one_or_none()
-
-    def create_evidence_content(
+    def replace_extracted_content(
         self,
         *,
-        evidence_item_id: uuid.UUID,
-        chunk_index: int,
-        page_number: int | None = None,
-        section_heading: str | None = None,
-        content_text: str,
-        token_count: int | None = None,
-        indexing_status: str = EvidenceProcessingStatus.PENDING.value,
-    ) -> EvidenceContent:
-        """Persist an extracted text chunk."""
-        now = datetime.now(UTC)
-        content = EvidenceContent(
-            evidence_item_id=evidence_item_id,
-            chunk_index=chunk_index,
-            page_number=page_number,
-            section_heading=section_heading,
-            content_text=content_text,
-            token_count=token_count,
-            indexing_status=indexing_status,
-            created_at=now,
+        evidence_id: uuid.UUID,
+        extracted_text: str,
+        warnings: tuple[str, ...],
+        pages: tuple[ExtractedPageData, ...],
+    ) -> None:
+        """Persist separated canonical text and ordered page segments cleanly."""
+        char_count = len(extracted_text)
+        word_count = len(extracted_text.split()) if extracted_text.strip() else 0
+
+        existing_content = self._session.get(EvidenceContent, evidence_id)
+        if existing_content is None:
+            self._session.add(
+                EvidenceContent(
+                    evidence_id=evidence_id,
+                    extracted_text=extracted_text,
+                    char_count=char_count,
+                    word_count=word_count,
+                    extraction_warnings=list(warnings),
+                )
+            )
+        else:
+            existing_content.extracted_text = extracted_text
+            existing_content.char_count = char_count
+            existing_content.word_count = word_count
+            existing_content.extraction_warnings = list(warnings)
+
+        self._session.execute(
+            delete(EvidencePageContent).where(EvidencePageContent.evidence_id == evidence_id)
         )
-        self._db.add(content)
-        self._db.flush()
-        return content
-
-    # -------------------------------------------------------------------------
-    # Background Sync Jobs
-    # -------------------------------------------------------------------------
-    def create_sync_job(
-        self,
-        *,
-        project_id: uuid.UUID,
-        source_mapping_id: uuid.UUID | None = None,
-        job_type: str = "full",
-    ) -> SourceSyncJob:
-        """Create a new queued sync job for the background worker."""
-        now = datetime.now(UTC)
-        job = SourceSyncJob(
-            project_id=project_id,
-            source_mapping_id=source_mapping_id,
-            job_type=job_type,
-            status=JobStatus.QUEUED.value,
-            attempt_count=0,
-            max_attempts=3,
-            progress_percent=0,
-            created_at=now,
-        )
-        self._db.add(job)
-        self._db.flush()
-        return job
-
-    def get_sync_job_by_id(self, job_id: uuid.UUID) -> SourceSyncJob | None:
-        """Fetch a sync job by ID."""
-        stmt = select(SourceSyncJob).where(SourceSyncJob.id == job_id)
-        return self._db.execute(stmt).scalar_one_or_none()
-
-    def list_sync_jobs_for_mapping(
-        self,
-        source_mapping_id: uuid.UUID,
-        limit: int = 20,
-    ) -> list[SourceSyncJob]:
-        """List sync jobs for a specific container mapping."""
-        stmt = (
-            select(SourceSyncJob)
-            .where(SourceSyncJob.source_mapping_id == source_mapping_id)
-            .order_by(SourceSyncJob.created_at.desc())
-            .limit(limit)
-        )
-        return list(self._db.execute(stmt).scalars().all())
-
-    def update_sync_job(
-        self,
-        job: SourceSyncJob,
-        *,
-        status: str,
-        error_message: str | None = None,
-        started_at: datetime | None = None,
-        completed_at: datetime | None = None,
-        increment_attempt: bool = False,
-    ) -> SourceSyncJob:
-        """Update job lifecycle status and timestamps."""
-        job.status = status
-        if error_message is not None:
-            job.error_message = error_message
-        if started_at is not None:
-            job.started_at = started_at
-        if completed_at is not None:
-            job.completed_at = completed_at
-        if increment_attempt:
-            job.attempt_count += 1
-        self._db.add(job)
-        self._db.flush()
-        return job
+        self._session.flush()
+        for page in pages:
+            self._session.add(
+                EvidencePageContent(
+                    evidence_id=evidence_id,
+                    page_number=page.page_number,
+                    extraction_outcome=page.extraction_outcome,
+                    ocr_applied=page.ocr_applied,
+                    ocr_truncated=page.ocr_truncated,
+                    text_content=page.text_content,
+                    char_count=len(page.text_content),
+                    structured_metadata=dict(page.structured_metadata),
+                )
+            )
+        self._session.flush()

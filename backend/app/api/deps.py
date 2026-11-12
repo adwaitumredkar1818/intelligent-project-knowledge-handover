@@ -19,6 +19,11 @@ from app.core.security import decode_access_token, utc_now
 from app.models.enums import UserStatus
 from app.repositories.audit import AuditLogRepository
 from app.repositories.auth import RefreshSessionRepository
+from app.repositories.chunk import EvidenceChunkRepository
+from app.repositories.evidence import EvidenceRepository
+from app.repositories.integration import IntegrationRepository
+from app.repositories.job import BackgroundJobRepository
+from app.repositories.knowledge import KnowledgeRepository
 from app.repositories.organisation import OrganisationRepository
 from app.repositories.project import ProjectRepository
 from app.repositories.rbac import RbacRepository
@@ -26,8 +31,12 @@ from app.repositories.system import SystemRepository
 from app.repositories.user import UserRepository
 from app.services.audit import AuditService
 from app.services.auth import AuthService
+from app.services.embedding import EmbeddingService, OllamaEmbeddingService
 from app.services.evidence import EvidenceService
 from app.services.health import HealthService
+from app.services.integrations.service import SourceIntegrationService
+from app.services.knowledge import KnowledgeReconstructionService
+from app.services.llm import OllamaLLMClient, StructuredLLMClient
 from app.services.organisation import OrganisationService
 from app.services.project import ProjectService
 from app.services.rbac import (
@@ -36,7 +45,14 @@ from app.services.rbac import (
     ProjectContext,
     RbacService,
 )
+from app.services.retrieval import HybridRetrievalService
+from app.services.storage import LocalPrivateStorageBackend, StorageBackend
+from app.services.token_encryption import (
+    LocalTokenEncryptionService,
+    TokenEncryptionService,
+)
 from app.services.user import UserService
+from app.services.vector_store import ChromaV2HttpVectorStore, VectorStoreClient
 
 _bearer_scheme = HTTPBearer(auto_error=False)
 
@@ -193,12 +209,193 @@ def get_project_service(
     )
 
 
+def get_storage_backend(
+    request: Request,
+    settings: Settings = Depends(get_app_settings),  # noqa: B008
+) -> StorageBackend:
+    """Resolve configured private encrypted storage backend."""
+    overridden = getattr(request.app.state, "storage_backend", None)
+    if overridden is not None:
+        return cast(StorageBackend, overridden)
+    return LocalPrivateStorageBackend(
+        root_path=settings.security.upload_storage_path,
+        file_encryption_key=settings.security.file_encryption_key.get_secret_value(),
+    )
+
+
 def get_evidence_service(
     settings: Settings = Depends(get_app_settings),  # noqa: B008
     db_session: Session = Depends(get_db_session),  # noqa: B008
+    storage_backend: StorageBackend = Depends(get_storage_backend),  # noqa: B008
+    rbac_service: RbacService = Depends(get_rbac_service),  # noqa: B008
+    audit_service: AuditService = Depends(get_audit_service),  # noqa: B008
 ) -> EvidenceService:
     """Construct EvidenceService for the current request scope."""
-    return EvidenceService(db=db_session, settings=settings)
+    return EvidenceService(
+        session=db_session,
+        settings=settings,
+        evidence_repository=EvidenceRepository(db_session),
+        job_repository=BackgroundJobRepository(db_session),
+        storage_backend=storage_backend,
+        rbac_service=rbac_service,
+        audit_service=audit_service,
+    )
+
+
+def get_token_encryption_service(
+    request: Request,
+    settings: Settings = Depends(get_app_settings),  # noqa: B008
+) -> TokenEncryptionService:
+    """Resolve replaceable OAuth token encryption service derived from `TOKEN_ENCRYPTION_KEY`."""
+    overridden = getattr(request.app.state, "token_encryption_service", None)
+    if overridden is not None:
+        return cast(TokenEncryptionService, overridden)
+    return LocalTokenEncryptionService(
+        token_encryption_key=settings.security.token_encryption_key.get_secret_value(),
+    )
+
+
+def get_source_integration_service(
+    request: Request,
+    settings: Settings = Depends(get_app_settings),  # noqa: B008
+    db_session: Session = Depends(get_db_session),  # noqa: B008
+    token_encryption: TokenEncryptionService = Depends(get_token_encryption_service),  # noqa: B008
+    rbac_service: RbacService = Depends(get_rbac_service),  # noqa: B008
+    audit_service: AuditService = Depends(get_audit_service),  # noqa: B008
+) -> SourceIntegrationService:
+    """Construct SourceIntegrationService with optional mock HTTP transport for tests."""
+    transport = cast(
+        httpx.BaseTransport | None,
+        getattr(request.app.state, "integration_http_transport", None),
+    )
+    return SourceIntegrationService(
+        session=db_session,
+        settings=settings,
+        integration_repo=IntegrationRepository(db_session),
+        job_repository=BackgroundJobRepository(db_session),
+        token_encryption=token_encryption,
+        rbac_service=rbac_service,
+        audit_service=audit_service,
+        http_transport=transport,
+    )
+
+
+def get_embedding_service(
+    request: Request,
+    settings: Settings = Depends(get_app_settings),  # noqa: B008
+) -> EmbeddingService:
+    """Resolve replaceable EmbeddingService adapter with optional test overrides."""
+    overridden = getattr(request.app.state, "embedding_service", None)
+    if overridden is not None:
+        return cast(EmbeddingService, overridden)
+    transport = cast(
+        httpx.BaseTransport | None,
+        getattr(request.app.state, "ollama_http_transport", None),
+    )
+    return OllamaEmbeddingService(
+        base_url=settings.ollama.base_url,
+        model=settings.ollama.embedding_model,
+        batch_size=settings.embedding.batch_size,
+        expected_dimensions=settings.embedding.expected_dimensions,
+        timeout_seconds=settings.embedding.timeout_seconds,
+        http_transport=transport,
+    )
+
+
+def get_vector_store_client(
+    request: Request,
+    settings: Settings = Depends(get_app_settings),  # noqa: B008
+) -> VectorStoreClient:
+    """Resolve replaceable VectorStoreClient (Chroma v2) with optional test overrides."""
+    overridden = getattr(request.app.state, "vector_store_client", None)
+    if overridden is not None:
+        return cast(VectorStoreClient, overridden)
+    transport = cast(
+        httpx.BaseTransport | None,
+        getattr(request.app.state, "chroma_http_transport", None),
+    )
+    collection_override = cast(
+        str | None,
+        getattr(request.app.state, "chroma_collection_name", None),
+    )
+    chroma_token = (
+        settings.chroma.auth_token.get_secret_value()
+        if settings.chroma.auth_token is not None
+        else None
+    )
+    return ChromaV2HttpVectorStore(
+        base_url=settings.chroma.base_url,
+        tenant=settings.chroma.tenant,
+        database=settings.chroma.database,
+        collection_prefix=settings.chroma.collection_prefix,
+        embedding_model=settings.ollama.embedding_model,
+        index_version=settings.chroma.index_version,
+        expected_dimensions=settings.embedding.expected_dimensions,
+        auth_token=chroma_token,
+        request_timeout_seconds=settings.chroma.request_timeout_seconds,
+        collection_name_override=collection_override,
+        http_transport=transport,
+    )
+
+
+def get_hybrid_retrieval_service(
+    settings: Settings = Depends(get_app_settings),  # noqa: B008
+    db_session: Session = Depends(get_db_session),  # noqa: B008
+    embedding_service: EmbeddingService = Depends(get_embedding_service),  # noqa: B008
+    vector_store: VectorStoreClient = Depends(get_vector_store_client),  # noqa: B008
+    audit_service: AuditService = Depends(get_audit_service),  # noqa: B008
+) -> HybridRetrievalService:
+    """Construct HybridRetrievalService for the current request scope."""
+    return HybridRetrievalService(
+        session=db_session,
+        settings=settings,
+        chunk_repository=EvidenceChunkRepository(db_session),
+        job_repository=BackgroundJobRepository(db_session),
+        embedding_service=embedding_service,
+        vector_store=vector_store,
+        audit_service=audit_service,
+    )
+
+
+def get_llm_client(
+    request: Request,
+    settings: Settings = Depends(get_app_settings),  # noqa: B008
+) -> StructuredLLMClient:
+    """Resolve replaceable StructuredLLMClient with optional test overrides."""
+    overridden = getattr(request.app.state, "llm_client", None)
+    if overridden is not None:
+        return cast(StructuredLLMClient, overridden)
+    transport = cast(
+        httpx.BaseTransport | None,
+        getattr(request.app.state, "ollama_http_transport", None),
+    )
+    return OllamaLLMClient(
+        base_url=settings.ollama.base_url,
+        model=settings.ollama.llm_model,
+        num_ctx=settings.ollama.llm_num_ctx,
+        num_predict=settings.ollama.llm_num_predict,
+        temperature=settings.ollama.llm_temperature,
+        timeout_seconds=settings.ollama.llm_timeout_seconds,
+        think=settings.ollama.llm_think,
+        http_transport=transport,
+    )
+
+
+def get_knowledge_reconstruction_service(
+    settings: Settings = Depends(get_app_settings),  # noqa: B008
+    db_session: Session = Depends(get_db_session),  # noqa: B008
+    audit_service: AuditService = Depends(get_audit_service),  # noqa: B008
+) -> KnowledgeReconstructionService:
+    """Construct KnowledgeReconstructionService for the current request scope."""
+    return KnowledgeReconstructionService(
+        session=db_session,
+        settings=settings,
+        knowledge_repository=KnowledgeRepository(db_session),
+        evidence_repository=EvidenceRepository(db_session),
+        chunk_repository=EvidenceChunkRepository(db_session),
+        job_repository=BackgroundJobRepository(db_session),
+        audit_service=audit_service,
+    )
 
 
 def get_current_principal(
