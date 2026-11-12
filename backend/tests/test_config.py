@@ -28,8 +28,14 @@ def test_separated_domain_configurations() -> None:
 
     assert settings.ollama.base_url == "http://host.docker.internal:11434"
     assert settings.ollama.llm_model == "qwen3:8b"
+    assert settings.ollama.llm_num_ctx == 8192
+    assert settings.ollama.llm_num_predict == 2048
+    assert settings.ollama.llm_think is False
     assert settings.ollama.embedding_model == "nomic-embed-text"
     assert settings.ollama.ocr_model == "glm-ocr:latest"
+    assert settings.extraction.prompt_version == "p2.6-v1"
+    assert settings.extraction.max_retries >= 1
+    assert settings.extraction.auto_reextract_on_update is False
 
 
 def test_cors_parsing_and_wildcard_rejection() -> None:

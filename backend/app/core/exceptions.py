@@ -167,6 +167,60 @@ class GoneError(AppError):
         )
 
 
+class PayloadTooLargeError(AppError):
+    """Expected 413 error when an uploaded payload exceeds configured size bounds."""
+
+    def __init__(
+        self,
+        message: str = "Uploaded payload exceeds the maximum permitted size.",
+        *,
+        code: str = "PAYLOAD_TOO_LARGE",
+        details: list[dict[str, Any]] | dict[str, Any] | None = None,
+    ) -> None:
+        super().__init__(
+            message,
+            status_code=status.HTTP_413_CONTENT_TOO_LARGE,
+            code=code,
+            details=details,
+        )
+
+
+class UnsupportedMediaTypeError(AppError):
+    """Expected 415 error when an uploaded file type fails MIME or magic-byte checks."""
+
+    def __init__(
+        self,
+        message: str = "Unsupported media type.",
+        *,
+        code: str = "UNSUPPORTED_MEDIA_TYPE",
+        details: list[dict[str, Any]] | dict[str, Any] | None = None,
+    ) -> None:
+        super().__init__(
+            message,
+            status_code=status.HTTP_415_UNSUPPORTED_MEDIA_TYPE,
+            code=code,
+            details=details,
+        )
+
+
+class UnprocessableEntityError(AppError):
+    """Expected 422 error when document structure is malformed or invalid."""
+
+    def __init__(
+        self,
+        message: str = "Submitted document could not be processed.",
+        *,
+        code: str = "UNPROCESSABLE_DOCUMENT",
+        details: list[dict[str, Any]] | dict[str, Any] | None = None,
+    ) -> None:
+        super().__init__(
+            message,
+            status_code=status.HTTP_422_UNPROCESSABLE_CONTENT,
+            code=code,
+            details=details,
+        )
+
+
 class ServiceUnavailableError(AppError):
     """Expected 503 error when a required core dependency is unavailable."""
 

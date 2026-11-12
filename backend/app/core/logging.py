@@ -18,14 +18,20 @@ _REDACTION_PATTERNS: tuple[tuple[re.Pattern[str], str], ...] = (
     (re.compile(r"(?i)\b(Bearer\s+)[A-Za-z0-9._~+/=-]+"), r"\1[REDACTED]"),
     # Mask Argon2 / bcrypt password hash digests if ever present
     (re.compile(r"\$argon2(?:id|i|d)?\$[^\s,;\"']+"), "[REDACTED]"),
-    # Mask common key=value or key: value secret pairs
+    # Mask common key=value or key: value secret pairs and OAuth query credentials
     (
         re.compile(
-            r"(?i)\b(password|passwd|password_hash|secret|jwt_secret_key|token|access_token|"
-            r"refresh_token|invitation_token|development_invitation_token|raw_token|"
-            r"token_hash|api_key|authorization|cookie|set-cookie)\s*([=:])\s*([^\s,;]+)"
+            r"(?i)\b(password|passwd|password_hash|secret|client_secret|jwt_secret_key|token|"
+            r"access_token|refresh_token|encrypted_access_token|encrypted_refresh_token|"
+            r"invitation_token|development_invitation_token|raw_token|token_hash|api_key|"
+            r"authorization|cookie|set-cookie|code_verifier|oauth_state)\s*([=:])\s*([^\s,;&]+)"
         ),
         r"\1\2[REDACTED]",
+    ),
+    # Mask OAuth callback authorization codes / states inside query strings
+    (
+        re.compile(r"([?&](?:code|state)=)[^&\s\"']+"),
+        r"\1[REDACTED]",
     ),
 )
 

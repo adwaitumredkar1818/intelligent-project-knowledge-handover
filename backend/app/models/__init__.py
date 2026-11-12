@@ -3,6 +3,26 @@
 from app.db.base import Base
 from app.models.audit import AuditLog
 from app.models.auth import RefreshSession
+from app.models.evidence import (
+    EvidenceChunk,
+    EvidenceContent,
+    EvidenceItem,
+    EvidencePageContent,
+)
+from app.models.integration import (
+    OAuthState,
+    ProjectSourceMapping,
+    SourceAccessPolicy,
+    SourceConnection,
+    SourceSyncRun,
+    UserSourceAuthorisation,
+)
+from app.models.job import BackgroundJob
+from app.models.knowledge import (
+    KnowledgeEvidenceLink,
+    KnowledgeExtractionRun,
+    KnowledgeItem,
+)
 from app.models.organisation import (
     Organisation,
     OrganisationInvitation,
@@ -14,16 +34,30 @@ from app.models.user import User
 
 __all__ = [
     "AuditLog",
+    "BackgroundJob",
     "Base",
+    "EvidenceChunk",
+    "EvidenceContent",
+    "EvidenceItem",
+    "EvidencePageContent",
+    "KnowledgeEvidenceLink",
+    "KnowledgeExtractionRun",
+    "KnowledgeItem",
+    "OAuthState",
     "Organisation",
     "OrganisationInvitation",
     "OrganisationMembership",
     "Permission",
     "Project",
     "ProjectMembership",
+    "ProjectSourceMapping",
     "RefreshSession",
     "Role",
     "RolePermission",
+    "SourceAccessPolicy",
+    "SourceConnection",
+    "SourceSyncRun",
     "User",
     "UserRole",
+    "UserSourceAuthorisation",
 ]
