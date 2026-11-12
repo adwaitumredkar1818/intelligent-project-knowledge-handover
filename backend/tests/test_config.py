@@ -97,11 +97,43 @@ def test_rejects_unsupported_database_driver_and_bad_urls() -> None:
     with pytest.raises(ValidationError, match="postgresql\\+psycopg"):
         build_test_settings(database_url="sqlite:///./should_fail.db")
 
+    with pytest.raises(ValidationError, match="percent-encode"):
+        build_test_settings(
+            database_url="postgresql+psycopg://postgres.proj:sec#ret@pooler.example.com:5432/postgres"
+        )
+
+    with pytest.raises(ValidationError, match="percent-encode"):
+        build_test_settings(
+            database_url="postgresql+psycopg://postgres.proj:sec@ret@pooler.example.com:5432/postgres"
+        )
+
+    with pytest.raises(ValidationError, match="sslmode"):
+        build_test_settings(
+            app_env="production",
+            cookie_secure=True,
+            postgres_ssl_mode="require",
+            database_url="postgresql+psycopg://postgres.proj:secret@pooler.example.com:5432/postgres?sslmode=disable",
+        )
+
     with pytest.raises(ValidationError, match="OLLAMA_BASE_URL"):
         build_test_settings(ollama_base_url="ftp://invalid-ollama")
 
     with pytest.raises(ValidationError, match="COOKIE_SECURE"):
         build_test_settings(cookie_samesite="none", cookie_secure=False)
+
+
+def test_supabase_style_pooler_url_and_ssl_require() -> None:
+    settings = build_test_settings(
+        postgres_ssl_mode="require",
+        database_url=(
+            "postgresql+psycopg://postgres.example_ref:p%40ss%23word%3A1"
+            "@region-1.pooler.supabase.com:5432/postgres"
+        ),
+    )
+    assert settings.database.ssl_mode == "require"
+    assert settings.database.sqlalchemy_url().startswith("postgresql+psycopg://")
+    rendered = f"{repr(settings)} {str(settings)} {repr(settings.database)}"
+    assert "p%40ss%23word%3A1" not in rendered
 
 
 def test_secret_fields_masked_in_representations() -> None:

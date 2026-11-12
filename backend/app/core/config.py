@@ -6,10 +6,11 @@ import json
 from functools import cached_property, lru_cache
 from pathlib import Path
 from typing import Annotated, Any, Literal
-from urllib.parse import urlparse
+from urllib.parse import parse_qs, urlparse
 
 from pydantic import BaseModel, ConfigDict, Field, SecretStr, field_validator, model_validator
 from pydantic_settings import BaseSettings, NoDecode, SettingsConfigDict
+from sqlalchemy.engine import make_url
 
 AppEnv = Literal["development", "test", "production"]
 LogLevel = Literal["DEBUG", "INFO", "WARNING", "ERROR", "CRITICAL"]
@@ -58,8 +59,35 @@ class DatabaseSettings(BaseModel):
         parsed = urlparse(raw_url)
         if parsed.scheme != "postgresql+psycopg":
             raise ValueError("DATABASE_URL must use the 'postgresql+psycopg' SQLAlchemy driver.")
-        if not parsed.hostname or not parsed.path.lstrip("/"):
+        if parsed.fragment:
+            raise ValueError(
+                "DATABASE_URL must not contain a URL fragment ('#'); "
+                "percent-encode special characters in the password."
+            )
+        try:
+            port = parsed.port
+        except ValueError as exc:
+            raise ValueError(
+                "DATABASE_URL contains an invalid port or unencoded special characters; "
+                "percent-encode special characters in the password."
+            ) from exc
+        if port is not None and not (1 <= port <= 65535):
+            raise ValueError("DATABASE_URL port must be between 1 and 65535.")
+        try:
+            sa_url = make_url(raw_url)
+        except Exception as exc:
+            raise ValueError("DATABASE_URL is not a valid SQLAlchemy database URL.") from exc
+        if (
+            not parsed.hostname
+            or not parsed.path.lstrip("/")
+            or not sa_url.host
+            or not sa_url.database
+        ):
             raise ValueError("DATABASE_URL must include a valid host and database name.")
+        if "@" in sa_url.host:
+            raise ValueError(
+                "DATABASE_URL host contains '@'; percent-encode special characters in the password."
+            )
         return self
 
     def sqlalchemy_url(self) -> str:
@@ -573,6 +601,9 @@ class Settings(BaseSettings):
                 raise ValueError("COOKIE_SECURE must be true in production.")
             if self.postgres_ssl_mode == "disable":
                 raise ValueError("POSTGRES_SSL_MODE must not be 'disable' in production.")
+            parsed_db_query = parse_qs(urlparse(self.database.sqlalchemy_url()).query)
+            if any(mode.lower() == "disable" for mode in parsed_db_query.get("sslmode", [])):
+                raise ValueError("DATABASE_URL sslmode must not be 'disable' in production.")
 
             for env_name, secret in (
                 ("POSTGRES_PASSWORD", self.postgres_password),

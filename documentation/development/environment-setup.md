@@ -51,12 +51,12 @@ Required to boot core services and configure local persistence/security:
 | `BACKEND_PORT` | Backend | No | `8000` | FastAPI HTTP port |
 | `CORS_ALLOWED_ORIGINS` | Backend | No | `http://localhost:3000` | Allowed frontend origin(s) for CORS & cookie origin checks |
 | `NEXT_PUBLIC_API_BASE_URL` | Frontend | **No** | `http://localhost:8000/api/v1` | Public backend API base URL. **Never place secrets in `NEXT_PUBLIC_*` variables.** |
-| `POSTGRES_HOST` | Backend / Worker / Infra | No | `localhost` | Hostname from Windows host (`localhost`); Docker containers **must** use `postgres` |
-| `POSTGRES_PORT` | Backend / Worker / Infra | No | `5432` | Loopback host port bound by PostgreSQL (`127.0.0.1:${POSTGRES_PORT}:5432`) |
-| `POSTGRES_DB` | Backend / Worker / Infra | No | `knowledge_handover` | Canonical PostgreSQL database name |
-| `POSTGRES_USER` | Backend / Worker / Infra | No | `postgres` | PostgreSQL username |
-| `POSTGRES_PASSWORD` | Backend / Worker / Infra | **Yes** | *(replace locally)* | PostgreSQL password (required by `docker-compose.yml`; never commit) |
-| `DATABASE_URL` | Backend / Worker / Alembic | **Yes** | `postgresql+psycopg://...` | SQLAlchemy 2.x + Psycopg 3 (`psycopg`) connection URL |
+| `POSTGRES_HOST` | Backend / Worker / Infra | No | `localhost` | Hostname for local Docker Postgres (`localhost` from host, `postgres` in Docker); kept for Docker fallback when `DATABASE_URL` points to Supabase |
+| `POSTGRES_PORT` | Backend / Worker / Infra | No | `5432` | Loopback host port bound by local Docker PostgreSQL (`127.0.0.1:${POSTGRES_PORT}:5432`) |
+| `POSTGRES_DB` | Backend / Worker / Infra | No | `knowledge_handover` | Local Docker PostgreSQL database name (required by `docker-compose.yml`) |
+| `POSTGRES_USER` | Backend / Worker / Infra | No | `postgres` | Local Docker PostgreSQL username (required by `docker-compose.yml`) |
+| `POSTGRES_PASSWORD` | Backend / Worker / Infra | **Yes** | *(replace locally)* | Local Docker PostgreSQL password (required by `docker-compose.yml`; never commit) |
+| `DATABASE_URL` | Backend / Worker / Alembic | **Yes** | `postgresql+psycopg://...` | Active SQLAlchemy 2.x + Psycopg 3 connection URL (points to Supabase Session Pooler or local Docker PostgreSQL; special password characters must be percent-encoded) |
 | `CHROMA_HOST` | Backend / Worker / Infra | No | `localhost` | Hostname from Windows host (`localhost`); Docker containers **must** use `chromadb` |
 | `CHROMA_PORT` | Backend / Worker / Infra | No | `8001` | Loopback host port mapped to ChromaDB's internal port `8000` (`127.0.0.1:${CHROMA_PORT}:8000`) |
 | `CHROMA_COLLECTION_PREFIX` | Backend / Worker | No | `ipkrh` | Prefix for ChromaDB collections |
@@ -133,7 +133,7 @@ Required to boot core services and configure local persistence/security:
 | `INTEGRATION_ALLOWED_POST_AUTH_REDIRECTS` | Backend | No | *(empty)* | Comma-separated allowlisted post-OAuth redirect URL prefixes/origins (alongside `CORS_ALLOWED_ORIGINS`) |
 | `GITHUB_DEFAULT_COMMITS_LIMIT` | Worker | No | `50` | Default maximum commits ingested per GitHub sync run |
 | `GITHUB_DEFAULT_DOCS_LIMIT` | Worker | No | `20` | Default maximum README/Markdown/ADR docs ingested per GitHub sync run |
-| `POSTGRES_SSL_MODE` | Backend / Worker | No | `prefer` | PostgreSQL TLS mode (`require` / `verify-full` recommended in production) |
+| `POSTGRES_SSL_MODE` | Backend / Worker / Alembic | No | `prefer` | PostgreSQL TLS mode (`prefer` for local Docker; `require` required for Supabase PostgreSQL, or `verify-full` with a Supabase root CA certificate) |
 | `CHROMA_AUTH_TOKEN` | Backend / Worker / Infra | **Yes** | *(empty)* | Reserved for reverse-proxy/gateway authentication in shared deployments *(not used natively by local `chromadb/chroma:latest` 1.4.4)* |
 | `CHROMA_TENANT` | Backend / Worker | No | `default_tenant` | ChromaDB HTTP v2 tenant scope for vector collection API calls |
 | `CHROMA_DATABASE` | Backend / Worker | No | `default_database` | ChromaDB HTTP v2 database scope for vector collection API calls |
@@ -227,6 +227,40 @@ docker compose --env-file .env -f infrastructure/docker/docker-compose.yml logs 
 - **From future Docker containers (`backend` / `worker`) on `ipkrh_network`**:
   - Use Docker service name **`postgres`** on internal port **`5432`**:
     `postgresql+psycopg://<POSTGRES_USER>:<POSTGRES_PASSWORD>@postgres:5432/<POSTGRES_DB>`
+
+#### 5.1.1 Managed Supabase PostgreSQL Configuration & Local Fallback
+
+FastAPI, the background worker, and Alembic all connect through `DATABASE_URL` (requiring the `postgresql+psycopg://` SQLAlchemy + Psycopg 3 scheme) and `POSTGRES_SSL_MODE`.
+
+- **Configuring Supabase PostgreSQL in root `.env`**:
+  1. Use the Supabase **Shared Pooler (Session mode, port `5432`)** connection string converted to the `postgresql+psycopg://` driver prefix:
+     ```dotenv
+     DATABASE_URL=postgresql+psycopg://postgres.<project-ref>:<url-encoded-password>@<region>.pooler.supabase.com:5432/postgres
+     POSTGRES_SSL_MODE=require
+     ```
+  2. **Percent-encoding special characters in passwords:** Characters such as `@`, `#`, `:`, `/`, `?`, and `%` break URL parsing unless percent-encoded (for example, `#` -> `%23`, `@` -> `%40`). You can generate a safe encoded string locally without printing it to logs:
+     ```powershell
+     .\backend\.venv\Scripts\python.exe -c "import getpass, urllib.parse; print(urllib.parse.quote(getpass.getpass('DB password: '), safe=''))"
+     ```
+  3. **Keep local Docker fallback intact:** Leave `POSTGRES_HOST`, `POSTGRES_PORT`, `POSTGRES_DB`, `POSTGRES_USER`, and `POSTGRES_PASSWORD` populated in `.env` so `docker compose --env-file .env -f infrastructure/docker/docker-compose.yml` continues to run `ipkrh-postgres` cleanly without modifying `ipkrh_postgres_data`. To switch back to local Docker PostgreSQL, set:
+     ```dotenv
+     DATABASE_URL=postgresql+psycopg://<POSTGRES_USER>:<POSTGRES_PASSWORD>@localhost:5432/<POSTGRES_DB>
+     POSTGRES_SSL_MODE=prefer
+     ```
+- **SSL Requirements**:
+  - `POSTGRES_SSL_MODE=require` must be set when connecting to Supabase PostgreSQL (`backend/app/db/session.py` automatically passes `sslmode` and `connect_timeout=5` to Psycopg 3 unless overridden in `DATABASE_URL`).
+  - `require` enforces TLS encryption over the network; note that `verify-ca` / `verify-full` additionally require supplying Supabase's root CA certificate (`sslrootcert`) because Supabase's pooler certificate chain is signed by Supabase's own CA rather than the OS default trust store.
+  - Production mode (`APP_ENV=production`) explicitly rejects `POSTGRES_SSL_MODE=disable` and `?sslmode=disable`.
+- **Read-Only Connection & SSL Verification**:
+  - Run the repository verification script after updating `.env` (never prints credentials or URLs):
+    ```powershell
+    .\backend\.venv\Scripts\python.exe scripts\verify_db_connection.py --require-ssl
+    ```
+  - This executes `SELECT current_database(), current_user, version(), now();`, checks `pgconn.ssl_in_use`, and reports the current `alembic_version` without modifying any database state.
+- **Migration Connection Requirements (Alembic Safety)**:
+  - [`infrastructure/database/migrations/env.py`](../../infrastructure/database/migrations/env.py) loads `DATABASE_URL` and `POSTGRES_SSL_MODE` dynamically via `Settings` and uses `sqlalchemy.pool.NullPool` so migration connections close immediately after completion.
+  - Always point Alembic at Supabase **Session mode (port `5432`)** or a **Direct PostgreSQL connection**, **never** Transaction pooler mode (port `6543`), because Alembic relies on transactional DDL, session-scoped locks, and Psycopg 3 server-side prepared statements.
+  - Never run `alembic upgrade head`, stamp `alembic_version`, or alter production tables against a live Supabase project until connectivity is verified and schema migration approval is confirmed.
 
 ### 5.2 Accessing ChromaDB
 
