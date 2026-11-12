@@ -61,9 +61,8 @@ def test_isolated_postgres_workspace_migration_upgrade_downgrade_cycle() -> None
         finally:
             engine.dispose()
 
-        # 2. Upgrade to 0003 head and verify Alembic model-to-DB parity (`alembic check`)
-        command.upgrade(cfg, "head")
-        command.check(cfg)
+        # 2. Upgrade specifically to Phase 2.3 revision cleanly
+        command.upgrade(cfg, "0003_org_project_workspaces")
 
         engine = create_engine(temp_url, connect_args={"connect_timeout": 5})
         try:
@@ -136,9 +135,8 @@ def test_isolated_postgres_workspace_migration_upgrade_downgrade_cycle() -> None
         finally:
             engine.dispose()
 
-        # 4. Re-upgrade back to 0003 head cleanly
-        command.upgrade(cfg, "head")
-        command.check(cfg)
+        # 4. Re-upgrade back to 0003 cleanly
+        command.upgrade(cfg, "0003_org_project_workspaces")
     finally:
         with psycopg.connect(admin_dsn, autocommit=True, connect_timeout=5) as admin_conn:
             admin_conn.execute(

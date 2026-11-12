@@ -21,14 +21,23 @@ _SENSITIVE_METADATA_KEYS: frozenset[str] = frozenset(
         "token_hash",
         "refresh_token",
         "access_token",
+        "encrypted_access_token",
+        "encrypted_refresh_token",
         "invitation_token",
         "development_invitation_token",
         "secret",
+        "client_secret",
         "jwt_secret_key",
         "cookie",
         "set-cookie",
         "authorization",
         "api_key",
+        "code",
+        "oauth_code",
+        "code_verifier",
+        "state",
+        "oauth_state",
+        "state_hash",
     }
 )
 
