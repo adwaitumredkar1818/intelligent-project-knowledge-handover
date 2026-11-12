@@ -1,48 +1,41 @@
 @import "tailwindcss";
 
 :root {
-  --background: oklch(1 0 0);
-  --foreground: oklch(0.145 0 0);
-  --card: oklch(1 0 0);
-  --card-foreground: oklch(0.145 0 0);
-  --popover: oklch(1 0 0);
-  --popover-foreground: oklch(0.145 0 0);
-  --primary: oklch(0.205 0 0);
-  --primary-foreground: oklch(0.985 0 0);
-  --secondary: oklch(0.97 0 0);
-  --secondary-foreground: oklch(0.205 0 0);
-  --muted: oklch(0.97 0 0);
-  --muted-foreground: oklch(0.556 0 0);
-  --accent: oklch(0.97 0 0);
-  --accent-foreground: oklch(0.205 0 0);
-  --destructive: oklch(0.577 0.245 27.325);
-  --destructive-foreground: oklch(0.985 0 0);
-  --border: oklch(0.922 0 0);
-  --input: oklch(0.922 0 0);
-  --ring: oklch(0.708 0 0);
-  --radius: 0.625rem;
-}
+  --background: #F4F6F9;
+  --foreground: #25334B;
+  --card: #FFFFFF;
+  --card-foreground: #25334B;
+  --popover: #FFFFFF;
+  --popover-foreground: #25334B;
+  --primary: #4774A9;
+  --primary-foreground: #FFFFFF;
+  --secondary: #E8EEF5;
+  --secondary-foreground: #25334B;
+  --muted: #F0F4F8;
+  --muted-foreground: #69778D;
+  --accent: #249E91;
+  --accent-foreground: #FFFFFF;
+  --destructive: #C65B60;
+  --destructive-foreground: #FFFFFF;
+  --border: #DCE3EB;
+  --input: #DCE3EB;
+  --ring: #4774A9;
+  --radius: 0.375rem;
 
-.dark {
-  --background: oklch(0.145 0 0);
-  --foreground: oklch(0.985 0 0);
-  --card: oklch(0.205 0 0);
-  --card-foreground: oklch(0.985 0 0);
-  --popover: oklch(0.205 0 0);
-  --popover-foreground: oklch(0.985 0 0);
-  --primary: oklch(0.922 0 0);
-  --primary-foreground: oklch(0.205 0 0);
-  --secondary: oklch(0.269 0 0);
-  --secondary-foreground: oklch(0.985 0 0);
-  --muted: oklch(0.269 0 0);
-  --muted-foreground: oklch(0.708 0 0);
-  --accent: oklch(0.269 0 0);
-  --accent-foreground: oklch(0.985 0 0);
-  --destructive: oklch(0.704 0.191 22.216);
-  --destructive-foreground: oklch(0.985 0 0);
-  --border: oklch(1 0 0 / 10%);
-  --input: oklch(1 0 0 / 15%);
-  --ring: oklch(0.556 0 0);
+  /* The Handover Enterprise Tokens */
+  --th-sidebar-bg: #253650;
+  --th-sidebar-hover: #304563;
+  --th-primary: #4774A9;
+  --th-primary-hover: #365F92;
+  --th-teal: #249E91;
+  --th-main-bg: #F4F6F9;
+  --th-panel: #FFFFFF;
+  --th-border: #DCE3EB;
+  --th-text-primary: #25334B;
+  --th-text-secondary: #69778D;
+  --th-success: #269878;
+  --th-warning: #C48A32;
+  --th-error: #C65B60;
 }
 
 @theme inline {
@@ -65,10 +58,24 @@
   --color-border: var(--border);
   --color-input: var(--input);
   --color-ring: var(--ring);
-  --radius-sm: calc(var(--radius) - 4px);
-  --radius-md: calc(var(--radius) - 2px);
-  --radius-lg: var(--radius);
+  --radius-sm: calc(var(--radius) - 2px);
+  --radius-md: var(--radius);
+  --radius-lg: calc(var(--radius) + 2px);
   --radius-xl: calc(var(--radius) + 4px);
+
+  --color-th-sidebar: var(--th-sidebar-bg);
+  --color-th-sidebar-hover: var(--th-sidebar-hover);
+  --color-th-primary: var(--th-primary);
+  --color-th-primary-hover: var(--th-primary-hover);
+  --color-th-teal: var(--th-teal);
+  --color-th-main: var(--th-main-bg);
+  --color-th-panel: var(--th-panel);
+  --color-th-border: var(--th-border);
+  --color-th-text: var(--th-text-primary);
+  --color-th-muted: var(--th-text-secondary);
+  --color-th-success: var(--th-success);
+  --color-th-warning: var(--th-warning);
+  --color-th-error: var(--th-error);
 }
 
 @layer base {
@@ -77,5 +84,6 @@
   }
   body {
     @apply bg-background text-foreground antialiased;
+    font-feature-settings: "rlig" 1, "calt" 1;
   }
 }
