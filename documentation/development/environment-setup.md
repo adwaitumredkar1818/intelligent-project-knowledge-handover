@@ -134,6 +134,7 @@ Required to boot core services and configure local persistence/security:
 | `GITHUB_DEFAULT_COMMITS_LIMIT` | Worker | No | `50` | Default maximum commits ingested per GitHub sync run |
 | `GITHUB_DEFAULT_DOCS_LIMIT` | Worker | No | `20` | Default maximum README/Markdown/ADR docs ingested per GitHub sync run |
 | `POSTGRES_SSL_MODE` | Backend / Worker / Alembic | No | `prefer` | PostgreSQL TLS mode (`prefer` for local Docker; `require` required for Supabase PostgreSQL, or `verify-full` with a Supabase root CA certificate) |
+| `POSTGRES_CONNECT_TIMEOUT_SECONDS` | Backend / Worker / Alembic | No | `5` | Psycopg 3 PostgreSQL connection timeout in seconds (`1–60`; use `15–20` for remote managed PostgreSQL over TLS such as Supabase cross-region poolers) |
 | `CHROMA_AUTH_TOKEN` | Backend / Worker / Infra | **Yes** | *(empty)* | Reserved for reverse-proxy/gateway authentication in shared deployments *(not used natively by local `chromadb/chroma:latest` 1.4.4)* |
 | `CHROMA_TENANT` | Backend / Worker | No | `default_tenant` | ChromaDB HTTP v2 tenant scope for vector collection API calls |
 | `CHROMA_DATABASE` | Backend / Worker | No | `default_database` | ChromaDB HTTP v2 database scope for vector collection API calls |
