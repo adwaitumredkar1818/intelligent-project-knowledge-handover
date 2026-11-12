@@ -456,7 +456,12 @@ class EvidenceService:
             self._session.commit()
         except IntegrityError:
             self._session.rollback()
-            self._storage.delete_object(storage_object_key=stored.storage_object_key)
+            try:
+                self._storage.delete_object(storage_object_key=stored.storage_object_key)
+            except Exception:
+                logger.warning(
+                    "Failed to clean up encrypted object after duplicate/integrity rollback."
+                )
             concurrent_existing = self._evidence_repo.find_active_duplicate(
                 project_id=project_ctx.project.id,
                 content_hash=validated.content_hash,
@@ -481,7 +486,10 @@ class EvidenceService:
             raise
         except Exception:
             self._session.rollback()
-            self._storage.delete_object(storage_object_key=stored.storage_object_key)
+            try:
+                self._storage.delete_object(storage_object_key=stored.storage_object_key)
+            except Exception:
+                logger.warning("Failed to clean up encrypted object after upload rollback.")
             raise
 
         self._session.refresh(item)
@@ -565,6 +573,8 @@ class EvidenceService:
             storage_object_key=evidence.storage_object_key,
             organisation_id=evidence.organisation_id,
             project_id=evidence.project_id,
+            key_id=evidence.encryption_key_id,
+            expected_plaintext_size=evidence.file_size_bytes,
         )
         filename = evidence.original_filename or f"evidence-{evidence.id}"
         mime_type = evidence.mime_type or "application/octet-stream"
@@ -610,6 +620,8 @@ class EvidenceService:
                     storage_object_key=evidence.storage_object_key,
                     organisation_id=evidence.organisation_id,
                     project_id=evidence.project_id,
+                    key_id=evidence.encryption_key_id,
+                    expected_plaintext_size=evidence.file_size_bytes,
                 )
                 text = ""
                 if evidence.category == EvidenceCategory.PDF_DOCUMENT.value or (evidence.mime_type or "").endswith("pdf"):

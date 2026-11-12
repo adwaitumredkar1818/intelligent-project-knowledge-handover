@@ -155,7 +155,7 @@ const MODULE_SPECS: Record<string, ModuleSpec> = {
     requirements: [
       "Ollama inference concurrency limiter (RTX 4050 6GB VRAM bounds)",
       "ChromaDB collection health and vector dimension checks",
-      "Supabase Auth and storage bucket parameters",
+      "Private encrypted storage provider and bucket parameters",
     ],
   },
 };

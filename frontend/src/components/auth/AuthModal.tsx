@@ -269,7 +269,7 @@ export function AuthModal() {
           <div className="mt-5 pt-4 border-t border-[#DCE3EB] flex items-center justify-between text-[11px] text-[#69778D]">
             <div className="flex items-center gap-1.5">
               <ShieldCheck className="w-3.5 h-3.5 text-[#249E91]" />
-              <span>FastAPI &amp; Supabase Auth JWKS</span>
+              <span>FastAPI JWT &amp; Argon2id RBAC</span>
             </div>
             <span>AES-256-GCM Encrypted</span>
           </div>

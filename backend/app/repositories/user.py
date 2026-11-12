@@ -35,14 +35,6 @@ class UserRepository:
         )
         return self._session.scalar(stmt)
 
-    def get_by_supabase_auth_id(self, supabase_auth_id: str) -> User | None:
-        stmt = (
-            select(User)
-            .where(User.supabase_auth_id == supabase_auth_id)
-            .options(selectinload(User.user_roles).selectinload(UserRole.role))
-        )
-        return self._session.scalar(stmt)
-
     def list_users(self, *, limit: int = 50, offset: int = 0) -> list[User]:
         stmt = (
             select(User)
@@ -62,16 +54,16 @@ class UserRepository:
         *,
         full_name: str,
         email: str,
-        password_hash: str | None = None,
-        supabase_auth_id: str | None = None,
+        password_hash: str,
         status: str = UserStatus.ACTIVE.value,
         is_email_verified: bool = False,
     ) -> User:
+        if not password_hash or not password_hash.strip():
+            raise ValueError("password_hash must be a non-empty hash string.")
         user = User(
             full_name=full_name,
             email=email,
             password_hash=password_hash,
-            supabase_auth_id=supabase_auth_id,
             status=status,
             is_email_verified=is_email_verified,
         )

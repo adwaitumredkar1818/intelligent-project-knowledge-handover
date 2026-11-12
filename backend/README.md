@@ -83,7 +83,9 @@ backend/
 │   │   ├── rbac.py                # Platform, organisation & project RBAC resolution & escalation checks
 │   │   ├── reconstruction_worker.py # Async worker executing Phase 2.6 LLM extraction, JSON repair & ACL re-checks
 │   │   ├── retrieval.py           # HybridRetrievalService (RRF fusion, two-phase ACLs, degraded fallback & reindex)
-│   │   ├── storage.py             # AES-256-GCM LocalPrivateStorageBackend (HKDF + AAD + opaque keys)
+│   │   ├── storage.py             # Canonical AES-256-GCM envelope crypto + LocalPrivateStorageBackend (`local-v1`)
+│   │   ├── storage_factory.py     # Explicit `STORAGE_PROVIDER` selector shared by API and worker
+│   │   ├── supabase_storage.py    # Supabase Storage private bucket backend (`supabase-v1`, no signed URLs)
 │   │   ├── token_encryption.py    # Dedicated AES-256-GCM LocalTokenEncryptionService (TOKEN_ENCRYPTION_KEY + AAD)
 │   │   ├── user.py                # Admin user inspection, status lifecycle & role assignment orchestration
 │   │   └── vector_store.py        # Replaceable VectorStoreClient & ChromaDB HTTP v2 adapter

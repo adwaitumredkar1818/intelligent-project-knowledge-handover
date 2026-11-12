@@ -10,6 +10,7 @@ import uuid
 from types import FrameType
 from typing import Any
 
+import httpx
 from sqlalchemy import Engine
 
 from app.core.config import Settings, get_settings
@@ -25,7 +26,7 @@ from app.services.integrations.sync_worker import SourceSyncWorkerService
 from app.services.llm import OllamaLLMClient
 from app.services.ocr import OllamaGLMOCRService
 from app.services.reconstruction_worker import ReconstructionWorkerService
-from app.services.storage import LocalPrivateStorageBackend
+from app.services.storage_factory import build_storage_backend
 from app.services.token_encryption import LocalTokenEncryptionService
 from app.services.vector_store import ChromaV2HttpVectorStore
 
@@ -193,14 +194,12 @@ def build_worker_service(
     settings: Settings,
     *,
     worker_id: str | None = None,
+    storage_http_transport: httpx.BaseTransport | None = None,
 ) -> tuple[CompositeWorkerService, Engine]:
     """Assemble isolated engine, storage, encryption, OCR adapter, and composite workers."""
     engine = create_db_engine(settings)
     session_factory = create_session_factory(engine)
-    storage = LocalPrivateStorageBackend(
-        root_path=settings.security.upload_storage_path,
-        file_encryption_key=settings.security.file_encryption_key.get_secret_value(),
-    )
+    storage = build_storage_backend(settings, http_transport=storage_http_transport)
     ocr_service = OllamaGLMOCRService(
         base_url=settings.ollama.base_url,
         model=settings.ollama.ocr_model,

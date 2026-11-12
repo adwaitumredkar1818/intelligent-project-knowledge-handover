@@ -9,7 +9,6 @@ import React, {
   type ReactNode,
 } from "react";
 import { api, setStoredToken, ApiError } from "../lib/api";
-import { supabase } from "../lib/supabase";
 import type {
   User,
   Organisation,

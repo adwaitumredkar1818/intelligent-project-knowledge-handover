@@ -84,8 +84,8 @@ Do **not** silently replace any technology below. Any proposed alternative must 
 | :--- | :--- |
 | **Frontend** | Next.js (React 19, TypeScript strict mode), Tailwind CSS v4, shadcn/ui, Lucide Icons, React Flow (relationship visualisation) |
 | **Backend** | Python 3.11, FastAPI, Pydantic v2, SQLAlchemy 2.x, Alembic (migrations), Psycopg 3 (`psycopg`), HTTPX; separate lightweight Python worker process for async jobs (no Redis, Celery, or message broker in initial phase) |
-| **Platform Identity** | **Supabase Auth** as the sole platform identity provider (registration, login, logout, password management, session verification via JWKS/JWT verification in FastAPI; legacy custom auth deprecated/migrated safely) |
-| **Document Storage** | **Supabase Storage** (private bucket `project-evidence` for uploaded original PDFs, DOCXs, and document objects; backend-mediated streaming/signed URLs, preserving application AES-256-GCM encryption) |
+| **Platform Identity** | **FastAPI-managed authentication** as the sole platform identity authority (Argon2id password hashing, short-lived JWT access tokens, SHA-256 `RefreshSession` rotation in `HttpOnly` cookies, and PostgreSQL RBAC — no Supabase Auth) |
+| **Document Storage** | **Dual-provider private encrypted storage** via explicit `STORAGE_PROVIDER` (`local_encrypted` default or `supabase_storage` private bucket `project-evidence`); preserves canonical application AES-256-GCM envelope encryption and **backend-mediated streaming downloads only** (no signed or public URLs) |
 | **Data & Canonical Store** | **PostgreSQL** (canonical application database, structured knowledge relationships, provenance, audit logs, and tsvector full-text search) |
 | **Vector Indexing** | **ChromaDB** (dedicated HTTP server mode; **strictly one project-isolated collection per Handover project**, holding chunks across documents, GitHub, Jira, and Slack) |
 | **AI, OCR & Embeddings** | **Ollama** (sole local inference runtime on Windows): **Qwen3 8B** (structured knowledge extraction and reasoning), **GLM OCR** (`glm-ocr:latest` for scanned pages/images), **nomic-embed-text** (unified 768-dim embeddings for evidence indexing and retrieval) |
@@ -93,7 +93,7 @@ Do **not** silently replace any technology below. Any proposed alternative must 
 | **Document Processing** | PyMuPDF (digital text extraction), `python-docx` (DOCX structure extraction), GLM OCR (`glm-ocr:latest` on Ollama for scanned/image pages) |
 | **Integrations** | **GitHub** (Fine-grained Personal Access Token with read-only scopes, repo discovery, commit/PR/issue sync), **Jira** (OAuth 2.0 3LO primary, optional controlled API token mode), **Slack** (OAuth v2 read-only, optional manual Bot Token `xoxb-` development mode) |
 | **Infrastructure** | Docker Desktop (WSL2), Docker Compose, Git, GitHub |
-| **Security & Auth Boundary** | FastAPI-managed Supabase JWT verification, delegated per-user source credentials encrypted at rest with AES-256-GCM, strict read-time source ACL checks before retrieval/prompting |
+| **Security & Auth Boundary** | FastAPI-managed JWT + `RefreshSession` verification, server-only `SUPABASE_SERVICE_ROLE_KEY` for private object storage, delegated per-user source credentials encrypted at rest with AES-256-GCM, strict read-time source ACL checks before retrieval/prompting |
 
 ---
 

@@ -1,4 +1,4 @@
-"""Private encrypted binary storage abstraction for uploaded project documents."""
+"""Private encrypted binary storage abstraction and canonical AES-256-GCM envelope helpers."""
 
 from __future__ import annotations
 
@@ -25,10 +25,17 @@ _STORAGE_KEY_PATTERN = re.compile(
     r"[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}/"
     r"[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}\.enc$"
 )
-_ENVELOPE_MAGIC = b"IPKRH1\x01"
-_NONCE_SIZE = 12
-_LOCAL_KEY_ID = "local-v1"
-_ENCRYPTION_ALGORITHM = "AES-256-GCM"
+ENVELOPE_MAGIC = b"IPKRH1\x01"
+_ENVELOPE_MAGIC = ENVELOPE_MAGIC
+NONCE_SIZE_BYTES = 12
+_NONCE_SIZE = NONCE_SIZE_BYTES
+GCM_TAG_SIZE_BYTES = 16
+ENVELOPE_OVERHEAD_BYTES = len(ENVELOPE_MAGIC) + NONCE_SIZE_BYTES + GCM_TAG_SIZE_BYTES  # 35 bytes
+LOCAL_KEY_ID = "local-v1"
+_LOCAL_KEY_ID = LOCAL_KEY_ID
+SUPABASE_KEY_ID = "supabase-v1"
+ENCRYPTION_ALGORITHM = "AES-256-GCM"
+_ENCRYPTION_ALGORITHM = ENCRYPTION_ALGORITHM
 
 
 @dataclass(frozen=True, slots=True)
@@ -61,6 +68,7 @@ class StorageBackend(Protocol):
         organisation_id: uuid.UUID,
         project_id: uuid.UUID,
         key_id: str | None = None,
+        expected_plaintext_size: int | None = None,
     ) -> bytes:
         """Read and authenticate encrypted bytes directly in memory."""
 
@@ -71,7 +79,7 @@ class StorageBackend(Protocol):
         """Return whether an opaque object key currently exists in storage."""
 
 
-def _derive_aes256_key(raw_secret: str) -> bytes:
+def derive_aes256_storage_key(raw_secret: str) -> bytes:
     """Derive a domain-separated 256-bit AES-GCM key from `FILE_ENCRYPTION_KEY`."""
     secret_bytes = raw_secret.encode("utf-8")
     if len(secret_bytes) < 16:
@@ -85,8 +93,136 @@ def _derive_aes256_key(raw_secret: str) -> bytes:
     return hkdf.derive(secret_bytes)
 
 
-def _build_aad(*, organisation_id: uuid.UUID, project_id: uuid.UUID, object_key: str) -> bytes:
+_derive_aes256_key = derive_aes256_storage_key
+
+
+def build_storage_aad(
+    *,
+    organisation_id: uuid.UUID,
+    project_id: uuid.UUID,
+    object_key: str,
+) -> bytes:
+    """Build AEAD associated data binding ciphertext to tenant, project, and opaque key."""
     return f"{organisation_id}:{project_id}:{object_key}".encode()
+
+
+def validate_storage_object_key(storage_object_key: str) -> str:
+    """Validate strict opaque `<org_uuid>/<project_uuid>/<object_uuid>.enc` key shape."""
+    raw = storage_object_key.strip()
+    if "\\" in raw:
+        raise ValueError("Malformed opaque storage object key.")
+    if not _STORAGE_KEY_PATTERN.fullmatch(raw):
+        raise ValueError("Malformed opaque storage object key.")
+    return raw
+
+
+def generate_storage_object_key(
+    *,
+    organisation_id: uuid.UUID,
+    project_id: uuid.UUID,
+    object_id: uuid.UUID | None = None,
+) -> str:
+    """Create and validate an opaque storage key bound to org and project UUIDs."""
+    candidate = f"{organisation_id}/{project_id}/{object_id or uuid.uuid4()}.enc"
+    return validate_storage_object_key(candidate)
+
+
+def expected_envelope_size_bytes(plaintext_size_bytes: int) -> int:
+    """Return exact AEAD envelope byte length for a plaintext payload of known size."""
+    if plaintext_size_bytes < 0:
+        raise ValueError("plaintext_size_bytes must be non-negative.")
+    return plaintext_size_bytes + ENVELOPE_OVERHEAD_BYTES
+
+
+def encrypt_storage_envelope(
+    *,
+    aes_key: bytes,
+    organisation_id: uuid.UUID,
+    project_id: uuid.UUID,
+    object_key: str,
+    plaintext: bytes,
+) -> bytes:
+    """Encrypt plaintext bytes using canonical AES-256-GCM envelope with tenant/key AAD."""
+    normalized_key = validate_storage_object_key(object_key)
+    nonce = os.urandom(NONCE_SIZE_BYTES)
+    aad = build_storage_aad(
+        organisation_id=organisation_id,
+        project_id=project_id,
+        object_key=normalized_key,
+    )
+    ciphertext = AESGCM(aes_key).encrypt(nonce, plaintext, aad)
+    return ENVELOPE_MAGIC + nonce + ciphertext
+
+
+def decrypt_storage_envelope(
+    *,
+    aes_key: bytes,
+    envelope: bytes,
+    organisation_id: uuid.UUID,
+    project_id: uuid.UUID,
+    object_key: str,
+    key_id: str | None = None,
+    expected_key_id: str | None = None,
+    expected_plaintext_size: int | None = None,
+) -> bytes:
+    """Verify key version, envelope header, ciphertext length, and AEAD tag before decrypting."""
+    if expected_key_id is not None and key_id is not None and key_id != expected_key_id:
+        raise ServiceUnavailableError(
+            "Stored artefact references an unsupported encryption key version.",
+            code="STORAGE_KEY_UNSUPPORTED",
+        )
+    try:
+        normalized_key = validate_storage_object_key(object_key)
+    except ValueError as exc:
+        logger.warning("Rejected unsafe storage object key lookup.")
+        raise ServiceUnavailableError(
+            "Stored artefact location is invalid.",
+            code="STORAGE_KEY_INVALID",
+        ) from exc
+
+    if len(envelope) < ENVELOPE_OVERHEAD_BYTES or not envelope.startswith(ENVELOPE_MAGIC):
+        raise ServiceUnavailableError(
+            "Stored artefact failed envelope integrity verification.",
+            code="STORAGE_INTEGRITY_FAILED",
+        )
+
+    if expected_plaintext_size is not None:
+        expected_len = expected_envelope_size_bytes(expected_plaintext_size)
+        if len(envelope) != expected_len:
+            raise ServiceUnavailableError(
+                "Stored artefact ciphertext size did not match expected integrity envelope.",
+                code="STORAGE_INTEGRITY_FAILED",
+            )
+
+    offset = len(ENVELOPE_MAGIC)
+    nonce = envelope[offset : offset + NONCE_SIZE_BYTES]
+    ciphertext = envelope[offset + NONCE_SIZE_BYTES :]
+    if len(nonce) != NONCE_SIZE_BYTES or len(ciphertext) < GCM_TAG_SIZE_BYTES:
+        raise ServiceUnavailableError(
+            "Stored artefact envelope is truncated.",
+            code="STORAGE_INTEGRITY_FAILED",
+        )
+
+    aad = build_storage_aad(
+        organisation_id=organisation_id,
+        project_id=project_id,
+        object_key=normalized_key,
+    )
+    try:
+        plaintext = AESGCM(aes_key).decrypt(nonce, ciphertext, aad)
+    except InvalidTag as exc:
+        logger.error("AEAD integrity check failed while reading encrypted object.")
+        raise ServiceUnavailableError(
+            "Stored artefact failed integrity verification.",
+            code="STORAGE_INTEGRITY_FAILED",
+        ) from exc
+
+    if expected_plaintext_size is not None and len(plaintext) != expected_plaintext_size:
+        raise ServiceUnavailableError(
+            "Decrypted artefact size did not match expected evidence size.",
+            code="STORAGE_INTEGRITY_FAILED",
+        )
+    return plaintext
 
 
 class LocalPrivateStorageBackend:
@@ -99,7 +235,7 @@ class LocalPrivateStorageBackend:
     def __init__(self, *, root_path: Path, file_encryption_key: str) -> None:
         self._root_path = root_path.expanduser().resolve()
         self._root_path.mkdir(parents=True, exist_ok=True)
-        self._aes_key = _derive_aes256_key(file_encryption_key)
+        self._aes_key = derive_aes256_storage_key(file_encryption_key)
 
     @property
     def root_path(self) -> Path:
@@ -107,9 +243,7 @@ class LocalPrivateStorageBackend:
         return self._root_path
 
     def _resolve_safe_key(self, storage_object_key: str) -> Path:
-        normalized = storage_object_key.strip().replace("\\", "/")
-        if not _STORAGE_KEY_PATTERN.fullmatch(normalized):
-            raise ValueError("Malformed opaque storage object key.")
+        normalized = validate_storage_object_key(storage_object_key)
         candidate = (self._root_path / normalized).resolve()
         if not candidate.is_relative_to(self._root_path):
             raise ValueError("Storage key escaped configured private storage boundary.")
@@ -122,19 +256,20 @@ class LocalPrivateStorageBackend:
         project_id: uuid.UUID,
         data: bytes,
     ) -> StoredObjectMetadata:
-        object_id = uuid.uuid4()
-        object_key = f"{organisation_id}/{project_id}/{object_id}.enc"
+        object_key = generate_storage_object_key(
+            organisation_id=organisation_id,
+            project_id=project_id,
+        )
         try:
             target_path = self._resolve_safe_key(object_key)
             target_path.parent.mkdir(parents=True, exist_ok=True)
-            nonce = os.urandom(_NONCE_SIZE)
-            aad = _build_aad(
+            envelope = encrypt_storage_envelope(
+                aes_key=self._aes_key,
                 organisation_id=organisation_id,
                 project_id=project_id,
                 object_key=object_key,
+                plaintext=data,
             )
-            ciphertext = AESGCM(self._aes_key).encrypt(nonce, data, aad)
-            envelope = _ENVELOPE_MAGIC + nonce + ciphertext
 
             tmp_path = target_path.with_name(f".tmp-{uuid.uuid4().hex}")
             try:
@@ -156,8 +291,8 @@ class LocalPrivateStorageBackend:
         return StoredObjectMetadata(
             storage_provider=StorageProvider.LOCAL_ENCRYPTED.value,
             storage_object_key=object_key,
-            encryption_algorithm=_ENCRYPTION_ALGORITHM,
-            encryption_key_id=_LOCAL_KEY_ID,
+            encryption_algorithm=ENCRYPTION_ALGORITHM,
+            encryption_key_id=LOCAL_KEY_ID,
             ciphertext_size_bytes=len(envelope),
         )
 
@@ -168,8 +303,9 @@ class LocalPrivateStorageBackend:
         organisation_id: uuid.UUID,
         project_id: uuid.UUID,
         key_id: str | None = None,
+        expected_plaintext_size: int | None = None,
     ) -> bytes:
-        if key_id is not None and key_id != _LOCAL_KEY_ID:
+        if key_id is not None and key_id != LOCAL_KEY_ID:
             raise ServiceUnavailableError(
                 "Stored artefact references an unsupported encryption key version.",
                 code="STORAGE_KEY_UNSUPPORTED",
@@ -191,31 +327,23 @@ class LocalPrivateStorageBackend:
 
         try:
             raw = target_path.read_bytes()
-            if not raw.startswith(_ENVELOPE_MAGIC):
-                raise ValueError("Invalid encrypted storage envelope header.")
-            offset = len(_ENVELOPE_MAGIC)
-            nonce = raw[offset : offset + _NONCE_SIZE]
-            ciphertext = raw[offset + _NONCE_SIZE :]
-            if len(nonce) != _NONCE_SIZE or len(ciphertext) < 16:
-                raise ValueError("Truncated encrypted storage envelope.")
-            aad = _build_aad(
-                organisation_id=organisation_id,
-                project_id=project_id,
-                object_key=storage_object_key.strip().replace("\\", "/"),
-            )
-            return AESGCM(self._aes_key).decrypt(nonce, ciphertext, aad)
-        except InvalidTag as exc:
-            logger.error("AEAD integrity check failed while reading encrypted object.")
-            raise ServiceUnavailableError(
-                "Stored artefact failed integrity verification.",
-                code="STORAGE_INTEGRITY_FAILED",
-            ) from exc
-        except Exception as exc:
-            logger.exception("Failed to read/decrypt stored artefact.")
+        except OSError as exc:
+            logger.exception("Failed to read stored artefact from local disk.")
             raise ServiceUnavailableError(
                 "Stored artefact could not be read from private storage.",
                 code="STORAGE_READ_FAILED",
             ) from exc
+
+        return decrypt_storage_envelope(
+            aes_key=self._aes_key,
+            envelope=raw,
+            organisation_id=organisation_id,
+            project_id=project_id,
+            object_key=storage_object_key,
+            key_id=key_id,
+            expected_key_id=LOCAL_KEY_ID,
+            expected_plaintext_size=expected_plaintext_size,
+        )
 
     def delete_object(self, *, storage_object_key: str) -> bool:
         try:

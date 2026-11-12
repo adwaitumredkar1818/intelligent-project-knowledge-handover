@@ -8,7 +8,7 @@
 
 ## 1. Executive Summary
 
-This document provides a line-by-line audit of the entire existing codebase across backend, frontend, database, AI/OCR services, external connectors, and storage. It establishes the baseline for the implementation of **Project Workspace**, **Evidence Workspace**, **Supabase Auth & Storage Integration**, and **Ollama AI Ingestion Pipelines**.
+This document provides a line-by-line audit of the entire existing codebase across backend, frontend, database, AI/OCR services, external connectors, and storage. It established the baseline for **Project Workspace**, **Evidence Workspace**, and **Phase 2.9 Secure Supabase Storage Integration** *(final decision: FastAPI-managed Auth retained as canonical per updated ADR 0001; dual storage `STORAGE_PROVIDER=local_encrypted|supabase_storage` implemented per ADR 0002)*.
 
 ---
 
@@ -16,8 +16,8 @@ This document provides a line-by-line audit of the entire existing codebase acro
 
 | # | Capability Area | Existing Files / Models / Services / APIs | Current Status | Required Modifications & Integration Plan |
 |---|---|---|---|---|
-| **1** | **Authentication** | `backend/app/api/routes/auth.py`, `backend/app/services/auth.py`, `RefreshSession`, `/api/v1/auth/*` | **Requires migration** | Migrate to Supabase Auth as the sole identity provider. Implement FastAPI asymmetric JWT verification using Supabase JWKS. Safely link existing local user records via `supabase_auth_id`. Deprecate legacy local password endpoints. |
-| **2** | **Users** | `backend/app/models/user.py` (`User`), `backend/app/repositories/user.py`, `/api/v1/users/*` | **Complete and verified** | Add `supabase_auth_id` column with unique index via Alembic migration. Preserve internal UUIDs for all foreign key relationships (orgs, projects, audits). |
+| **1** | **Authentication** | `backend/app/api/routes/auth.py`, `backend/app/services/auth.py`, `RefreshSession`, `/api/v1/auth/*` | **Retained Canonical (Phase 2.9)** | FastAPI-managed Argon2id + HS256 JWT + `RefreshSession` rotation retained as sole platform identity authority per updated ADR 0001. Supabase Auth JWT interception and `supabase.ts` removed cleanly. |
+| **2** | **Users** | `backend/app/models/user.py` (`User`), `backend/app/repositories/user.py`, `/api/v1/users/*` | **Complete and verified** | Internal UUIDs remain authoritative across all FKs. Nullable `users.supabase_auth_id` from migration `0009` preserved untouched as dormant schema; empty/null `password_hash` rejected safely. |
 | **3** | **Organisations** | `backend/app/models/organisation.py` (`Organisation`), `backend/app/repositories/organisation.py`, `/api/v1/organisations/*` | **Complete and verified** | Multi-tenant tenant boundaries intact and verified via `test_organisations_api.py`. Tested with 100% pass rate. |
 | **4** | **Project Management** | `backend/app/models/project.py` (`Project`), `backend/app/services/project.py`, `/api/v1/projects/*` | **Complete and verified** | Full CRUD, lifecycle states (`planning`, `active`, `archived`), visibility (`private`, `organisation`), and verified in `test_projects_api.py`. |
 | **5** | **Project Membership** | `backend/app/models/project.py` (`ProjectMembership`), `ProjectRepository`, `/projects/{id}/members` | **Complete and verified** | Membership roles, responsibilities tracking, active/suspended status, and tenant isolation fully functional. |
@@ -25,7 +25,7 @@ This document provides a line-by-line audit of the entire existing codebase acro
 | **7** | **Invitations** | `backend/app/models/organisation.py` (`OrganisationInvitation`), `/api/v1/organisations/{id}/invitations` | **Complete and verified** | Single-use cryptographically signed invitation tokens with expiry and acceptance flow verified in `test_invitations_api.py`. |
 | **8** | **Project Transition Config** | `backend/app/models/project.py` (`ProjectTransition`), `/projects/{id}/transition`, Alembic `0008` | **Complete and verified** | Departing owner $\to$ successor mapping, workflow stages, distinct participant check constraint, and transition APIs. |
 | **9** | **Evidence Models** | `backend/app/models/evidence.py` (`EvidenceItem`, `EvidenceContent`, `EvidencePageContent`) | **Complete and verified** | Canonical evidence ledger tracking provider, external ID, title, hashes, page counts, OCR stats, and processing status. |
-| **10** | **File Storage** | `backend/app/services/storage.py` (`LocalPrivateStorageBackend`) | **Requires migration** | Currently stores encrypted files in local filesystem (`backend/data/uploads`). Must integrate Supabase Storage (`project-evidence` bucket) with fallback/migration utilities. |
+| **10** | **File Storage** | `backend/app/services/storage.py`, `supabase_storage.py`, `storage_factory.py` | **Implemented (Phase 2.9)** | Dual private encrypted storage via `STORAGE_PROVIDER` (`local_encrypted` default vs `supabase_storage` private bucket `project-evidence`), shared canonical AES-256-GCM envelope encryption, backend-mediated streaming only. |
 | **11** | **AES-256-GCM Encryption** | `backend/app/services/storage.py`, `backend/app/services/token_encryption.py` | **Complete and verified** | AES-256-GCM authenticated encryption for uploaded files and external OAuth/PAT tokens. Verified in `test_storage_security.py`. |
 | **12** | **PDF Extraction** | `backend/app/services/document_extraction.py` (PyMuPDF pipeline) | **Complete and verified** | High-performance native digital text extraction with page-level evaluation and OCR triggers for scanned pages. |
 | **13** | **DOCX Extraction** | `backend/app/services/document_extraction.py` (`python-docx` pipeline) | **Complete and verified** | Structured extraction of paragraphs, headings, tables, rows, and cells. Verified in `test_document_extraction_and_ocr.py`. |
@@ -43,7 +43,7 @@ This document provides a line-by-line audit of the entire existing codebase acro
 | **25** | **Cross-Source Relationships** | `backend/app/models/knowledge.py` (`KnowledgeEvidenceLink`) | **Complete and verified** | Relational mapping linking reconstructed knowledge items to supporting evidence records with support strength classifications. |
 | **26** | **Background Workers** | `backend/app/worker.py`, `ingestion_worker.py`, `sync_worker.py`, `indexing_worker.py`, `reconstruction_worker.py` | **Complete and verified** | PostgreSQL-backed asynchronous worker with state machine (`queued` $\to$ `running` $\to$ `completed` / `failed`), retries, and error tracking. |
 | **27** | **Audit Logging** | `backend/app/models/audit.py` (`AuditLog`), `backend/app/services/audit.py`, `/organisations/{id}/audit-events` | **Complete and verified** | Immutable PostgreSQL audit log recording actor, IP, action, resource, and before/after payloads for all state-changing events. |
-| **28** | **Existing Frontend App** | `frontend/src/app/`, `frontend/src/features/prototype/` | **Implemented but not integrated** | Highly polished Reference 1, 2, 3 UI shell. Needs live integration with Supabase Auth, real FastAPI endpoints, and removal of mock contexts. |
+| **28** | **Existing Frontend App** | `frontend/src/app/`, `frontend/src/features/prototype/`, `frontend/src/components/auth/AuthModal.tsx` | **Integrated with FastAPI Auth** | Connected to live FastAPI JWT + `HttpOnly` refresh endpoints; unused `@supabase/supabase-js` and `supabase.ts` removed in Phase 2.9. |
 
 ---
 
@@ -58,5 +58,4 @@ The database migration lineage is strictly linear and complete:
 6. `20261112_0006_evidence_chunks_and_fts.py`
 7. `20261112_0007_knowledge_reconstruction.py`
 8. `20261113_0008_project_transitions.py`
-
-**Next Planned Migration**: `0009_supabase_auth_and_project_vector_indexes.py` adding `supabase_auth_id` to `users` and `project_vector_indexes` table.
+9. `20261113_0009_supabase_and_vector_indexes.py` *(applied on live Supabase DB; `users.supabase_auth_id` remains dormant while `project_vector_indexes` supports isolated Chroma collections)*

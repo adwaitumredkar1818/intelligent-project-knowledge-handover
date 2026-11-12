@@ -156,11 +156,12 @@ def download_evidence(
         evidence_id=evidence_id,
         principal=principal,
     )
+    safe_filename = filename.replace('"', "").replace("\r", "").replace("\n", "")
     return Response(
         content=raw_bytes,
         media_type=mime_type,
         headers={
-            "Content-Disposition": f'attachment; filename="{filename}"',
+            "Content-Disposition": f'attachment; filename="{safe_filename}"',
         },
     )
 

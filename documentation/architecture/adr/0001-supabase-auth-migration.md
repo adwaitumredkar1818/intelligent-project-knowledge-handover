@@ -1,19 +1,18 @@
-# ADR 0001: Supabase Auth as Sole Platform Identity Provider
+# ADR 0001: Supabase Auth Evaluation & Retention of FastAPI-Managed Auth
 
 ## Status
-Accepted
+Superseded (FastAPI-Managed Authentication Retained as Canonical in Phase 2.9)
 
 ## Context
-The Handover previously implemented a custom FastAPI-managed authentication authority with Argon2id password hashing, short-lived JWTs, and refresh tokens stored in PostgreSQL. To standardize identity management, enable secure session rotation, support email verification, password reset workflows, and future social authentication while reducing authentication maintenance burden, Supabase Auth is adopted as the sole platform identity provider.
+During an intermediate prototype iteration, Supabase Auth was proposed to replace the platform's custom FastAPI-managed authentication authority. Upon architectural review prior to Phase 2.9 storage integration, adopting an external asymmetric JWT authority introduced dual-identity drift, risked bypassing PostgreSQL `RefreshSession` family revocation, and was rejected in favor of keeping platform identity strictly self-contained inside FastAPI and PostgreSQL.
 
-## Decision
-1. **Supabase Auth as Sole Identity Authority**: Supabase Auth handles user registration, login, logout, password resets, email verification, session refresh, and token issuance via PKCE flow.
-2. **FastAPI Asymmetric JWT Verification**: The FastAPI backend validates Supabase-issued access tokens by verifying signatures against Supabase JWKS public keys (`SUPABASE_JWKS_URL`), verifying issuer (`SUPABASE_JWT_ISSUER`), audience (`SUPABASE_JWT_AUDIENCE`), expiry, and subject.
-3. **Internal User Mapping**: The internal PostgreSQL `users` table remains authoritative for application relationships (organizations, projects, memberships, audit logs). A `supabase_auth_id` column maps Supabase identities to internal user UUIDs. Existing internal users are linked safely during verified login.
-4. **PostgreSQL RBAC Preservation**: Application roles and project-level permissions remain strictly evaluated in PostgreSQL. Roles are never inferred from client-editable user metadata.
-5. **No Parallel Authentication**: Legacy custom auth endpoints (`/auth/register`, `/auth/login`, etc.) are safely deprecated in favor of Supabase Auth.
+## Decision (Current Canonical Architecture — Phase 2.9)
+1. **FastAPI-Managed Platform Identity**: User registration (`/api/v1/auth/register`), login (`/api/v1/auth/login`), refresh rotation (`/api/v1/auth/refresh`), logout (`/api/v1/auth/logout`), and profile/session management remain exclusively managed by FastAPI using Argon2id password hashes (`pwdlib[argon2]`), short-lived HS256 JWT access tokens (`JWT_SECRET_KEY`), and SHA-256 `RefreshSession` tokens in `HttpOnly` cookies.
+2. **Strict Non-Empty Password Hash Enforcement**: All FastAPI-created users require a non-empty `password_hash`, and `/api/v1/auth/login` safely rejects legacy rows with `password_hash IS NULL` without throwing 500 errors (`401 INVALID_CREDENTIALS`).
+3. **No External Auth JWT Interception**: `get_current_principal()` rejects non-FastAPI tokens (`401 INVALID_ACCESS_TOKEN`) and never auto-provisions users from third-party JWT claims.
+4. **PostgreSQL RBAC Authority**: Roles, permissions, organisation memberships, and project memberships remain evaluated exclusively in PostgreSQL.
+5. **Zero-Migration Schema Compatibility**: The nullable `users.supabase_auth_id` column introduced in Alembic revision `0009_supabase_and_vector_indexes` is left intact as dormant schema to avoid mutating the live PostgreSQL database.
 
 ## Consequences
-- Requires Supabase project configuration (`SUPABASE_URL`, `SUPABASE_SECRET_KEY`, `SUPABASE_JWKS_URL`, `NEXT_PUBLIC_SUPABASE_URL`, `NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY`).
-- Eliminates local credential storage vulnerabilities.
-- Next.js frontend uses `@supabase/supabase-js` and `@supabase/ssr` with cookie-based session management.
+- No `@supabase/supabase-js`, `SUPABASE_JWKS_URL`, or `NEXT_PUBLIC_SUPABASE_*` variables exist in the codebase.
+- Platform authentication stays completely independent of Supabase Storage connectivity (`STORAGE_PROVIDER`) and third-party source OAuth 2.0 integrations (GitHub, Jira).

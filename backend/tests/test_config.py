@@ -8,6 +8,9 @@ import pytest
 from pydantic import ValidationError
 
 from app.core.config import Settings
+from app.services.storage import LocalPrivateStorageBackend
+from app.services.storage_factory import build_storage_backend
+from app.services.supabase_storage import SupabaseStorageBackend
 from tests.conftest import build_test_settings
 
 
@@ -175,3 +178,59 @@ def test_loads_from_explicit_env_file(tmp_path: Path) -> None:
     assert settings.app_env == "test"
     assert settings.database.name == "knowledge_handover"
     assert settings.chroma.base_url == "http://localhost:8001"
+
+
+def test_storage_provider_selection_and_fail_closed_validation(tmp_path: Path) -> None:
+    default_settings = build_test_settings(upload_storage_path=tmp_path)
+    assert default_settings.storage.provider == "local_encrypted"
+    assert isinstance(build_storage_backend(default_settings), LocalPrivateStorageBackend)
+
+    with pytest.raises(ValidationError, match="SUPABASE_URL"):
+        build_test_settings(
+            storage_provider="supabase_storage",
+            supabase_service_role_key="service-role-secret-key",
+        )
+
+    with pytest.raises(ValidationError, match="SUPABASE_SERVICE_ROLE_KEY"):
+        build_test_settings(
+            storage_provider="supabase_storage",
+            supabase_url="https://example.supabase.co",
+        )
+
+    # Anon/publishable keys must never satisfy server-side Supabase Storage
+    with pytest.raises(ValidationError, match="publishable"):
+        build_test_settings(
+            storage_provider="supabase_storage",
+            supabase_url="https://example.supabase.co",
+            supabase_service_role_key="sb_publishable_fake_key",
+        )
+
+    # Extra unknown legacy publishable env vars do not silently unlock supabase_storage
+    with pytest.raises(ValidationError, match="SUPABASE_SERVICE_ROLE_KEY"):
+        build_test_settings(
+            storage_provider="supabase_storage",
+            supabase_url="https://example.supabase.co",
+            supabase_publishable_key="sb_publishable_ignored_fallback",
+        )
+
+    with pytest.raises(ValidationError, match="SUPABASE_STORAGE_BUCKET"):
+        build_test_settings(
+            storage_provider="supabase_storage",
+            supabase_url="https://example.supabase.co",
+            supabase_service_role_key="service-role-secret-key",
+            supabase_storage_bucket="../bad/bucket",
+        )
+
+    supabase_settings = build_test_settings(
+        storage_provider="supabase_storage",
+        supabase_url="https://example.supabase.co/",
+        supabase_service_role_key="super-secret-supabase-service-role-key",
+        supabase_storage_bucket="project-evidence",
+    )
+    assert supabase_settings.storage.provider == "supabase_storage"
+    assert supabase_settings.storage.supabase_url == "https://example.supabase.co"
+    rendered = (
+        f"{repr(supabase_settings)} {str(supabase_settings)} {repr(supabase_settings.storage)}"
+    )
+    assert "super-secret-supabase-service-role-key" not in rendered
+    assert isinstance(build_storage_backend(supabase_settings), SupabaseStorageBackend)

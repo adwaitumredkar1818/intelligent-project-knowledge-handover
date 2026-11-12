@@ -81,6 +81,7 @@ class IngestionWorkerService:
             category,
             storage_key,
             key_id,
+            expected_plaintext_size,
             title,
             attempt_count,
             max_attempts,
@@ -93,6 +94,7 @@ class IngestionWorkerService:
                 organisation_id=organisation_id,
                 project_id=project_id,
                 key_id=key_id,
+                expected_plaintext_size=expected_plaintext_size,
             )
             extracted = self._extraction.extract_document(
                 category=category,
@@ -167,6 +169,7 @@ class IngestionWorkerService:
         str,
         str,
         str | None,
+        int | None,
         str,
         int,
         int,
@@ -235,6 +238,7 @@ class IngestionWorkerService:
                 evidence.category,
                 evidence.storage_object_key,
                 evidence.encryption_key_id,
+                evidence.file_size_bytes,
                 evidence.title,
                 int(job.attempt_count),
                 int(job.max_attempts),

@@ -121,3 +121,34 @@ def test_local_storage_blocks_path_traversal_and_deletes_safely(tmp_path: Path) 
     assert storage.delete_object(storage_object_key=stored.storage_object_key) is True
     assert storage.exists(storage_object_key=stored.storage_object_key) is False
     assert storage.delete_object(storage_object_key=stored.storage_object_key) is False
+
+
+def test_local_storage_enforces_key_id_and_expected_plaintext_size(tmp_path: Path) -> None:
+    storage = LocalPrivateStorageBackend(root_path=tmp_path, file_encryption_key=_SECRET_A)
+    org_id = uuid.uuid4()
+    proj_id = uuid.uuid4()
+    plaintext = b"Exact byte payload"
+    stored = storage.store_encrypted_bytes(
+        organisation_id=org_id,
+        project_id=proj_id,
+        data=plaintext,
+    )
+
+    with pytest.raises(ServiceUnavailableError) as key_exc:
+        storage.read_decrypted_bytes(
+            storage_object_key=stored.storage_object_key,
+            organisation_id=org_id,
+            project_id=proj_id,
+            key_id="supabase-v1",
+        )
+    assert key_exc.value.code == "STORAGE_KEY_UNSUPPORTED"
+
+    with pytest.raises(ServiceUnavailableError) as size_exc:
+        storage.read_decrypted_bytes(
+            storage_object_key=stored.storage_object_key,
+            organisation_id=org_id,
+            project_id=proj_id,
+            key_id=stored.encryption_key_id,
+            expected_plaintext_size=len(plaintext) + 10,
+        )
+    assert size_exc.value.code == "STORAGE_INTEGRITY_FAILED"
