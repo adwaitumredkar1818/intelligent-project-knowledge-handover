@@ -1,7 +1,17 @@
 "use client";
 
 import React, { useState } from "react";
-import { Lock, Mail, User as UserIcon, ArrowRight, ShieldCheck, AlertCircle } from "lucide-react";
+import {
+  Lock,
+  Mail,
+  User as UserIcon,
+  ArrowRight,
+  ShieldCheck,
+  AlertCircle,
+  CheckCircle2,
+  Eye,
+  EyeOff,
+} from "lucide-react";
 import { useLiveApp } from "../../context/LiveAppContext";
 
 export function AuthModal() {
@@ -10,6 +20,7 @@ export function AuthModal() {
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [fullName, setFullName] = useState("");
+  const [showPassword, setShowPassword] = useState(false);
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
 
@@ -17,18 +28,37 @@ export function AuthModal() {
     return null;
   }
 
+  // Password strength checks (matches backend validate_password_strength)
+  const hasMinLength = password.length >= 12;
+  const hasUpper = /[A-Z]/.test(password);
+  const hasLower = /[a-z]/.test(password);
+  const hasNumber = /[0-9]/.test(password);
+  const hasSpecial = /[^A-Za-z0-9\s]/.test(password);
+  const isPasswordStrong = hasMinLength && hasUpper && hasLower && hasNumber && hasSpecial;
+
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     setErrorMessage(null);
+
+    if (mode === "register") {
+      if (fullName.trim().length < 2) {
+        setErrorMessage("Please enter your full name (at least 2 characters).");
+        return;
+      }
+      if (!isPasswordStrong) {
+        setErrorMessage(
+          "Password does not meet enterprise security requirements (must be at least 12 characters with uppercase, lowercase, numbers, and special symbols)."
+        );
+        return;
+      }
+    }
+
     setIsSubmitting(true);
     try {
       if (mode === "login") {
-        await login(email, password);
+        await login(email.trim(), password);
       } else {
-        if (!fullName.trim()) {
-          throw new Error("Please enter your full name");
-        }
-        await register(email, password, fullName);
+        await register(email.trim(), password, fullName.trim());
       }
     } catch (err: any) {
       setErrorMessage(err.message || "Authentication failed");
@@ -132,20 +162,98 @@ export function AuthModal() {
             </div>
 
             <div>
-              <label className="block text-xs font-semibold text-[#25334B] mb-1">
-                Password
-              </label>
+              <div className="flex items-center justify-between mb-1">
+                <label className="block text-xs font-semibold text-[#25334B]">
+                  Password
+                </label>
+                {mode === "register" && (
+                  <span className="text-[10px] text-[#69778D]">
+                    Min 12 chars, upper, lower, num &amp; symbol
+                  </span>
+                )}
+              </div>
               <div className="relative">
                 <Lock className="w-4 h-4 text-[#69778D] absolute left-3 top-2.5" />
                 <input
-                  type="password"
+                  type={showPassword ? "text" : "password"}
                   required
                   value={password}
                   onChange={(e) => setPassword(e.target.value)}
-                  placeholder="••••••••"
-                  className="w-full pl-9 pr-3 py-2 rounded-lg border border-[#DCE3EB] text-xs focus:outline-none focus:ring-2 focus:ring-[#4774A9] text-[#25334B]"
+                  placeholder={mode === "register" ? "e.g. HandoverPass2026!" : "••••••••"}
+                  className="w-full pl-9 pr-10 py-2 rounded-lg border border-[#DCE3EB] text-xs focus:outline-none focus:ring-2 focus:ring-[#4774A9] text-[#25334B]"
                 />
+                <button
+                  type="button"
+                  onClick={() => setShowPassword(!showPassword)}
+                  className="absolute right-3 top-2.5 text-[#69778D] hover:text-[#25334B] transition-colors focus:outline-none"
+                  aria-label={showPassword ? "Hide password" : "Show password"}
+                >
+                  {showPassword ? (
+                    <EyeOff className="w-4 h-4" />
+                  ) : (
+                    <Eye className="w-4 h-4" />
+                  )}
+                </button>
               </div>
+
+              {/* Password strength criteria indicator in register mode */}
+              {mode === "register" && password.length > 0 && (
+                <div className="mt-2.5 p-2.5 rounded-lg bg-[#F8FAFC] border border-[#E2E8F0] space-y-1.5 text-[11px]">
+                  <div className="font-semibold text-[#475569] mb-1">
+                    Password Requirements:
+                  </div>
+                  <div className="grid grid-cols-2 gap-1.5">
+                    <div
+                      className={`flex items-center gap-1.5 ${
+                        hasMinLength ? "text-emerald-700 font-medium" : "text-[#64748B]"
+                      }`}
+                    >
+                      <CheckCircle2
+                        className={`w-3.5 h-3.5 ${
+                          hasMinLength ? "text-emerald-600" : "text-[#CBD5E1]"
+                        }`}
+                      />
+                      <span>12+ characters</span>
+                    </div>
+                    <div
+                      className={`flex items-center gap-1.5 ${
+                        hasUpper && hasLower ? "text-emerald-700 font-medium" : "text-[#64748B]"
+                      }`}
+                    >
+                      <CheckCircle2
+                        className={`w-3.5 h-3.5 ${
+                          hasUpper && hasLower ? "text-emerald-600" : "text-[#CBD5E1]"
+                        }`}
+                      />
+                      <span>Upper &amp; lower case</span>
+                    </div>
+                    <div
+                      className={`flex items-center gap-1.5 ${
+                        hasNumber ? "text-emerald-700 font-medium" : "text-[#64748B]"
+                      }`}
+                    >
+                      <CheckCircle2
+                        className={`w-3.5 h-3.5 ${
+                          hasNumber ? "text-emerald-600" : "text-[#CBD5E1]"
+                        }`}
+                      />
+                      <span>At least 1 number</span>
+                    </div>
+                    <div
+                      className={`flex items-center gap-1.5 ${
+                        hasSpecial ? "text-emerald-700 font-medium" : "text-[#64748B]"
+                      }`}
+                    >
+                      <CheckCircle2
+                        className={`w-3.5 h-3.5 ${
+                          hasSpecial ? "text-emerald-600" : "text-[#CBD5E1]"
+                        }`}
+                      />
+                      <span>Special symbol (!@#...)</span>
+                    </div>
+                  </div>
+                </div>
+              )}
             </div>
 
             <button

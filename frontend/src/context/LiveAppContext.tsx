@@ -373,7 +373,7 @@ export function LiveAppProvider({ children }: { children: ReactNode }) {
 
   // Auth actions
   const login = async (email: string, password: string) => {
-    const res = await api.auth.login({ username: email, password });
+    const res = await api.auth.login({ email, password });
     setStoredToken(res.access_token);
     setToken(res.access_token);
     const me = await api.auth.me();

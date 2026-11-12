@@ -71,10 +71,28 @@ async function request<T>(
     } catch {
       // ignore
     }
-    const message =
-      errorData?.detail ||
+    let message =
+      errorData?.error?.message ||
       errorData?.message ||
       `HTTP error ${res.status}: ${res.statusText}`;
+
+    const details = errorData?.error?.details || errorData?.detail || errorData?.details;
+    if (details) {
+      if (typeof details === "string") {
+        message = details;
+      } else if (Array.isArray(details)) {
+        const detailMsgs = details.map((d: any) => {
+          if (typeof d === "string") return d;
+          if (d?.msg) {
+            const loc = Array.isArray(d.loc) ? d.loc.slice(-1)[0] : "";
+            const cleanMsg = String(d.msg).replace(/^Value error,\s*/i, "");
+            return loc && loc !== "body" ? `${loc}: ${cleanMsg}` : cleanMsg;
+          }
+          return JSON.stringify(d);
+        });
+        message = detailMsgs.filter(Boolean).join(". ");
+      }
+    }
     throw new ApiError(message, res.status, errorData);
   }
 
@@ -94,16 +112,10 @@ export const api = {
         body: JSON.stringify(data),
       });
     },
-    async login(data: { username: string; password: string }): Promise<{ access_token: string; token_type: string }> {
-      const form = new URLSearchParams();
-      form.append("username", data.username);
-      form.append("password", data.password);
+    async login(data: { email: string; password: string }): Promise<{ access_token: string; token_type: string }> {
       return request<{ access_token: string; token_type: string }>("/auth/login", {
         method: "POST",
-        headers: {
-          "Content-Type": "application/x-www-form-urlencoded",
-        },
-        body: form.toString(),
+        body: JSON.stringify(data),
       });
     },
     async me(): Promise<User> {
