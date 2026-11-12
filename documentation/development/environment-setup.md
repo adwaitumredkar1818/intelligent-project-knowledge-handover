@@ -1,6 +1,6 @@
 # Environment Setup Guide
 
-> **Current Phase Notice:** **Phase 2.2 (Platform Authentication, Identity & RBAC)** is complete: Docker infrastructure (**PostgreSQL** and **ChromaDB**), native Windows **Ollama** (`qwen3:8b`, `glm-ocr:latest`, `nomic-embed-text`), the Next.js TypeScript runtime (`frontend/`), the FastAPI backend foundation (`backend/app/`, `infrastructure/database/migrations/`), and platform authentication, refresh-session rotation, and scope-separated RBAC (`0002_auth_identity_rbac`) are implemented and verified. Organisations, project workspaces, source integrations, ingestion, and AI/RAG endpoints are not yet implemented.
+> **Current Phase Notice:** **Phase 2.6 (AI Knowledge Reconstruction & Structured Intelligence Extraction)** is complete alongside **Phases 2.1–2.5**: Docker infrastructure (**PostgreSQL** and **ChromaDB**), native Windows **Ollama** (`qwen3:8b`, `glm-ocr:latest`, `nomic-embed-text`), the Next.js TypeScript runtime (`frontend/`), the FastAPI backend foundation (`backend/app/`, `infrastructure/database/migrations/`), platform authentication & RBAC (`0002_auth_identity_rbac`), organisations & project workspaces (`0003_org_project_workspaces`), encrypted PDF/DOCX ingestion & GLM OCR (`0004_evidence_ingestion`), delegated per-user GitHub/Jira OAuth 2.0 connectors & sync execution (`0005_source_integrations`), chunking, PG `TSVECTOR`/`GIN` FTS, `nomic-embed-text`, ChromaDB HTTP v2 indexing & hybrid retrieval (`0006_evidence_chunks_and_fts`), and replaceable `StructuredLLMClient` (`OllamaLLMClient` / `qwen3:8b` with `OLLAMA_LLM_THINK=false`), fail-closed `NO EVIDENCE -> NO CLAIM` knowledge reconstruction (`ReconstructionWorkerService`), conservative deduplication, and staleness tracking (`0007_knowledge_reconstruction`) are implemented and verified. Knowledge relationships, verification review workflows, handover generation, and assistant synthesis belong to subsequent phases.
 
 ---
 
@@ -79,16 +79,21 @@ Required to boot core services and configure local persistence/security:
 | Variable | Scope | Secret? | Default / Example | Description |
 | :--- | :--- | :--- | :--- | :--- |
 | `GITHUB_ENABLED` | Backend / Worker | No | `false` | Enable GitHub API integration (initial source priority when enabled) |
+| `GITHUB_AUTH_BASE_URL` | Backend | No | `https://github.com` | GitHub OAuth authorize & token exchange base URL |
 | `GITHUB_API_BASE_URL` | Backend / Worker | No | `https://api.github.com` | GitHub REST API base URL |
 | `GITHUB_CLIENT_ID` | Backend | No | *(empty)* | GitHub OAuth app client ID *(required only when `GITHUB_ENABLED=true`)* |
 | `GITHUB_CLIENT_SECRET` | Backend | **Yes** | *(empty)* | GitHub OAuth app client secret *(required only when `GITHUB_ENABLED=true`)* |
 | `GITHUB_REDIRECT_URI` | Backend | No | `http://localhost:8000/api/v1/integrations/github/callback` | GitHub delegated OAuth callback |
+| `GITHUB_OAUTH_MODE` | Backend | No | `github_app` | OAuth app mode (`github_app` default least privilege vs `oauth_app`) |
+| `GITHUB_OAUTH_SCOPES` | Backend | No | `read:user user:email` | Requested GitHub OAuth scopes when `GITHUB_OAUTH_MODE=oauth_app` |
+| `GITHUB_ALLOW_CLASSIC_PRIVATE_REPO_SCOPE` | Backend | No | `false` | Explicitly strips classic write-capable `repo` scope unless opted in |
 | `JIRA_ENABLED` | Backend / Worker | No | `false` | Enable Jira API integration (initial source priority when enabled) |
 | `JIRA_AUTH_BASE_URL` | Backend | No | `https://auth.atlassian.com` | Atlassian OAuth 2.0 base URL |
 | `JIRA_API_BASE_URL` | Backend | No | `https://api.atlassian.com` | Jira Cloud REST API base URL |
 | `JIRA_CLIENT_ID` | Backend | No | *(empty)* | Jira OAuth 2.0 (3LO) client ID *(required only when `JIRA_ENABLED=true`)* |
 | `JIRA_CLIENT_SECRET` | Backend | **Yes** | *(empty)* | Jira OAuth 2.0 (3LO) client secret *(required only when `JIRA_ENABLED=true`)* |
 | `JIRA_REDIRECT_URI` | Backend | No | `http://localhost:8000/api/v1/integrations/jira/callback` | Jira delegated OAuth callback |
+| `JIRA_OAUTH_SCOPES` | Backend | No | `read:jira-work read:jira-user offline_access` | Read-only Atlassian 3LO scopes requested during consent |
 | `SLACK_ENABLED` | Backend / Worker | No | `false` | Optional MVP gate — keep `false` until workspace auth, API scope review & retention are confirmed |
 | `SLACK_API_BASE_URL` | Backend / Worker | No | `https://slack.com/api` | Slack Web API base URL |
 | `SLACK_CLIENT_ID` | Backend | No | *(empty)* | Slack app client ID *(required only when `SLACK_ENABLED=true`)* |
@@ -110,10 +115,57 @@ Required to boot core services and configure local persistence/security:
 | `COOKIE_SAMESITE` | Backend | No | `lax` | `SameSite` policy (`lax` or `strict`) for `HttpOnly` refresh token cookies |
 | `COOKIE_DOMAIN` | Backend | No | *(empty)* | Cookie domain override for non-localhost deployments |
 | `MAX_UPLOAD_SIZE_MB` | Backend | No | `50` | Maximum allowed single upload file size in megabytes |
+| `MAX_DOCUMENT_PAGES` | Backend / Worker | No | `200` | Maximum allowed page count for uploaded PDF documents |
+| `OLLAMA_OCR_NUM_CTX` | Worker | No | `8192` | Explicit context window passed to Ollama `glm-ocr:latest` requests |
+| `OLLAMA_OCR_NUM_PREDICT` | Worker | No | `4096` | Maximum tokens generated per page during OCR inference (triggers truncation flag if hit) |
+| `OLLAMA_OCR_TIMEOUT_SECONDS` | Worker | No | `120` | HTTP timeout in seconds for each Ollama page OCR inference call |
+| `OCR_RENDER_DPI` | Worker | No | `150` | Target DPI when rasterizing scanned/sparse-text PDF pages for OCR |
+| `OCR_MAX_IMAGE_DIMENSION` | Worker | No | `2048` | Upper width/height pixel bound for rasterized page images sent to OCR |
+| `OCR_MIN_TEXT_CHARS_PER_PAGE` | Worker | No | `40` | Minimum digital text chars per PDF page before an image-bearing page routes to OCR |
+| `OCR_MAX_PAGES_PER_DOCUMENT` | Worker | No | `40` | Maximum OCR-processed pages per document before remaining sparse pages record `skipped_limit` (`partially_extracted`) |
 | `WORKER_POLL_INTERVAL_SECONDS` | Worker | No | `5` | Polling interval (seconds) for the PostgreSQL-backed Python worker |
-| `WORKER_MAX_ATTEMPTS` | Worker | No | `3` | Maximum retry attempts before moving a failed job to `dead_letter` |
+| `WORKER_MAX_ATTEMPTS` | Backend / Worker | No | `3` | Maximum retry attempts before a failed job transitions to `failed` |
+| `WORKER_RETRY_BASE_SECONDS` | Worker | No | `15` | Base backoff interval in seconds (`base * 2^(attempt-1)`) before retrying retryable failures |
+| `WORKER_LEASE_SECONDS` | Worker | No | `300` | Job lock lease duration in seconds before stale `running` jobs are reclaimed |
+| `OAUTH_STATE_EXPIRE_MINUTES` | Backend | No | `10` | Lifetime (minutes) of single-use PKCE `oauth_states` records |
+| `INTEGRATION_HTTP_TIMEOUT_SECONDS` | Backend / Worker | No | `20` | HTTPX timeout in seconds for external GitHub & Jira API requests |
+| `INTEGRATION_SYNC_MAX_ITEMS_PER_RUN` | Backend / Worker | No | `250` | Upper cap on synced items discovered per source sync run |
+| `INTEGRATION_ALLOWED_POST_AUTH_REDIRECTS` | Backend | No | *(empty)* | Comma-separated allowlisted post-OAuth redirect URL prefixes/origins (alongside `CORS_ALLOWED_ORIGINS`) |
+| `GITHUB_DEFAULT_COMMITS_LIMIT` | Worker | No | `50` | Default maximum commits ingested per GitHub sync run |
+| `GITHUB_DEFAULT_DOCS_LIMIT` | Worker | No | `20` | Default maximum README/Markdown/ADR docs ingested per GitHub sync run |
 | `POSTGRES_SSL_MODE` | Backend / Worker | No | `prefer` | PostgreSQL TLS mode (`require` / `verify-full` recommended in production) |
 | `CHROMA_AUTH_TOKEN` | Backend / Worker / Infra | **Yes** | *(empty)* | Reserved for reverse-proxy/gateway authentication in shared deployments *(not used natively by local `chromadb/chroma:latest` 1.4.4)* |
+| `CHROMA_TENANT` | Backend / Worker | No | `default_tenant` | ChromaDB HTTP v2 tenant scope for vector collection API calls |
+| `CHROMA_DATABASE` | Backend / Worker | No | `default_database` | ChromaDB HTTP v2 database scope for vector collection API calls |
+| `CHROMA_INDEX_VERSION` | Backend / Worker | No | `v1` | Index schema/chunking version suffix embedded in Chroma collection name (`${CHROMA_COLLECTION_PREFIX}_evidence_chunks_${OLLAMA_EMBEDDING_MODEL}_${CHROMA_INDEX_VERSION}`) |
+| `CHROMA_REQUEST_TIMEOUT_SECONDS` | Backend / Worker | No | `15.0` | HTTP timeout in seconds for ChromaDB HTTP v2 upsert, query, delete, and health calls |
+| `CHUNK_TARGET_CHARS` | Worker | No | `1100` | Target chunk size in characters (~340 tokens for `nomic-embed-text`) |
+| `CHUNK_MAX_CHARS` | Worker | No | `1400` | Maximum chunk size ceiling before sentence/paragraph splitting (`CHUNK_MIN_CHARS <= TARGET <= MAX`) |
+| `CHUNK_OVERLAP_CHARS` | Worker | No | `150` | Character overlap carried between consecutive split text segments (`< CHUNK_TARGET_CHARS`) |
+| `CHUNK_MIN_CHARS` | Worker | No | `120` | Minimum trailing chunk threshold before merging short adjacent segments |
+| `EMBEDDING_BATCH_SIZE` | Worker | No | `8` | Number of chunks embedded per Ollama `/api/embed` batch call |
+| `EMBEDDING_EXPECTED_DIMENSIONS` | Backend / Worker | No | `768` | Expected embedding vector dimensionality enforced for `nomic-embed-text` compatibility checks |
+| `EMBEDDING_TIMEOUT_SECONDS` | Backend / Worker | No | `60.0` | HTTP timeout in seconds for Ollama `/api/embed` calls |
+| `RETRIEVAL_DEFAULT_TOP_K` | Backend | No | `10` | Default result limit returned by `POST /projects/{project_id}/search` |
+| `RETRIEVAL_MAX_TOP_K` | Backend | No | `50` | Maximum allowed `top_k` per search request |
+| `RETRIEVAL_CANDIDATE_MULTIPLIER` | Backend | No | `4` | Per-channel candidate overfetch factor prior to RRF fusion & PG ACL post-revalidation |
+| `RETRIEVAL_MIN_CANDIDATE_LIMIT` | Backend | No | `40` | Floor on per-channel FTS / vector candidate fetch count |
+| `RETRIEVAL_RRF_K` | Backend | No | `60` | Reciprocal Rank Fusion dampening constant (`weight / (k + rank)`) |
+| `RETRIEVAL_SEMANTIC_WEIGHT` | Backend | No | `1.0` | Weight applied to ChromaDB semantic rank during RRF fusion |
+| `RETRIEVAL_KEYWORD_WEIGHT` | Backend | No | `1.0` | Weight applied to PostgreSQL FTS rank during RRF fusion |
+| `RETRIEVAL_MIN_SEMANTIC_SIMILARITY` | Backend | No | `0.15` | Minimum cosine similarity filter before RRF fusion *(subject to Phase 8 real-evidence calibration)* |
+| `RETRIEVAL_MIN_KEYWORD_SCORE` | Backend | No | `0.0` | Minimum normalised PG FTS keyword score threshold *(subject to Phase 8 calibration)* |
+| `RETRIEVAL_MIN_HYBRID_SCORE` | Backend | No | `0.0` | Minimum normalised hybrid RRF score threshold *(subject to Phase 8 calibration)* |
+| `OLLAMA_LLM_NUM_CTX` | Worker | No | `8192` | Explicit context window (`num_ctx`) passed to Ollama `qwen3:8b` extraction requests |
+| `OLLAMA_LLM_NUM_PREDICT` | Worker | No | `2048` | Maximum generated tokens (`num_predict`) per Ollama extraction batch (checked for truncation) |
+| `OLLAMA_LLM_TEMPERATURE` | Worker | No | `0.1` | Low sampling temperature for structured JSON knowledge extraction |
+| `OLLAMA_LLM_TIMEOUT_SECONDS` | Worker | No | `120.0` | HTTP timeout in seconds for each Ollama `/api/chat` structured extraction call |
+| `OLLAMA_LLM_THINK` | Worker | No | `false` | Disables Qwen3 reasoning trace tokens via Ollama `think: false` for fast strict JSON responses |
+| `EXTRACTION_PROMPT_VERSION` | Worker | No | `p2.6-v1` | Prompt contract version recorded on `knowledge_extraction_runs` and `knowledge_items` |
+| `EXTRACTION_MAX_RETRIES` | Worker | No | `2` | Invalid-JSON repair prompt retry budget per batch prior to failing an item |
+| `EXTRACTION_MAX_CHUNKS_PER_BATCH` | Worker | No | `6` | Maximum chunks from a single evidence item grouped into one LLM extraction batch |
+| `EXTRACTION_MAX_CHARS_PER_BATCH` | Worker | No | `5500` | Maximum prompt character payload per extraction batch within `OLLAMA_LLM_NUM_CTX` |
+| `EXTRACTION_AUTO_REEXTRACT_ON_UPDATE` | Worker | No | `false` | When `true`, automatically queues `knowledge_reconstruction` after re-indexing marks existing claims stale |
 
 ---
 
@@ -264,21 +316,21 @@ python -m pip install -r backend\requirements.txt
 python -m pip install pytest ruff mypy
 
 # 4. Verify baseline imports
-python -c "import fastapi, uvicorn, pydantic, pydantic_settings, sqlalchemy, psycopg, alembic, httpx, dotenv, jwt, pwdlib; print('Backend baseline imports OK')"
+python -c "import fastapi, uvicorn, pydantic, pydantic_settings, sqlalchemy, psycopg, alembic, httpx, dotenv, jwt, pwdlib, pymupdf, docx, cryptography; print('Backend baseline imports OK')"
 ```
 
-- **Baseline Runtime Dependencies** (`backend/requirements.txt`): `fastapi`, `uvicorn[standard]`, `pydantic`, `pydantic-settings`, `sqlalchemy`, `psycopg[binary]`, `alembic`, `httpx`, `python-dotenv`, `pyjwt`, `pwdlib[argon2]`.
+- **Core Runtime Dependencies** (`backend/requirements.txt`): `fastapi`, `uvicorn[standard]`, `pydantic`, `pydantic-settings`, `sqlalchemy`, `psycopg[binary]`, `alembic`, `httpx`, `python-dotenv`, `pyjwt`, `pwdlib[argon2]`, plus Phase 2.4A document/crypto packages `pymupdf`, `python-docx`, `python-multipart`, and `cryptography`.
 - **Separated Optional Dependency Groups** (do **not** install prematurely; install only as their phases start):
-  - `documents`: `pymupdf`, `python-docx`, `python-multipart`
+  - `documents`: promoted into core dependencies in Phase 2.4A (`pymupdf`, `python-docx`, `python-multipart`)
   - `embeddings-rag`: `chromadb-client`
-  - `integrations-security`: `cryptography` *(deferred for external OAuth source token encryption)*
+  - `integrations-security`: `cryptography` promoted in Phase 2.4A for at-rest file encryption; reserve for future OAuth/connector dependencies
   - `worker`: lightweight worker utilities *(no Redis or Celery)*
-  - `dev`: `pytest`, `ruff`, `mypy` *(installed for Phase 2.1–2.2 verification)*
+  - `dev`: `pytest`, `ruff`, `mypy` *(installed for verification)*
 - **Re-locking Base Dependencies** (when updating `backend/pyproject.toml`):
   ```powershell
   uv pip compile backend\pyproject.toml --python-version 3.11 -o backend\requirements.txt
   ```
-- **Running the FastAPI Application & Database Checks (Phase 2.2)**:
+# - **Running the FastAPI Application, Composite Ingestion/Sync/Indexing/Reconstruction Worker & Database Checks (Phase 2.6)**:
   ```powershell
   cd backend
 
@@ -289,8 +341,12 @@ python -c "import fastapi, uvicorn, pydantic, pydantic_settings, sqlalchemy, psy
 
   # Run lint, strict typing, and test suite
   ..\backend\.venv\Scripts\ruff.exe check app tests ..\infrastructure\database\migrations
-  ..\backend\.venv\Scripts\mypy.exe app tests ..\infrastructure\database\migrations\env.py ..\infrastructure\database\migrations\versions\20261111_0002_auth_identity_rbac.py
+  ..\backend\.venv\Scripts\mypy.exe app tests ..\infrastructure\database\migrations\env.py ..\infrastructure\database\migrations\versions\20261111_0002_auth_identity_rbac.py ..\infrastructure\database\migrations\versions\20261111_0003_org_project_workspaces.py ..\infrastructure\database\migrations\versions\20261111_0004_evidence_ingestion.py ..\infrastructure\database\migrations\versions\20261111_0005_source_integrations.py ..\infrastructure\database\migrations\versions\20261112_0006_evidence_chunks_and_fts.py ..\infrastructure\database\migrations\versions\20261112_0007_knowledge_reconstruction.py
   ..\backend\.venv\Scripts\pytest.exe -v
+
+  # Run lightweight PostgreSQL-backed CompositeWorkerService (`document_ingestion` + `source_sync` + `evidence_indexing` + `knowledge_reconstruction`)
+  ..\backend\.venv\Scripts\python.exe -m app.worker --once
+  ..\backend\.venv\Scripts\python.exe -m app.worker
 
   # Start FastAPI HTTP server independently (http://127.0.0.1:8000)
   ..\backend\.venv\Scripts\uvicorn.exe app.main:app --host 127.0.0.1 --port 8000

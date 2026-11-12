@@ -1,9 +1,9 @@
 # Integration Readiness & Permission Prerequisites
 
-This document specifies the required permissions, OAuth 2.0 setup procedures, security boundaries, and pre-enablement gates for external source connectors before application integration development begins in Phase 4.
+This document specifies the required permissions, OAuth 2.0 setup procedures, security boundaries, and operational prerequisites for external source connectors.
 
 > [!IMPORTANT]
-> **Phase 1.3 Scope Boundary**: No live OAuth applications, webhooks, API connectors, or credentials are created in this phase. All integrations remain disabled by default (`GITHUB_ENABLED=false`, `JIRA_ENABLED=false`, `SLACK_ENABLED=false` in [`.env.example`](../../.env.example)).
+> **Phase 2.4B + Phase 2.5 Backend Implemented (Safe Defaults Preserved)**: Delegated backend OAuth 2.0, discovery, mapping, ACL verification, and asynchronous sync pipelines for GitHub and Jira are implemented alongside Phase 2.5 permission-aware chunking, PostgreSQL FTS, and ChromaDB v2 vector indexing. All connectors remain disabled by default (`GITHUB_ENABLED=false`, `JIRA_ENABLED=false`, `SLACK_ENABLED=false` in [`.env.example`](../../.env.example)), no live OAuth apps or credentials are stored in the repository, and Slack remains strictly gated (`409 SLACK_INTEGRATION_DISABLED`).
 
 ---
 
@@ -30,7 +30,7 @@ All source integrations must satisfy the architectural decisions in [`security-a
 
 ## 2. GitHub OAuth & API Readiness
 
-**Status**: Initial priority source integration (`GITHUB_ENABLED=false` until enabled in Phase 4).
+**Status**: Backend delegated GitHub connector implemented in Phase 2.4B (`GITHUB_ENABLED=false` by default until operator supplies App credentials).
 
 ### 2.1 Environment Variables (Canonical Reference)
 
@@ -39,10 +39,14 @@ Defined in [`.env.example`](../../.env.example) and [`environment-setup.md`](./e
 | Variable | Visibility | Default / Placeholder | Purpose |
 | :--- | :--- | :--- | :--- |
 | `GITHUB_ENABLED` | Backend / Worker | `false` | Feature gate for GitHub connector |
+| `GITHUB_AUTH_BASE_URL` | Backend only | `https://github.com` | GitHub OAuth authorize & token exchange base URL |
 | `GITHUB_API_BASE_URL` | Backend / Worker | `https://api.github.com` | GitHub REST API base URL (supports GitHub Enterprise override) |
 | `GITHUB_CLIENT_ID` | Backend only | *(empty)* | GitHub App or OAuth App Client ID |
 | `GITHUB_CLIENT_SECRET` | Backend secret | *(empty)* | GitHub App or OAuth App Client Secret |
 | `GITHUB_REDIRECT_URI` | Backend only | `http://localhost:8000/api/v1/integrations/github/callback` | Backend-handled delegated OAuth callback URI |
+| `GITHUB_OAUTH_MODE` | Backend only | `github_app` | Selects least-privilege `github_app` (default) vs `oauth_app` mode |
+| `GITHUB_OAUTH_SCOPES` | Backend only | `read:user user:email` | Requested scopes when running in `oauth_app` mode |
+| `GITHUB_ALLOW_CLASSIC_PRIVATE_REPO_SCOPE` | Backend only | `false` | Explicitly strips classic write-capable `repo` scope unless opted in |
 
 ### 2.2 Required Permissions & App Choice
 
@@ -66,7 +70,7 @@ Defined in [`.env.example`](../../.env.example) and [`environment-setup.md`](./e
 
 ## 3. Jira API (Atlassian OAuth 2.0 3LO) Readiness
 
-**Status**: Initial priority source integration (`JIRA_ENABLED=false` until enabled in Phase 4).
+**Status**: Backend delegated Jira Cloud 3LO connector implemented in Phase 2.4B (`JIRA_ENABLED=false` by default until operator supplies Atlassian 3LO credentials).
 
 ### 3.1 Environment Variables (Canonical Reference)
 
@@ -78,6 +82,7 @@ Defined in [`.env.example`](../../.env.example) and [`environment-setup.md`](./e
 | `JIRA_CLIENT_ID` | Backend only | *(empty)* | Atlassian Developer Console App Client ID |
 | `JIRA_CLIENT_SECRET` | Backend secret | *(empty)* | Atlassian Developer Console App Client Secret |
 | `JIRA_REDIRECT_URI` | Backend only | `http://localhost:8000/api/v1/integrations/jira/callback` | Backend-handled delegated OAuth 2.0 (3LO) callback URI |
+| `JIRA_OAUTH_SCOPES` | Backend only | `read:jira-work read:jira-user offline_access` | Read-only Atlassian Cloud REST API scopes requested during 3LO consent |
 
 ### 3.2 Required Permissions & Scopes
 
@@ -136,9 +141,9 @@ Do not flip `SLACK_ENABLED=true` or ingest Slack conversations until written con
 
 ---
 
-## 5. Pre-Implementation Verification Checklist (Before Phase 4)
+## 5. Verification Status (Phase 2.5 Complete)
 
-- [ ] Platform authentication (login, JWT access tokens, `HttpOnly` refresh cookies, RBAC) is operational before enabling any source connector callback route.
-- [ ] `TOKEN_ENCRYPTION_KEY` encryption/decryption helper and `audit_logs` writer are tested before persisting any third-party OAuth token.
-- [ ] Per-user ACL filtering (`source_access_policies`) is verified in unit/integration tests before external evidence is chunked into ChromaDB.
-- [ ] Synthetic test fixtures (`is_synthetic = true`) remain completely isolated from real OAuth connection states—never present mock repos, Jira tickets, or Slack messages as connected organisational data.
+- [x] Platform authentication (login, JWT access tokens, `HttpOnly` refresh cookies, RBAC) is operational and enforced before any source connector callback route.
+- [x] `TOKEN_ENCRYPTION_KEY` encryption/decryption helper (`LocalTokenEncryptionService`) and `audit_logs` writer are implemented and verified in automated tests before persisting third-party OAuth tokens.
+- [x] Per-user ACL filtering (`source_access_policies` + `EvidenceRepository.list_for_project` + `SourceAccessPolicyService` + Phase 2.5 `EvidenceChunkRepository` / `HybridRetrievalService` two-phase Chroma pre-filter & canonical PG post-revalidation) is verified in integration tests across evidence listing, chunk inspection, keyword FTS, semantic vector search, and hybrid search.
+- [x] Synthetic test fixtures (`is_synthetic: true`) remain isolated from real OAuth connection states, excluded by default from hybrid retrieval & indexing summaries (`include_synthetic=false`), and live PostgreSQL/ChromaDB dev storage contains zero seeded external source rows.
