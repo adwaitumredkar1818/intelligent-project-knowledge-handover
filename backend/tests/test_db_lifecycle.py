@@ -122,7 +122,7 @@ def test_alembic_configuration_and_revisions() -> None:
     revisions = [rev.revision for rev in script_dir.walk_revisions()]
     assert revisions == [
         "0009_supabase_and_vector_indexes",
-        "0008_project_transitions",
+        "0008_project_transitions_rbac",
         "0007_knowledge_reconstruction",
         "0006_evidence_chunks_and_fts",
         "0005_source_integrations",
