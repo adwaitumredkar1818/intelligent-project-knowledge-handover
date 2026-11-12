@@ -45,7 +45,12 @@ def test_isolated_postgres_knowledge_migration_cycle() -> None:
     admin_dsn = f"postgresql://{db_cfg.user}:{password}@127.0.0.1:{db_cfg.port}/postgres"
     temp_url = f"postgresql+psycopg://{db_cfg.user}:{password}@127.0.0.1:{db_cfg.port}/{temp_db}"
 
-    with psycopg.connect(admin_dsn, autocommit=True, connect_timeout=5) as admin_conn:
+    try:
+        admin_conn = psycopg.connect(admin_dsn, autocommit=True, connect_timeout=2)
+    except (psycopg.OperationalError, psycopg.errors.ConnectionTimeout):
+        pytest.skip("PostgreSQL offline; skipping isolated live database migration test")
+
+    with admin_conn:
         admin_conn.execute(f'CREATE DATABASE "{temp_db}"')
 
     try:

@@ -889,14 +889,16 @@ class ProjectService:
 
         attention_items: list[AttentionItemCard] = []
         for mapping in source_metrics.get("mappings", []):
-            if mapping.sync_status == "failed":
+            sync_status = getattr(mapping, "last_sync_status", None) or getattr(mapping, "status", None)
+            if sync_status in ("failed", "error"):
+                error_msg = getattr(mapping, "last_error_summary", None) or "Unknown error"
                 attention_items.append(
                     AttentionItemCard(
                         id=f"sync-err-{mapping.id}",
                         type="source_sync_failure",
                         message=(
                             f"Sync failed for {mapping.external_resource_name}: "
-                            f"{mapping.sync_error or 'Unknown error'}"
+                            f"{error_msg}"
                         ),
                         resource_id=str(mapping.id),
                     )

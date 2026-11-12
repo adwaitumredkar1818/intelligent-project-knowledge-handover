@@ -37,6 +37,39 @@ def _require_http_url(value: str, field_name: str) -> str:
     return cleaned
 
 
+class SupabaseSettings(BaseModel):
+    """Supabase Auth & Storage configuration."""
+
+    model_config = ConfigDict(frozen=True)
+
+    enabled: bool = False
+    url: str | None = None
+    publishable_key: str | None = None
+    secret_key: SecretStr | None = None
+    jwt_secret: SecretStr | None = None
+    jwt_issuer: str | None = None
+    jwt_audience: str = "authenticated"
+    jwks_url: str | None = None
+    storage_bucket: str = "project-evidence"
+    storage_signed_url_ttl_seconds: int = Field(default=60, ge=10, le=3600)
+
+    @property
+    def auth_jwks_url(self) -> str | None:
+        if self.jwks_url:
+            return self.jwks_url
+        if self.url:
+            return f"{self.url.rstrip('/')}/auth/v1/.well-known/jwks.json"
+        return None
+
+    @property
+    def auth_issuer_url(self) -> str | None:
+        if self.jwt_issuer:
+            return self.jwt_issuer
+        if self.url:
+            return f"{self.url.rstrip('/')}/auth/v1"
+        return None
+
+
 class DatabaseSettings(BaseModel):
     """PostgreSQL connectivity settings (canonical application database)."""
 
@@ -485,6 +518,18 @@ class Settings(BaseSettings):
     github_default_commits_limit: int = Field(default=50, ge=1, le=500)
     github_default_docs_limit: int = Field(default=20, ge=1, le=100)
 
+    # Supabase platform Auth & Storage configuration (`settings.supabase`)
+    supabase_enabled: bool = False
+    supabase_url: str | None = None
+    supabase_publishable_key: str | None = None
+    supabase_secret_key: SecretStr | None = None
+    supabase_jwt_secret: SecretStr | None = None
+    supabase_jwt_issuer: str | None = None
+    supabase_jwt_audience: str = "authenticated"
+    supabase_jwks_url: str | None = None
+    supabase_storage_bucket: str = "project-evidence"
+    supabase_storage_signed_url_ttl_seconds: int = Field(default=60, ge=10, le=3600)
+
     @field_validator("cors_allowed_origins", mode="before")
     @classmethod
     def _parse_cors_origins(cls, value: Any) -> list[str]:
@@ -783,6 +828,22 @@ class Settings(BaseSettings):
             allowed_post_auth_redirects=tuple(self.integration_allowed_post_auth_redirects),
             default_github_commits_limit=self.github_default_commits_limit,
             default_github_docs_limit=self.github_default_docs_limit,
+        )
+
+    @cached_property
+    def supabase(self) -> SupabaseSettings:
+        """Centralised Supabase Auth and Storage settings."""
+        return SupabaseSettings(
+            enabled=self.supabase_enabled,
+            url=self.supabase_url,
+            publishable_key=self.supabase_publishable_key,
+            secret_key=self.supabase_secret_key,
+            jwt_secret=self.supabase_jwt_secret,
+            jwt_issuer=self.supabase_jwt_issuer,
+            jwt_audience=self.supabase_jwt_audience,
+            jwks_url=self.supabase_jwks_url,
+            storage_bucket=self.supabase_storage_bucket,
+            storage_signed_url_ttl_seconds=self.supabase_storage_signed_url_ttl_seconds,
         )
 
     @property

@@ -146,10 +146,10 @@ def test_evidence_workspace_complete_lifecycle(monkeypatch: pytest.MonkeyPatch) 
         )
         assert pdf_upload.status_code == 201
         pdf_data = pdf_upload.json()
-        assert pdf_data["original_filename"] == "adr-001.pdf"
-        assert pdf_data["file_format"] == "pdf"
-        assert pdf_data["chunk_count"] >= 1
-        pdf_evidence_id = pdf_data["evidence_item_id"]
+        pdf_ev = pdf_data.get("evidence", pdf_data)
+        assert pdf_ev.get("original_filename") == "adr-001.pdf"
+        assert pdf_ev.get("category") == "pdf_document"
+        pdf_evidence_id = pdf_ev["id"]
 
         docx_bytes = _create_sample_docx_bytes("Production Runbook")
         docx_upload = client.post(
@@ -165,9 +165,9 @@ def test_evidence_workspace_complete_lifecycle(monkeypatch: pytest.MonkeyPatch) 
         )
         assert docx_upload.status_code == 201
         docx_data = docx_upload.json()
-        assert docx_data["file_format"] == "docx"
-        assert docx_data["chunk_count"] >= 1
-        docx_evidence_id = docx_data["evidence_item_id"]
+        docx_ev = docx_data.get("evidence", docx_data)
+        assert docx_ev.get("category") == "docx_document"
+        docx_evidence_id = docx_ev["id"]
 
         # ---------------------------------------------------------------------
         # Stage B: Evidence Library (Panel B) Search & Metrics

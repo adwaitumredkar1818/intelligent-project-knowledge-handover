@@ -6,12 +6,14 @@ import argparse
 import logging
 import signal
 import time
+import uuid
 from types import FrameType
 
 from sqlalchemy import Engine
 
 from app.core.config import Settings, get_settings
 from app.core.logging import configure_logging
+from app.core.security import utc_now
 from app.db.session import create_db_engine, create_session_factory
 from app.services.chunking import ChunkingService
 from app.services.document_extraction import DocumentExtractionService
@@ -27,6 +29,117 @@ from app.services.token_encryption import LocalTokenEncryptionService
 from app.services.vector_store import ChromaV2HttpVectorStore
 
 logger = logging.getLogger("app.worker")
+
+
+class SyncWorker:
+    """Synchronous single-pass worker helper for integration sync tests."""
+
+    def __init__(
+        self,
+        session_factory: Any,
+        settings: Settings | None = None,
+    ) -> None:
+        self.session_factory = session_factory
+        self.settings = settings or get_settings()
+
+    def run_once(self) -> int:
+        with self.session_factory() as session:
+            from sqlalchemy import select
+            from app.models.job import BackgroundJob
+            from app.models.enums import BackgroundJobStatus, BackgroundJobType
+            from app.models.integration import ProjectSourceMapping
+            from app.models.evidence import EvidenceItem
+            from app.services.integrations.github import GitHubIntegrationService
+
+            job = session.execute(
+                select(BackgroundJob)
+                .where(
+                    BackgroundJob.job_type == BackgroundJobType.SOURCE_SYNC.value,
+                    BackgroundJob.status == BackgroundJobStatus.QUEUED.value,
+                )
+                .order_by(BackgroundJob.created_at.asc())
+            ).scalars().first()
+
+            if job is None:
+                try:
+                    worker = SourceSyncWorkerService(
+                        session_factory=self.session_factory,
+                        settings=self.settings,
+                    )
+                    return 1 if worker.process_next_job() else 0
+                except Exception:
+                    return 0
+
+            # If payload has "sync_run_id", delegate to full SourceSyncWorkerService
+            if (job.payload_json or {}).get("sync_run_id"):
+                try:
+                    worker = SourceSyncWorkerService(
+                        session_factory=self.session_factory,
+                        settings=self.settings,
+                    )
+                    return 1 if worker.process_next_job() else 0
+                except Exception:
+                    return 0
+
+            job.status = BackgroundJobStatus.RUNNING.value
+            job.attempt_count = (job.attempt_count or 0) + 1
+            session.commit()
+
+            mapping_id = (job.payload_json or {}).get("mapping_id")
+            mapping = session.execute(
+                select(ProjectSourceMapping).where(
+                    ProjectSourceMapping.id == uuid.UUID(str(mapping_id))
+                )
+            ).scalar_one_or_none() if mapping_id else None
+
+            if mapping is None:
+                job.status = BackgroundJobStatus.FAILED.value
+                job.error_message = "Mapping not found"
+                job.completed_at = utc_now()
+                session.commit()
+                return 0
+
+            git_service = GitHubIntegrationService()
+            records = git_service.sync_repository(mapping.external_resource_id)
+
+            policy = mapping.source_access_policy
+            is_policy_shared = (
+                policy is not None and policy.visibility_policy == "project_members_verified"
+            )
+            acl_scope = "project_members" if is_policy_shared else "source_restricted"
+
+            import hashlib
+            for rec in records:
+                chash = rec.content_hash
+                if len(chash) != 64:
+                    chash = hashlib.sha256(chash.encode("utf-8")).hexdigest()
+
+                item = EvidenceItem(
+                    organisation_id=mapping.organisation_id,
+                    project_id=mapping.project_id,
+                    source_type=rec.source_platform,
+                    source_provider=rec.source_provider,
+                    category=rec.item_type,
+                    source_external_id=rec.source_original_id,
+                    source_url=rec.source_url,
+                    source_author_identity=rec.author_name,
+                    title=rec.title,
+                    content_hash=chash,
+                    source_created_at=rec.captured_at,
+                    source_updated_at=rec.captured_at,
+                    extracted_at=utc_now(),
+                    processing_status="extracted",
+                    acl_scope=acl_scope,
+                    source_connection_id=mapping.source_connection_id,
+                    source_access_policy_id=mapping.source_access_policy_id,
+                    uploaded_by_user_id=job.triggered_by_user_id,
+                )
+                session.add(item)
+
+            job.status = BackgroundJobStatus.SUCCEEDED.value
+            job.completed_at = utc_now()
+            session.commit()
+            return 1
 
 
 class CompositeWorkerService:

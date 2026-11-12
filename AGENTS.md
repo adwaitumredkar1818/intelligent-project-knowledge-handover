@@ -82,14 +82,18 @@ Do **not** silently replace any technology below. Any proposed alternative must 
 
 | Layer | Confirmed Technologies & Baseline Rules |
 | :--- | :--- |
-| **Frontend** | Next.js, React, TypeScript, Tailwind CSS, shadcn/ui, Lucide Icons, React Flow (relationship visualisation) |
-| **Backend** | Python 3.11, FastAPI, Pydantic, SQLAlchemy 2.x, Alembic (migrations), Psycopg 3 (`psycopg`), HTTPX; separate lightweight Python worker process for async jobs (no Redis, Celery, or message broker in initial phase) |
-| **Data & Retrieval** | PostgreSQL (canonical store, structured relationship tables, full-text search, and job records), ChromaDB (dedicated HTTP server mode via Docker Compose for semantic vector search), `nomic-embed-text` (embeddings) |
-| **AI, OCR & RAG** | Ollama (local inference), Qwen3 8B (initial model to benchmark), `glm-ocr:latest` via local Ollama behind a replaceable backend OCR abstraction (do not introduce vLLM or another OCR runtime at this stage), hybrid RAG (ChromaDB semantic + PostgreSQL full-text search combined by backend retrieval layer) |
-| **Document Processing** | PyMuPDF, `python-docx`, GLM OCR (`glm-ocr:latest` on Ollama) |
-| **Integrations** | GitHub API and Jira API (initial priority alongside uploaded documents); Slack API kept strictly as an optional MVP integration gated by workspace authorisation, API scope review, and data-retention confirmation |
-| **Infrastructure** | Docker Desktop, Docker Compose, Git, GitHub |
-| **Auth & Security** | FastAPI-managed platform authentication (secure password hashing, short-lived JWT access tokens, `HttpOnly` refresh cookies never exposed to browser JS), separate OAuth 2.0 integrations for delegated per-user source access, Role-Based Access Control (RBAC) |
+| **Frontend** | Next.js (React 19, TypeScript strict mode), Tailwind CSS v4, shadcn/ui, Lucide Icons, React Flow (relationship visualisation) |
+| **Backend** | Python 3.11, FastAPI, Pydantic v2, SQLAlchemy 2.x, Alembic (migrations), Psycopg 3 (`psycopg`), HTTPX; separate lightweight Python worker process for async jobs (no Redis, Celery, or message broker in initial phase) |
+| **Platform Identity** | **Supabase Auth** as the sole platform identity provider (registration, login, logout, password management, session verification via JWKS/JWT verification in FastAPI; legacy custom auth deprecated/migrated safely) |
+| **Document Storage** | **Supabase Storage** (private bucket `project-evidence` for uploaded original PDFs, DOCXs, and document objects; backend-mediated streaming/signed URLs, preserving application AES-256-GCM encryption) |
+| **Data & Canonical Store** | **PostgreSQL** (canonical application database, structured knowledge relationships, provenance, audit logs, and tsvector full-text search) |
+| **Vector Indexing** | **ChromaDB** (dedicated HTTP server mode; **strictly one project-isolated collection per Handover project**, holding chunks across documents, GitHub, Jira, and Slack) |
+| **AI, OCR & Embeddings** | **Ollama** (sole local inference runtime on Windows): **Qwen3 8B** (structured knowledge extraction and reasoning), **GLM OCR** (`glm-ocr:latest` for scanned pages/images), **nomic-embed-text** (unified 768-dim embeddings for evidence indexing and retrieval) |
+| **Inference Coordination** | Single Ollama inference scheduler (`OLLAMA_MAX_CONCURRENT_AI_JOBS=1`) to prevent concurrent VRAM contention between Qwen3 8B and GLM OCR on RTX 4050 (6GB VRAM) |
+| **Document Processing** | PyMuPDF (digital text extraction), `python-docx` (DOCX structure extraction), GLM OCR (`glm-ocr:latest` on Ollama for scanned/image pages) |
+| **Integrations** | **GitHub** (Fine-grained Personal Access Token with read-only scopes, repo discovery, commit/PR/issue sync), **Jira** (OAuth 2.0 3LO primary, optional controlled API token mode), **Slack** (OAuth v2 read-only, optional manual Bot Token `xoxb-` development mode) |
+| **Infrastructure** | Docker Desktop (WSL2), Docker Compose, Git, GitHub |
+| **Security & Auth Boundary** | FastAPI-managed Supabase JWT verification, delegated per-user source credentials encrypted at rest with AES-256-GCM, strict read-time source ACL checks before retrieval/prompting |
 
 ---
 

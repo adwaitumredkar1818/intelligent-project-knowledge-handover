@@ -20,6 +20,7 @@ from app.schemas.evidence import (
     DocumentUploadResponse,
     EvidenceDetailResponse,
     EvidenceListResponse,
+    EvidenceMetricsResponse,
 )
 from app.services.evidence import EvidenceService
 from app.services.rbac import AuthenticatedPrincipal, ProjectContext
@@ -52,6 +53,13 @@ async def _read_bounded_upload(upload: UploadFile, *, max_bytes: int) -> bytes:
     response_model=DocumentUploadResponse,
     status_code=status.HTTP_201_CREATED,
     summary="Upload a PDF or DOCX document as project evidence",
+)
+@router.post(
+    "/projects/{project_id}/evidence/upload",
+    response_model=DocumentUploadResponse,
+    status_code=status.HTTP_201_CREATED,
+    summary="Upload a PDF or DOCX document as project evidence (alias)",
+    include_in_schema=False,
 )
 async def upload_project_document(
     response: Response,
@@ -95,6 +103,8 @@ def list_project_evidence(
         Depends(require_project_permission("project.read")),
     ],
     evidence_service: Annotated[EvidenceService, Depends(get_evidence_service)],
+    q: str | None = Query(default=None),
+    provider: str | None = Query(default=None),
     processing_status: str | None = Query(default=None),
     source_type: str | None = Query(default=None),
     category: str | None = Query(default=None),
@@ -107,8 +117,51 @@ def list_project_evidence(
         processing_status=processing_status,
         source_type=source_type,
         category=category,
+        q=q,
+        provider=provider,
         limit=limit,
         offset=offset,
+    )
+
+
+@router.get(
+    "/projects/{project_id}/evidence/metrics",
+    response_model=EvidenceMetricsResponse,
+    status_code=status.HTTP_200_OK,
+    summary="Get aggregated metrics for Panel B Evidence Library",
+)
+def get_project_evidence_metrics(
+    project_ctx: Annotated[
+        ProjectContext,
+        Depends(require_project_permission("project.read")),
+    ],
+    evidence_service: Annotated[EvidenceService, Depends(get_evidence_service)],
+) -> EvidenceMetricsResponse:
+    """Retrieve evidence library count, document count, bytes, and provider counts."""
+    return evidence_service.get_project_evidence_metrics(project_ctx=project_ctx)
+
+
+@router.get(
+    "/evidence/{evidence_id}/download",
+    status_code=status.HTTP_200_OK,
+    summary="Download decrypted evidence document payload",
+)
+def download_evidence(
+    evidence_id: uuid.UUID,
+    principal: Annotated[AuthenticatedPrincipal, Depends(get_current_principal)],
+    evidence_service: Annotated[EvidenceService, Depends(get_evidence_service)],
+) -> Response:
+    """Stream decrypted document bytes with authentic Content-Type and filename."""
+    raw_bytes, filename, mime_type = evidence_service.download_evidence_content(
+        evidence_id=evidence_id,
+        principal=principal,
+    )
+    return Response(
+        content=raw_bytes,
+        media_type=mime_type,
+        headers={
+            "Content-Disposition": f'attachment; filename="{filename}"',
+        },
     )
 
 

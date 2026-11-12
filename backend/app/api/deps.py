@@ -47,6 +47,8 @@ from app.services.rbac import (
 )
 from app.services.retrieval import HybridRetrievalService
 from app.services.storage import LocalPrivateStorageBackend, StorageBackend
+from app.services.supabase_auth import SupabaseAuthService
+from app.services.supabase_storage import SupabaseStorageBackend
 from app.services.token_encryption import (
     LocalTokenEncryptionService,
     TokenEncryptionService,
@@ -217,6 +219,19 @@ def get_storage_backend(
     overridden = getattr(request.app.state, "storage_backend", None)
     if overridden is not None:
         return cast(StorageBackend, overridden)
+    if settings.supabase.enabled and settings.supabase.url:
+        api_key = (
+            settings.supabase.secret_key.get_secret_value()
+            if settings.supabase.secret_key
+            else (settings.supabase.publishable_key or "")
+        )
+        return SupabaseStorageBackend(
+            base_url=settings.supabase.url,
+            bucket=settings.supabase.storage_bucket,
+            api_key=api_key,
+            file_encryption_key=settings.security.file_encryption_key.get_secret_value(),
+            http_transport=getattr(request.app.state, "supabase_http_transport", None),
+        )
     return LocalPrivateStorageBackend(
         root_path=settings.security.upload_storage_path,
         file_encryption_key=settings.security.file_encryption_key.get_secret_value(),
@@ -398,13 +413,25 @@ def get_knowledge_reconstruction_service(
     )
 
 
+def get_supabase_auth_service(
+    request: Request,
+    settings: Settings = Depends(get_app_settings),  # noqa: B008
+) -> SupabaseAuthService:
+    """Construct SupabaseAuthService with optional app-state override."""
+    overridden = getattr(request.app.state, "supabase_auth_service", None)
+    if overridden is not None:
+        return cast(SupabaseAuthService, overridden)
+    return SupabaseAuthService(settings=settings)
+
+
 def get_current_principal(
     credentials: HTTPAuthorizationCredentials | None = Depends(_bearer_scheme),  # noqa: B008
     settings: Settings = Depends(get_app_settings),  # noqa: B008
     db_session: Session = Depends(get_db_session),  # noqa: B008
     rbac_service: RbacService = Depends(get_rbac_service),  # noqa: B008
+    supabase_auth: SupabaseAuthService = Depends(get_supabase_auth_service),  # noqa: B008
 ) -> AuthenticatedPrincipal:
-    """Validate Bearer JWT, verify user status & active session family, and resolve RBAC."""
+    """Validate Bearer JWT (Supabase Auth or platform token), verify user status & resolve RBAC."""
     if (
         credentials is None
         or credentials.scheme.lower() != "bearer"
@@ -415,7 +442,29 @@ def get_current_principal(
             code="AUTHENTICATION_REQUIRED",
         )
 
-    claims = decode_access_token(credentials.credentials, settings)
+    token = credentials.credentials
+
+    # 1. If Supabase Auth is enabled, attempt Supabase JWT verification
+    if settings.supabase.enabled and supabase_auth.is_configured:
+        try:
+            supabase_claims = supabase_auth.verify_token(token)
+            user = supabase_auth.provision_or_sync_user(db_session, supabase_claims)
+            if user.status != UserStatus.ACTIVE.value:
+                raise UnauthorizedError(
+                    "User account is not active.",
+                    code="AUTHENTICATION_INVALID",
+                )
+            return rbac_service.resolve_principal(
+                user=user,
+                session_family_id=None,
+            )
+        except UnauthorizedError as exc:
+            if exc.code in {"SESSION_EXPIRED"}:
+                raise
+            # Allow fallback to internal token verification
+
+    # 2. Platform token verification (internal / test / CLI fallback)
+    claims = decode_access_token(token, settings)
     user = UserRepository(db_session).get_by_id(claims.subject)
     if user is None or user.status != UserStatus.ACTIVE.value:
         raise UnauthorizedError(

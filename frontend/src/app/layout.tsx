@@ -1,9 +1,11 @@
 import type { Metadata } from "next";
 import "./globals.css";
+import { LiveAppProvider } from "../context/LiveAppContext";
+import { AppLayout } from "../components/layout/AppLayout";
 
 export const metadata: Metadata = {
-  title: "Intelligent Project Knowledge Reconstruction & Handover Platform",
-  description: "Frontend runtime environment (Phase 1.2 initialisation).",
+  title: "The Handover · Intelligent Project Knowledge Reconstruction & Handover Platform",
+  description: "Prevent Critical Knowledge From Leaving With People.",
 };
 
 export default function RootLayout({
@@ -13,7 +15,11 @@ export default function RootLayout({
 }>) {
   return (
     <html lang="en">
-      <body>{children}</body>
+      <body className="antialiased">
+        <LiveAppProvider>
+          <AppLayout>{children}</AppLayout>
+        </LiveAppProvider>
+      </body>
     </html>
   );
 }

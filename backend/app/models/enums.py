@@ -163,6 +163,7 @@ class StorageProvider(StrEnum):
     """Storage backend providers for persisted encrypted artefacts."""
 
     LOCAL_ENCRYPTED = "local_encrypted"
+    SUPABASE_STORAGE = "supabase_storage"
 
 
 class BackgroundJobType(StrEnum):
