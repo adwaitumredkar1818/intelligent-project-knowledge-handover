@@ -195,3 +195,14 @@ scripts/                   # Utility, indexing, and verification scripts
 
 - Follow the phased sequence in [`documentation/development/development-roadmap.md`](documentation/development/development-roadmap.md).
 - Do not generate speculative scaffolding, demo data, or unapproved infrastructure beyond the active phase gate.
+
+---
+
+## 9. Graphify Codebase Knowledge Graph
+
+This project maintains a local Graphify knowledge graph in `graphify-out/` generated via deterministic AST tree-sitter parsing.
+
+- **Fast Codebase Navigation**: For questions regarding code architecture, callers, or dependencies, always consult the local knowledge graph using `graphify query "<question>"`, `graphify path "<A>" "<B>"`, or `graphify explain "<concept>"`.
+- **Wiki Navigation**: If `graphify-out/wiki/index.md` exists, navigate it instead of performing broad grep searches across raw files.
+- **Continuous Maintenance**: After modifying code files in any session, run `graphify update .` to keep `graphify-out/graph.json` synchronized without LLM cost.
+
