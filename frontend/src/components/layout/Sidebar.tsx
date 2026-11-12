@@ -84,7 +84,7 @@ const NAV_GROUPS: NavGroup[] = [
 
 export function Sidebar() {
   const pathname = usePathname();
-  const { isMobileSidebarOpen, setIsMobileSidebarOpen, activeProject, user, logout } = useLiveApp();
+  const { isMobileSidebarOpen, setIsMobileSidebarOpen, activeProject, activeOrg, user, logout } = useLiveApp();
 
   return (
     <>
@@ -132,10 +132,15 @@ export function Sidebar() {
           </button>
         </div>
 
-        {/* Active Project Context Badge */}
+        {/* Active Project & Org Context Badge */}
         <div className="px-3 py-2 bg-[#1E2C42] border-b border-[#304563] text-xs">
-          <div className="text-[10px] uppercase font-semibold tracking-wider text-[#69778D]">
-            Active Workspace
+          <div className="flex items-center justify-between text-[10px] uppercase font-semibold tracking-wider text-[#69778D]">
+            <span>Active Workspace</span>
+            {activeOrg && (
+              <span className="text-[#249E91] font-semibold tracking-normal normal-case truncate max-w-[110px]" title={activeOrg.name}>
+                {activeOrg.name}
+              </span>
+            )}
           </div>
           <div className="text-white font-medium truncate mt-0.5 flex items-center gap-1.5">
             <span className="w-2 h-2 rounded-full bg-[#249E91] shrink-0" />

@@ -5,6 +5,7 @@ import { Sidebar } from "./Sidebar";
 import { TopNav } from "./TopNav";
 import { ToastContainer } from "../common/ToastContainer";
 import { AuthModal } from "../auth/AuthModal";
+import { CreateOrganisationModal } from "../modals/CreateOrganisationModal";
 import { CreateProjectModal } from "../modals/CreateProjectModal";
 import { UploadDocumentModal } from "../modals/UploadDocumentModal";
 import { ConnectSourceModal } from "../modals/ConnectSourceModal";
@@ -30,6 +31,7 @@ export function AppLayout({ children }: { children: ReactNode }) {
       {/* Global Modals & Notifications */}
       <ToastContainer />
       <AuthModal />
+      <CreateOrganisationModal />
       <CreateProjectModal />
       <UploadDocumentModal />
       <ConnectSourceModal />

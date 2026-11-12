@@ -49,7 +49,10 @@ interface LiveAppContextType {
   projects: Project[];
   activeProject: Project | null;
   setActiveProject: (project: Project) => void;
-  createProject: (data: { name: string; slug?: string; description?: string; target_handover_date?: string }) => Promise<Project>;
+  createProject: (
+    data: { name: string; slug?: string; description?: string; target_handover_date?: string },
+    options?: { orgId?: string; newOrgName?: string }
+  ) => Promise<Project>;
   isLoadingProjects: boolean;
   refreshProjects: () => Promise<void>;
 
@@ -89,6 +92,8 @@ interface LiveAppContextType {
   downloadEvidence: (evidenceId: string, filename?: string) => Promise<void>;
 
   // UI state & modals
+  isCreateOrgModalOpen: boolean;
+  setIsCreateOrgModalOpen: (open: boolean) => void;
   isCreateProjectModalOpen: boolean;
   setIsCreateProjectModalOpen: (open: boolean) => void;
   isAddSourceModalOpen: boolean;
@@ -147,6 +152,7 @@ export function LiveAppProvider({ children }: { children: ReactNode }) {
   });
 
   // Modals & UI
+  const [isCreateOrgModalOpen, setIsCreateOrgModalOpen] = useState(false);
   const [isCreateProjectModalOpen, setIsCreateProjectModalOpen] = useState(false);
   const [isAddSourceModalOpen, setIsAddSourceModalOpen] = useState(false);
   const [isUploadModalOpen, setIsUploadModalOpen] = useState(false);
@@ -424,16 +430,35 @@ export function LiveAppProvider({ children }: { children: ReactNode }) {
     return org;
   };
 
-  const createProject = async (data: { name: string; slug?: string; description?: string; target_handover_date?: string }) => {
-    if (!activeOrg) throw new Error("No active organisation selected");
-    const proj = await api.projects.create(activeOrg.id, data);
+  const createProject = async (
+    data: { name: string; slug?: string; description?: string; target_handover_date?: string },
+    options?: { orgId?: string; newOrgName?: string }
+  ) => {
+    let targetOrg: Organisation | null = activeOrg;
+
+    if (options?.newOrgName && options.newOrgName.trim()) {
+      targetOrg = await createOrganisation(options.newOrgName.trim());
+    } else if (options?.orgId) {
+      targetOrg = organisations.find((o) => o.id === options.orgId) ?? activeOrg;
+    }
+
+    if (!targetOrg && organisations.length > 0 && organisations[0]) {
+      targetOrg = organisations[0];
+      setActiveOrg(targetOrg);
+    }
+
+    if (!targetOrg) {
+      throw new Error("Please specify or create an Organisation workspace first.");
+    }
+
+    const proj = await api.projects.create(targetOrg.id, data);
     await refreshProjects();
     setActiveProject(proj);
     setIsCreateProjectModalOpen(false);
     addToast({
       type: "success",
-      title: "Project Created",
-      message: `Project ${proj.name} has been initialised`,
+      title: "Project Workspace Created",
+      message: `Project ${proj.name} is now active in ${targetOrg.name}`,
     });
     return proj;
   };
@@ -597,6 +622,8 @@ export function LiveAppProvider({ children }: { children: ReactNode }) {
     refreshEvidence,
     uploadDocument,
     downloadEvidence,
+    isCreateOrgModalOpen,
+    setIsCreateOrgModalOpen,
     isCreateProjectModalOpen,
     setIsCreateProjectModalOpen,
     isAddSourceModalOpen,

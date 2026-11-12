@@ -16,18 +16,22 @@ import {
   ShieldCheck,
   Activity,
   Plus,
+  Building2,
 } from "lucide-react";
 import { useLiveApp } from "../../context/LiveAppContext";
 
 export function OverviewView() {
   const {
     activeProject,
+    activeOrg,
+    organisations,
     overview,
     isLoadingOverview,
     setIsUploadModalOpen,
     setIsAddSourceModalOpen,
     setIsAddMemberModalOpen,
     setIsCreateProjectModalOpen,
+    setIsCreateOrgModalOpen,
   } = useLiveApp();
 
   if (!activeProject) {
@@ -36,16 +40,30 @@ export function OverviewView() {
         <FolderGit2 className="w-12 h-12 text-[#4774A9] mb-3 stroke-[1.5]" />
         <h2 className="text-base font-bold text-[#25334B]">No Active Project Selected</h2>
         <p className="text-xs text-[#69778D] max-w-sm mt-1 mb-5">
-          Create or select a project workspace to track handover readiness, connect authorised sources, and ingest evidence.
+          {organisations.length === 0
+            ? "Welcome to The Handover! Create your organisation container and project workspace to begin."
+            : `Create or select a project workspace inside ${activeOrg?.name || "your organisation"} to track handover readiness.`}
         </p>
-        <button
-          type="button"
-          onClick={() => setIsCreateProjectModalOpen(true)}
-          className="px-4 py-2.5 rounded-lg bg-[#4774A9] hover:bg-[#365F92] text-white text-xs font-semibold flex items-center gap-2 transition-colors shadow-xs"
-        >
-          <Plus className="w-4 h-4" />
-          <span>Create First Project Workspace</span>
-        </button>
+        <div className="flex items-center gap-3">
+          {organisations.length === 0 && (
+            <button
+              type="button"
+              onClick={() => setIsCreateOrgModalOpen(true)}
+              className="px-4 py-2.5 rounded-lg border border-[#249E91] text-[#249E91] hover:bg-[#F0FAF8] text-xs font-semibold flex items-center gap-2 transition-colors cursor-pointer"
+            >
+              <Building2 className="w-4 h-4" />
+              <span>Create Organisation</span>
+            </button>
+          )}
+          <button
+            type="button"
+            onClick={() => setIsCreateProjectModalOpen(true)}
+            className="px-4 py-2.5 rounded-lg bg-[#4774A9] hover:bg-[#365F92] text-white text-xs font-semibold flex items-center gap-2 transition-colors shadow-xs cursor-pointer"
+          >
+            <Plus className="w-4 h-4" />
+            <span>Create Project Workspace</span>
+          </button>
+        </div>
       </div>
     );
   }

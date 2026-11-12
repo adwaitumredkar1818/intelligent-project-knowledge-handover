@@ -103,6 +103,13 @@ async function request<T>(
   return res.json() as Promise<T>;
 }
 
+function unwrapList<T>(res: any): T[] {
+  if (!res) return [];
+  if (Array.isArray(res)) return res;
+  if (Array.isArray(res.items)) return res.items;
+  return [];
+}
+
 export const api = {
   // Authentication
   auth: {
@@ -126,9 +133,10 @@ export const api = {
   // Organisations
   organisations: {
     async list(): Promise<Organisation[]> {
-      return request<Organisation[]>("/organisations");
+      const res = await request<any>("/organisations");
+      return unwrapList<Organisation>(res);
     },
-    async create(data: { name: string; slug?: string }): Promise<Organisation> {
+    async create(data: { name: string; slug?: string; description?: string }): Promise<Organisation> {
       return request<Organisation>("/organisations", {
         method: "POST",
         body: JSON.stringify(data),
@@ -142,7 +150,8 @@ export const api = {
   // Projects
   projects: {
     async list(orgId: string): Promise<Project[]> {
-      return request<Project[]>(`/organisations/${orgId}/projects`);
+      const res = await request<any>(`/organisations/${orgId}/projects`);
+      return unwrapList<Project>(res);
     },
     async create(orgId: string, data: { name: string; slug?: string; description?: string; target_handover_date?: string }): Promise<Project> {
       return request<Project>(`/organisations/${orgId}/projects`, {
@@ -161,7 +170,8 @@ export const api = {
   // Project Members & Transition Roles
   members: {
     async list(projectId: string): Promise<ProjectMember[]> {
-      return request<ProjectMember[]>(`/projects/${projectId}/members`);
+      const res = await request<any>(`/projects/${projectId}/members`);
+      return unwrapList<ProjectMember>(res);
     },
     async add(projectId: string, data: { user_id?: string; email?: string; role_name?: string; transition_role?: string }): Promise<ProjectMember> {
       return request<ProjectMember>(`/projects/${projectId}/members`, {
@@ -180,7 +190,8 @@ export const api = {
   // Sources & Connections
   sources: {
     async listOrgConnections(orgId: string): Promise<SourceConnection[]> {
-      return request<SourceConnection[]>(`/organisations/${orgId}/sources`);
+      const res = await request<any>(`/organisations/${orgId}/sources`);
+      return unwrapList<SourceConnection>(res);
     },
     async connectSource(orgId: string, data: { provider: "github" | "jira"; access_token: string; account_identifier: string; granted_scopes?: string[] }): Promise<SourceConnection> {
       return request<SourceConnection>(`/organisations/${orgId}/sources`, {
@@ -189,7 +200,8 @@ export const api = {
       });
     },
     async listProjectMappings(projectId: string): Promise<ProjectSourceMapping[]> {
-      return request<ProjectSourceMapping[]>(`/projects/${projectId}/sources/mappings`);
+      const res = await request<any>(`/projects/${projectId}/sources/mappings`);
+      return unwrapList<ProjectSourceMapping>(res);
     },
     async createProjectMapping(projectId: string, data: { source_connection_id: string; external_resource_key: string; external_resource_name: string; external_resource_url?: string }): Promise<ProjectSourceMapping> {
       return request<ProjectSourceMapping>(`/projects/${projectId}/sources/mappings`, {
@@ -204,7 +216,8 @@ export const api = {
       );
     },
     async getSyncJobs(projectId: string, mappingId: string): Promise<any[]> {
-      return request<any[]>(`/projects/${projectId}/sources/mappings/${mappingId}/jobs`);
+      const res = await request<any>(`/projects/${projectId}/sources/mappings/${mappingId}/jobs`);
+      return unwrapList<any>(res);
     },
   },
 
@@ -217,7 +230,8 @@ export const api = {
       if (params.limit) query.append("limit", params.limit.toString());
       if (params.offset) query.append("offset", params.offset.toString());
       const qs = query.toString() ? `?${query.toString()}` : "";
-      return request<EvidenceSummary[]>(`/projects/${projectId}/evidence${qs}`);
+      const res = await request<any>(`/projects/${projectId}/evidence${qs}`);
+      return unwrapList<EvidenceSummary>(res);
     },
     async getMetrics(projectId: string): Promise<EvidenceMetrics> {
       return request<EvidenceMetrics>(`/projects/${projectId}/evidence/metrics`);
