@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import json
+import re
 from functools import cached_property, lru_cache
 from pathlib import Path
 from typing import Annotated, Any, Literal
@@ -17,6 +18,9 @@ LogLevel = Literal["DEBUG", "INFO", "WARNING", "ERROR", "CRITICAL"]
 PostgresSslMode = Literal["disable", "allow", "prefer", "require", "verify-ca", "verify-full"]
 CookieSameSite = Literal["lax", "strict", "none"]
 AllowedJwtAlgorithm = Literal["HS256", "HS384", "HS512"]
+StorageBackendProvider = Literal["local_encrypted", "supabase_storage"]
+
+_STORAGE_BUCKET_PATTERN = re.compile(r"^[a-z0-9](?:[a-z0-9._-]{0,61}[a-z0-9])?$")
 
 _REPO_ROOT = Path(__file__).resolve().parents[3]
 _DEFAULT_ENV_FILE = _REPO_ROOT / ".env"
@@ -35,6 +39,69 @@ def _require_http_url(value: str, field_name: str) -> str:
     if parsed.scheme not in {"http", "https"} or not parsed.netloc:
         raise ValueError(f"{field_name} must be a valid http(s) URL.")
     return cleaned
+
+
+class StorageSettings(BaseModel):
+    """Explicit private encrypted object storage configuration (local or Supabase Storage)."""
+
+    model_config = ConfigDict(frozen=True)
+
+    provider: StorageBackendProvider = "local_encrypted"
+    upload_storage_path: Path = Path("./data/uploads")
+    supabase_url: str | None = None
+    supabase_service_role_key: SecretStr | None = None
+    supabase_storage_bucket: str = "project-evidence"
+    supabase_storage_timeout_seconds: float = Field(default=30.0, gt=0.5, le=300.0)
+    supabase_storage_max_retries: int = Field(default=2, ge=0, le=5)
+    supabase_storage_retry_backoff_seconds: float = Field(default=0.5, ge=0.0, le=10.0)
+    supabase_storage_verify_ciphertext_size: bool = True
+
+    @field_validator("supabase_storage_bucket", mode="before")
+    @classmethod
+    def _validate_bucket_name(cls, value: Any) -> str:
+        cleaned = str(value or "").strip()
+        if (
+            not cleaned
+            or "/" in cleaned
+            or "\\" in cleaned
+            or ".." in cleaned
+            or not _STORAGE_BUCKET_PATTERN.fullmatch(cleaned)
+        ):
+            raise ValueError(
+                "SUPABASE_STORAGE_BUCKET must be a valid lowercase bucket identifier "
+                "(letters, digits, '.', '_', '-'; no slashes or traversal)."
+            )
+        return cleaned
+
+    @model_validator(mode="after")
+    def _validate_storage_provider(self) -> StorageSettings:
+        normalized_url = _normalize_optional_str(self.supabase_url)
+        if normalized_url is not None:
+            normalized_url = _require_http_url(normalized_url, "SUPABASE_URL")
+            object.__setattr__(self, "supabase_url", normalized_url)
+
+        service_key = (
+            self.supabase_service_role_key.get_secret_value().strip()
+            if self.supabase_service_role_key is not None
+            else ""
+        )
+        if service_key.startswith("sb_publishable_"):
+            raise ValueError(
+                "SUPABASE_SERVICE_ROLE_KEY must not be a publishable key; "
+                "configure a server-side service-role or secret key."
+            )
+
+        if self.provider == "supabase_storage":
+            if not normalized_url:
+                raise ValueError(
+                    "SUPABASE_URL is required when STORAGE_PROVIDER='supabase_storage'."
+                )
+            if not service_key:
+                raise ValueError(
+                    "SUPABASE_SERVICE_ROLE_KEY is required when "
+                    "STORAGE_PROVIDER='supabase_storage'."
+                )
+        return self
 
 
 class DatabaseSettings(BaseModel):
@@ -486,6 +553,22 @@ class Settings(BaseSettings):
     github_default_commits_limit: int = Field(default=50, ge=1, le=500)
     github_default_docs_limit: int = Field(default=20, ge=1, le=100)
 
+    # Private encrypted document storage (`settings.storage`)
+    storage_provider: StorageBackendProvider = "local_encrypted"
+    supabase_url: str | None = None
+    supabase_service_role_key: SecretStr | None = None
+    supabase_secret_key: SecretStr | None = None
+    supabase_storage_bucket: str = "project-evidence"
+    supabase_storage_timeout_seconds: float = Field(default=30.0, gt=0.5, le=300.0)
+    supabase_storage_max_retries: int = Field(default=2, ge=0, le=5)
+    supabase_storage_retry_backoff_seconds: float = Field(default=0.5, ge=0.0, le=10.0)
+    supabase_storage_verify_ciphertext_size: bool = True
+
+    @field_validator("storage_provider", mode="before")
+    @classmethod
+    def _normalize_storage_provider(cls, value: Any) -> str:
+        return str(value or "local_encrypted").strip().lower()
+
     @field_validator("cors_allowed_origins", mode="before")
     @classmethod
     def _parse_cors_origins(cls, value: Any) -> list[str]:
@@ -557,6 +640,7 @@ class Settings(BaseSettings):
         "jwt_audience",
         "github_client_id",
         "jira_client_id",
+        "supabase_url",
         mode="before",
     )
     @classmethod
@@ -569,6 +653,8 @@ class Settings(BaseSettings):
         "chroma_auth_token",
         "github_client_secret",
         "jira_client_secret",
+        "supabase_service_role_key",
+        "supabase_secret_key",
         mode="before",
     )
     @classmethod
@@ -593,6 +679,7 @@ class Settings(BaseSettings):
         _ = self.embedding
         _ = self.retrieval
         _ = self.security
+        _ = self.storage
         _ = self.integrations
 
         if self.app_env == "production":
@@ -785,6 +872,22 @@ class Settings(BaseSettings):
             allowed_post_auth_redirects=tuple(self.integration_allowed_post_auth_redirects),
             default_github_commits_limit=self.github_default_commits_limit,
             default_github_docs_limit=self.github_default_docs_limit,
+        )
+
+    @cached_property
+    def storage(self) -> StorageSettings:
+        """Separated private encrypted storage provider configuration."""
+        resolved_service_key = self.supabase_service_role_key or self.supabase_secret_key
+        return StorageSettings(
+            provider=self.storage_provider,
+            upload_storage_path=self.upload_storage_path,
+            supabase_url=self.supabase_url,
+            supabase_service_role_key=resolved_service_key,
+            supabase_storage_bucket=self.supabase_storage_bucket,
+            supabase_storage_timeout_seconds=self.supabase_storage_timeout_seconds,
+            supabase_storage_max_retries=self.supabase_storage_max_retries,
+            supabase_storage_retry_backoff_seconds=self.supabase_storage_retry_backoff_seconds,
+            supabase_storage_verify_ciphertext_size=self.supabase_storage_verify_ciphertext_size,
         )
 
     @property

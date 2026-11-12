@@ -31,6 +31,7 @@ from app.models.organisation import (
 from app.models.project import Project, ProjectMembership, ProjectTransition
 from app.models.rbac import Permission, Role, RolePermission, UserRole
 from app.models.user import User
+from app.models.vector_index import ProjectVectorIndex
 
 __all__ = [
     "AuditLog",
@@ -52,6 +53,7 @@ __all__ = [
     "ProjectMembership",
     "ProjectSourceMapping",
     "ProjectTransition",
+    "ProjectVectorIndex",
     "RefreshSession",
     "Role",
     "RolePermission",

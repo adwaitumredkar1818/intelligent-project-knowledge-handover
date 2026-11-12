@@ -44,6 +44,7 @@ pnpm-debug.log*
 chroma_data/
 /data/
 backend/data/
+backend/storage/
 uploads/
 logs/
 tmp/

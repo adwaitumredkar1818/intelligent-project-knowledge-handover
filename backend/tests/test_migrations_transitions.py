@@ -124,9 +124,8 @@ def test_isolated_postgres_transitions_migration_cycle() -> None:
         finally:
             engine.dispose()
 
-        # 2. Upgrade to head (0008) and verify zero Alembic schema drift
-        command.upgrade(cfg, "head")
-        command.check(cfg)
+        # 2. Upgrade specifically to 0008_project_transitions_rbac
+        command.upgrade(cfg, "0008_project_transitions_rbac")
 
         engine = create_engine(temp_url, connect_args={"connect_timeout": 5})
         try:

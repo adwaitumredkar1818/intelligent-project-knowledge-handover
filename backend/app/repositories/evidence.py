@@ -171,6 +171,8 @@ class EvidenceRepository:
         processing_status: str | None = None,
         source_type: str | None = None,
         category: str | None = None,
+        q: str | None = None,
+        provider: str | None = None,
         viewer_user_id: uuid.UUID | None = None,
         has_project_manage: bool = False,
         enforce_source_acl: bool = True,
@@ -188,6 +190,25 @@ class EvidenceRepository:
             filters.append(EvidenceItem.source_type == source_type)
         if category is not None:
             filters.append(EvidenceItem.category == category)
+        if q is not None and q.strip():
+            term = f"%{q.strip()}%"
+            filters.append(
+                or_(
+                    EvidenceItem.title.ilike(term),
+                    EvidenceItem.original_filename.ilike(term),
+                )
+            )
+        if provider is not None and provider.strip():
+            prov_lower = provider.strip().lower()
+            if prov_lower in ("pdf", "docx"):
+                filters.append(EvidenceItem.category == f"{prov_lower}_document")
+            else:
+                filters.append(
+                    or_(
+                        EvidenceItem.source_provider == prov_lower,
+                        EvidenceItem.source_type == prov_lower,
+                    )
+                )
 
         if enforce_source_acl:
             allowed_policy_ids, revoked_policy_ids = self._allowed_policy_ids_for_viewer(
@@ -374,3 +395,55 @@ class EvidenceRepository:
                 )
             )
         self._session.flush()
+
+    def get_project_evidence_metrics(self, project_id: uuid.UUID) -> dict[str, Any]:
+        """Aggregate evidence item counts, sizes, and provider distributions."""
+        stmt = (
+            select(
+                func.count(EvidenceItem.id),
+                func.coalesce(func.sum(EvidenceItem.file_size_bytes), 0),
+            )
+            .where(
+                EvidenceItem.project_id == project_id,
+                EvidenceItem.deleted_at.is_(None),
+            )
+        )
+        total_items, total_bytes = self._session.execute(stmt).one()
+
+        doc_stmt = (
+            select(func.count(EvidenceItem.id))
+            .where(
+                EvidenceItem.project_id == project_id,
+                EvidenceItem.deleted_at.is_(None),
+                EvidenceItem.source_type == "document_upload",
+            )
+        )
+        doc_count = self._session.scalar(doc_stmt) or 0
+
+        provider_stmt = (
+            select(EvidenceItem.source_provider, func.count(EvidenceItem.id))
+            .where(
+                EvidenceItem.project_id == project_id,
+                EvidenceItem.deleted_at.is_(None),
+            )
+            .group_by(EvidenceItem.source_provider)
+        )
+        by_provider = {str(k): int(v) for k, v in self._session.execute(provider_stmt).all()}
+
+        status_stmt = (
+            select(EvidenceItem.processing_status, func.count(EvidenceItem.id))
+            .where(
+                EvidenceItem.project_id == project_id,
+                EvidenceItem.deleted_at.is_(None),
+            )
+            .group_by(EvidenceItem.processing_status)
+        )
+        by_status = {str(k): int(v) for k, v in self._session.execute(status_stmt).all()}
+
+        return {
+            "total_items": int(total_items or 0),
+            "total_documents": int(doc_count),
+            "total_bytes": int(total_bytes or 0),
+            "by_provider": by_provider,
+            "by_status": by_status,
+        }

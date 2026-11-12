@@ -69,8 +69,9 @@ Required to boot core services and configure local persistence/security:
 | `JWT_ACCESS_TOKEN_EXPIRE_MINUTES` | Backend | No | `15` | Access token lifetime (minutes) |
 | `JWT_REFRESH_TOKEN_EXPIRE_DAYS` | Backend | No | `7` | Refresh token lifetime (days; transported in `HttpOnly` cookie only) |
 | `TOKEN_ENCRYPTION_KEY` | Backend / Worker | **Yes** | *(generate 32-byte key)* | Symmetric key for encrypting external source OAuth tokens in PostgreSQL |
-| `FILE_ENCRYPTION_KEY` | Backend / Worker | **Yes** | *(generate 32-byte key)* | Symmetric key for local at-rest encryption of uploaded files *(replaced by KMS in production)* |
-| `UPLOAD_STORAGE_PATH` | Backend / Worker | No | `./data/uploads` | Private backend/worker directory for encrypted uploads, strictly outside frontend directories |
+| `FILE_ENCRYPTION_KEY` | Backend / Worker | **Yes** | *(generate 32-byte key)* | Symmetric key for canonical AES-256-GCM envelope encryption of uploaded evidence files (`local_encrypted` and `supabase_storage`) |
+| `UPLOAD_STORAGE_PATH` | Backend / Worker | No | `./data/uploads` | Private backend/worker directory for encrypted uploads when `STORAGE_PROVIDER=local_encrypted`, strictly outside frontend directories |
+| `STORAGE_PROVIDER` | Backend / Worker | No | `local_encrypted` | Explicit storage backend selector (`local_encrypted` \| `supabase_storage`) shared identically by FastAPI and the Python worker |
 
 ### 3.2 Group 2: Optional Source Integrations (Disabled by Default)
 
@@ -110,6 +111,13 @@ Required to boot core services and configure local persistence/security:
 | `JWT_ISSUER` | Backend | No | `ipkrh-platform` | Canonical `iss` claim enforced on platform JWT access tokens |
 | `JWT_AUDIENCE` | Backend | No | `ipkrh-api` | Canonical `aud` claim enforced on platform JWT access tokens |
 | `AUTH_RATE_LIMIT_ENABLED` | Backend | No | `true` | Enable pluggable rate-limiting hook on auth mutation/credential endpoints |
+| `SUPABASE_URL` | Backend / Worker | No | *(empty)* | Supabase project REST base URL (required only when `STORAGE_PROVIDER=supabase_storage`) |
+| `SUPABASE_SERVICE_ROLE_KEY` | Backend / Worker | **Yes** | *(empty)* | Server-only Supabase `service_role` / `sb_secret_*` key for private bucket object storage (required when `STORAGE_PROVIDER=supabase_storage`; publishable/anon keys rejected; never expose to frontend) |
+| `SUPABASE_STORAGE_BUCKET` | Backend / Worker | No | `project-evidence` | Private Supabase Storage bucket slug used when `STORAGE_PROVIDER=supabase_storage` |
+| `SUPABASE_STORAGE_TIMEOUT_SECONDS` | Backend / Worker | No | `30.0` | HTTPX request timeout in seconds for Supabase Storage object uploads, downloads, info checks, and deletes |
+| `SUPABASE_STORAGE_MAX_RETRIES` | Backend / Worker | No | `2` | Bounded retry count for transient Supabase Storage errors (`429`, `500`, `502`, `503`, `504`, `TimeoutException`, `HTTPError`) |
+| `SUPABASE_STORAGE_RETRY_BACKOFF_SECONDS` | Backend / Worker | No | `0.5` | Base exponential backoff interval in seconds (`backoff * 2^attempt`) between transient Supabase Storage retries |
+| `SUPABASE_STORAGE_VERIFY_CIPHERTEXT_SIZE` | Backend / Worker | No | `true` | Enforces exact ciphertext envelope size (`len(plaintext) + 35`) and `Content-Length` integrity verification before decrypting |
 | `AUTH_RATE_LIMIT_MAX_ATTEMPTS` | Backend | No | `20` | Maximum attempts per rate-limit window before returning `429 Too Many Requests` |
 | `AUTH_RATE_LIMIT_WINDOW_SECONDS` | Backend | No | `60` | Sliding window duration in seconds for authentication rate limiting |
 | `COOKIE_SAMESITE` | Backend | No | `lax` | `SameSite` policy (`lax` or `strict`) for `HttpOnly` refresh token cookies |
@@ -262,6 +270,27 @@ FastAPI, the background worker, and Alembic all connect through `DATABASE_URL` (
   - [`infrastructure/database/migrations/env.py`](../../infrastructure/database/migrations/env.py) loads `DATABASE_URL` and `POSTGRES_SSL_MODE` dynamically via `Settings` and uses `sqlalchemy.pool.NullPool` so migration connections close immediately after completion.
   - Always point Alembic at Supabase **Session mode (port `5432`)** or a **Direct PostgreSQL connection**, **never** Transaction pooler mode (port `6543`), because Alembic relies on transactional DDL, session-scoped locks, and Psycopg 3 server-side prepared statements.
   - Never run `alembic upgrade head`, stamp `alembic_version`, or alter production tables against a live Supabase project until connectivity is verified and schema migration approval is confirmed.
+
+#### 5.1.2 Supabase Private Storage Bucket Setup (`project-evidence`)
+
+When switching evidence uploads from local encrypted storage (`STORAGE_PROVIDER=local_encrypted`) to Supabase Storage (`STORAGE_PROVIDER=supabase_storage`), provision the private bucket manually in Supabase **without** adding any public or anonymous client policies:
+
+1. **Create the Private Bucket (Supabase Dashboard → Storage → Buckets)**:
+   - Bucket ID / Name: `project-evidence` (matching `SUPABASE_STORAGE_BUCKET=project-evidence`).
+   - **Public bucket**: Keep **OFF** (strictly private — no public URLs or unauthenticated bucket reads/writes).
+   - **File size limit**: Set to **at least `51 MB`** (or `52428835` bytes / e.g. `55 MB` if rounded in MB) to accommodate the `MAX_UPLOAD_SIZE_MB=50` plaintext limit **plus `35` bytes of canonical AES-256-GCM envelope overhead** (`IPKRH1\x01` + 12B nonce + 16B GCM tag).
+   - **Allowed MIME types**: Restrict to **`application/octet-stream`**. *(Important: FastAPI validates plaintext evidence formats — `.pdf` [`application/pdf`] and `.docx` [`application/vnd.openxmlformats-officedocument.wordprocessingml.document`] — in `document_validation.py` before encryption, and `SupabaseStorageBackend` uploads encrypted `.enc` envelopes with `Content-Type: application/octet-stream`. Do not set `application/pdf` alone on the bucket, or Supabase Storage will reject encrypted object uploads.)*
+2. **Verify Zero Anonymous / Client RLS Policies (`storage.objects`)**:
+   - Do **not** add `anon` or `authenticated` `SELECT`/`INSERT`/`UPDATE`/`DELETE` policies on `storage.objects` for `project-evidence`.
+   - All backend and worker operations authenticate strictly over HTTPS using server-only `SUPABASE_SERVICE_ROLE_KEY`, while browser downloads stream strictly through FastAPI `GET /api/v1/evidence/{evidence_id}/download` after RBAC and PostgreSQL source ACL verification (never signed URLs).
+3. **Configure Root `.env` on Backend & Worker**:
+   ```dotenv
+   STORAGE_PROVIDER=supabase_storage
+   SUPABASE_URL=https://<your-project-ref>.supabase.co
+   SUPABASE_SERVICE_ROLE_KEY=<your-server-only-service-role-or-sb_secret-key>
+   SUPABASE_STORAGE_BUCKET=project-evidence
+   ```
+   Never expose `SUPABASE_SERVICE_ROLE_KEY` to `frontend/` or any `NEXT_PUBLIC_*` variable. Keep `FILE_ENCRYPTION_KEY` identical across FastAPI and worker processes.
 
 ### 5.2 Accessing ChromaDB
 

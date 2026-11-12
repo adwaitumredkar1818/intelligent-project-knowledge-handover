@@ -36,7 +36,13 @@ class User(Base):
     )
     full_name: Mapped[str] = mapped_column(String(255), nullable=False)
     email: Mapped[str] = mapped_column(String(254), unique=True, index=True, nullable=False)
-    password_hash: Mapped[str] = mapped_column(String(512), nullable=False)
+    supabase_auth_id: Mapped[str | None] = mapped_column(
+        String(128),
+        unique=True,
+        index=True,
+        nullable=True,
+    )
+    password_hash: Mapped[str | None] = mapped_column(String(512), nullable=True)
     status: Mapped[str] = mapped_column(
         String(32),
         nullable=False,

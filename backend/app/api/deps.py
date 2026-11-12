@@ -46,7 +46,8 @@ from app.services.rbac import (
     RbacService,
 )
 from app.services.retrieval import HybridRetrievalService
-from app.services.storage import LocalPrivateStorageBackend, StorageBackend
+from app.services.storage import StorageBackend
+from app.services.storage_factory import build_storage_backend
 from app.services.token_encryption import (
     LocalTokenEncryptionService,
     TokenEncryptionService,
@@ -217,10 +218,11 @@ def get_storage_backend(
     overridden = getattr(request.app.state, "storage_backend", None)
     if overridden is not None:
         return cast(StorageBackend, overridden)
-    return LocalPrivateStorageBackend(
-        root_path=settings.security.upload_storage_path,
-        file_encryption_key=settings.security.file_encryption_key.get_secret_value(),
+    transport = cast(
+        httpx.BaseTransport | None,
+        getattr(request.app.state, "supabase_http_transport", None),
     )
+    return build_storage_backend(settings, http_transport=transport)
 
 
 def get_evidence_service(
@@ -404,7 +406,7 @@ def get_current_principal(
     db_session: Session = Depends(get_db_session),  # noqa: B008
     rbac_service: RbacService = Depends(get_rbac_service),  # noqa: B008
 ) -> AuthenticatedPrincipal:
-    """Validate Bearer JWT, verify user status & active session family, and resolve RBAC."""
+    """Validate FastAPI Bearer JWT, verify active user status & session family, and resolve RBAC."""
     if (
         credentials is None
         or credentials.scheme.lower() != "bearer"

@@ -79,6 +79,7 @@ def test_register_normalisation_duplicate_prevention_and_safe_validation(
                 select(User).where(User.email == "ada.lovelace@example.com")
             )
             assert stored is not None
+            assert stored.password_hash is not None
             assert stored.password_hash.startswith("$argon2id$")
             assert stored.password_hash != _VALID_PASSWORD
 

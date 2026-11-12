@@ -6,7 +6,7 @@ import uuid
 from datetime import datetime
 from typing import Any
 
-from pydantic import Field
+from pydantic import Field, model_validator
 
 from app.schemas.common import BaseSchema
 
@@ -64,6 +64,7 @@ class EvidenceSummaryResponse(BaseSchema):
     uploaded_by_user_id: uuid.UUID | None
     source_type: str
     source_provider: str
+    provider: str | None = None
     category: str
     source_external_id: str
     source_url: str | None
@@ -98,12 +99,44 @@ class EvidenceSummaryResponse(BaseSchema):
     created_at: datetime
     updated_at: datetime
 
+    @model_validator(mode="before")
+    @classmethod
+    def _populate_provider(cls, data: Any) -> Any:
+        if isinstance(data, dict):
+            if not data.get("provider"):
+                cat = str(data.get("category") or "")
+                if cat == "pdf_document":
+                    data["provider"] = "pdf"
+                elif cat == "docx_document":
+                    data["provider"] = "docx"
+                elif data.get("source_provider") in ("github", "jira", "slack"):
+                    data["provider"] = data.get("source_provider")
+                else:
+                    data["provider"] = data.get("source_provider") or "upload"
+        return data
+
+
+class EvidenceChunkDetailResponse(BaseSchema):
+    """Chunk level detail for Panel C Evidence inspection."""
+
+    id: uuid.UUID
+    chunk_index: int
+    content_text: str
+    chunk_type: str = "text_segment"
+    section_title: str | None = None
+    page_number: int | None = None
+    char_length: int = 0
+    word_count: int = 0
+
 
 class EvidenceDetailResponse(EvidenceSummaryResponse):
     """Detailed evidence record including separated extracted content and job history."""
 
     extracted_content: EvidenceExtractedContentResponse | None = None
     jobs: list[BackgroundJobResponse] = Field(default_factory=list)
+    can_download: bool = False
+    download_url: str | None = None
+    chunks: list[EvidenceChunkDetailResponse] = Field(default_factory=list)
 
 
 class EvidenceListResponse(BaseSchema):
@@ -121,3 +154,27 @@ class DocumentUploadResponse(BaseSchema):
     evidence: EvidenceSummaryResponse
     job: BackgroundJobResponse | None
     duplicate_detected: bool
+    evidence_item_id: uuid.UUID | None = None
+
+    @model_validator(mode="before")
+    @classmethod
+    def _populate_item_id(cls, data: Any) -> Any:
+        if isinstance(data, dict):
+            if not data.get("evidence_item_id"):
+                ev = data.get("evidence")
+                if isinstance(ev, dict) and "id" in ev:
+                    data["evidence_item_id"] = ev["id"]
+                elif ev is not None and hasattr(ev, "id"):
+                    data["evidence_item_id"] = ev.id
+        return data
+
+
+class EvidenceMetricsResponse(BaseSchema):
+    """Aggregated metrics for Panel B Evidence Library header."""
+
+    total_items: int = 0
+    total_documents: int = 0
+    total_bytes: int = 0
+    by_provider: dict[str, int] = Field(default_factory=dict)
+    by_status: dict[str, int] = Field(default_factory=dict)
+

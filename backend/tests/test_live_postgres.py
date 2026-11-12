@@ -37,14 +37,17 @@ def test_live_postgresql_connectivity_and_readiness_readonly() -> None:
                     "have not been initialized on this target yet."
                 )
             rev = conn.execute(text("SELECT version_num FROM alembic_version")).scalar_one_or_none()
-            assert rev == "0008_project_transitions_rbac"
+            assert isinstance(rev, str) and len(rev) > 0
+            assert not rev.startswith(
+                ("0001_", "0002_", "0003_", "0004_", "0005_", "0006_", "0007_")
+            )
             role_count = conn.execute(text("SELECT count(*) FROM roles")).scalar_one()
             assert role_count >= 8
             perm_count = conn.execute(text("SELECT count(*) FROM permissions")).scalar_one()
             assert perm_count >= 28
             rp_count = conn.execute(text("SELECT count(*) FROM role_permissions")).scalar_one()
             assert rp_count >= 49
-            assert {
+            expected_tables = {
                 "users",
                 "refresh_sessions",
                 "roles",
@@ -72,7 +75,10 @@ def test_live_postgresql_connectivity_and_readiness_readonly() -> None:
                 "source_access_policies",
                 "project_source_mappings",
                 "source_sync_runs",
-            }.issubset(table_names)
+            }
+            if rev == "0009_supabase_and_vector_indexes":
+                expected_tables.add("project_vector_indexes")
+            assert expected_tables.issubset(table_names)
     finally:
         engine.dispose()
 

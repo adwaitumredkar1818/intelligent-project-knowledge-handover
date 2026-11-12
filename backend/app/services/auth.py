@@ -176,11 +176,12 @@ class AuthService:
     ) -> tuple[AccessTokenResponse, str]:
         """Authenticate credentials cleanly and start a new refresh token family."""
         user = self._user_repo.get_by_email(payload.email)
-        if user is None:
+        if user is None or not user.password_hash:
             verify_dummy_password(payload.password)
             log_security_event(
                 event_type="auth.login",
                 outcome="denied",
+                actor_user_id=str(user.id) if user is not None else None,
                 message="Rejected login due to invalid credentials.",
             )
             raise UnauthorizedError(

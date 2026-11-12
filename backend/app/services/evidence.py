@@ -37,9 +37,11 @@ from app.repositories.knowledge import KnowledgeRepository
 from app.schemas.evidence import (
     BackgroundJobResponse,
     DocumentUploadResponse,
+    EvidenceChunkDetailResponse,
     EvidenceDetailResponse,
     EvidenceExtractedContentResponse,
     EvidenceListResponse,
+    EvidenceMetricsResponse,
     EvidencePageContentResponse,
     EvidenceSummaryResponse,
 )
@@ -183,10 +185,30 @@ def to_evidence_detail_response(item: EvidenceItem) -> EvidenceDetailResponse:
             ],
         )
 
+    can_download = bool(item.storage_object_key and item.deleted_at is None)
+    download_url = f"/api/v1/evidence/{item.id}/download" if can_download else None
+
+    chunks_list = [
+        EvidenceChunkDetailResponse(
+            id=c.id,
+            chunk_index=c.chunk_index,
+            content_text=c.chunk_text,
+            chunk_type=c.chunk_type,
+            section_title=c.section_title,
+            page_number=c.page_number,
+            char_length=c.char_count,
+            word_count=c.token_estimate,
+        )
+        for c in (item.chunks or [])
+    ]
+
     return EvidenceDetailResponse(
         **summary.model_dump(),
         extracted_content=extracted_content,
         jobs=[to_background_job_response(job) for job in item.jobs],
+        can_download=can_download,
+        download_url=download_url,
+        chunks=chunks_list,
     )
 
 
@@ -385,7 +407,10 @@ class EvidenceService:
                 source_author_identity=(
                     validated.source_author_identity or project_ctx.principal.user.email
                 ),
-                title=validated.original_filename,
+                title=(
+                    validated.initial_metadata.get("embedded_title")
+                    or validated.original_filename
+                ),
                 original_filename=validated.original_filename,
                 mime_type=validated.mime_type,
                 file_size_bytes=validated.file_size_bytes,
@@ -431,7 +456,12 @@ class EvidenceService:
             self._session.commit()
         except IntegrityError:
             self._session.rollback()
-            self._storage.delete_object(storage_object_key=stored.storage_object_key)
+            try:
+                self._storage.delete_object(storage_object_key=stored.storage_object_key)
+            except Exception:
+                logger.warning(
+                    "Failed to clean up encrypted object after duplicate/integrity rollback."
+                )
             concurrent_existing = self._evidence_repo.find_active_duplicate(
                 project_id=project_ctx.project.id,
                 content_hash=validated.content_hash,
@@ -456,7 +486,10 @@ class EvidenceService:
             raise
         except Exception:
             self._session.rollback()
-            self._storage.delete_object(storage_object_key=stored.storage_object_key)
+            try:
+                self._storage.delete_object(storage_object_key=stored.storage_object_key)
+            except Exception:
+                logger.warning("Failed to clean up encrypted object after upload rollback.")
             raise
 
         self._session.refresh(item)
@@ -478,6 +511,8 @@ class EvidenceService:
         processing_status: str | None = None,
         source_type: str | None = None,
         category: str | None = None,
+        q: str | None = None,
+        provider: str | None = None,
         limit: int = 20,
         offset: int = 0,
     ) -> EvidenceListResponse:
@@ -500,6 +535,8 @@ class EvidenceService:
             processing_status=processing_status,
             source_type=source_type,
             category=category,
+            q=q,
+            provider=provider,
             viewer_user_id=project_ctx.principal.user.id,
             has_project_manage=project_ctx.has_permission("project.manage"),
             enforce_source_acl=True,
@@ -511,6 +548,56 @@ class EvidenceService:
             total=total,
             limit=limit,
             offset=offset,
+        )
+
+    def download_evidence_content(
+        self,
+        *,
+        evidence_id: uuid.UUID,
+        principal: AuthenticatedPrincipal,
+    ) -> tuple[bytes, str, str]:
+        """Verify project & source ACL permissions, decrypt at rest, and return raw file bytes."""
+        evidence, _ = self._resolve_accessible_evidence(
+            evidence_id=evidence_id,
+            principal=principal,
+            detailed=False,
+            require_read_permission=True,
+        )
+        if not evidence.storage_object_key:
+            raise NotFoundError(
+                "Evidence item has no stored document object.",
+                code="NO_STORAGE_OBJECT",
+            )
+
+        raw_bytes = self._storage.read_decrypted_bytes(
+            storage_object_key=evidence.storage_object_key,
+            organisation_id=evidence.organisation_id,
+            project_id=evidence.project_id,
+            key_id=evidence.encryption_key_id,
+            expected_plaintext_size=evidence.file_size_bytes,
+        )
+        filename = evidence.original_filename or f"evidence-{evidence.id}"
+        mime_type = evidence.mime_type or "application/octet-stream"
+        return raw_bytes, filename, mime_type
+
+    def get_project_evidence_metrics(
+        self,
+        *,
+        project_ctx: ProjectContext,
+    ) -> EvidenceMetricsResponse:
+        """Aggregate evidence item counts, categories, and bytes for Panel B header."""
+        if not project_ctx.has_permission("project.read"):
+            raise ForbiddenError(
+                "You do not have permission to read evidence in this project.",
+                code="FORBIDDEN",
+            )
+        data = self._evidence_repo.get_project_evidence_metrics(project_ctx.project.id)
+        return EvidenceMetricsResponse(
+            total_items=data["total_items"],
+            total_documents=data["total_documents"],
+            total_bytes=data["total_bytes"],
+            by_provider=data["by_provider"],
+            by_status=data["by_status"],
         )
 
     def get_evidence_detail(
@@ -526,6 +613,63 @@ class EvidenceService:
             detailed=True,
             require_read_permission=True,
         )
+
+        if (not evidence.chunks or len(evidence.chunks) == 0) and evidence.storage_object_key:
+            try:
+                raw_bytes = self._storage.read_decrypted_bytes(
+                    storage_object_key=evidence.storage_object_key,
+                    organisation_id=evidence.organisation_id,
+                    project_id=evidence.project_id,
+                    key_id=evidence.encryption_key_id,
+                    expected_plaintext_size=evidence.file_size_bytes,
+                )
+                text = ""
+                if evidence.category == EvidenceCategory.PDF_DOCUMENT.value or (
+                    evidence.mime_type or ""
+                ).endswith("pdf"):
+                    import pymupdf
+
+                    with pymupdf.Document(  # type: ignore[no-untyped-call]
+                        stream=raw_bytes,
+                        filetype="pdf",
+                    ) as doc:
+                        text = "\n".join(page.get_text() for page in doc).strip()
+                elif (
+                    evidence.category == EvidenceCategory.DOCX_DOCUMENT.value
+                    or "wordprocessing" in (evidence.mime_type or "")
+                ):
+                    import io
+
+                    import docx
+
+                    parsed = docx.Document(io.BytesIO(raw_bytes))
+                    text = "\n".join(p.text for p in parsed.paragraphs if p.text).strip()
+
+                if text:
+                    import hashlib
+
+                    from app.models.evidence import EvidenceChunk
+
+                    chunk = EvidenceChunk(
+                        organisation_id=evidence.organisation_id,
+                        project_id=evidence.project_id,
+                        evidence_id=evidence.id,
+                        chunk_index=0,
+                        chunk_type="text_segment",
+                        chunk_text=text,
+                        chunk_content_hash=hashlib.sha256(text.encode("utf-8")).hexdigest(),
+                        char_count=len(text),
+                        token_estimate=len(text.split()),
+                        page_number=1,
+                        source_type=evidence.source_type,
+                        acl_scope=evidence.acl_scope,
+                    )
+                    self._session.add(chunk)
+                    self._session.commit()
+                    self._session.refresh(evidence)
+            except Exception as exc:
+                logger.warning("On-demand chunk extraction skipped: %s", exc)
+
         return to_evidence_detail_response(evidence)
 
     def delete_evidence(

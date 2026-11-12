@@ -56,13 +56,16 @@ class UserRepository:
         email: str,
         password_hash: str,
         status: str = UserStatus.ACTIVE.value,
+        is_email_verified: bool = False,
     ) -> User:
+        if not password_hash or not password_hash.strip():
+            raise ValueError("password_hash must be a non-empty hash string.")
         user = User(
             full_name=full_name,
             email=email,
             password_hash=password_hash,
             status=status,
-            is_email_verified=False,
+            is_email_verified=is_email_verified,
         )
         self._session.add(user)
         self._session.flush()

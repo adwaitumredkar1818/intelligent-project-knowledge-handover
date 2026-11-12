@@ -56,11 +56,12 @@ Every ingested upload or external GitHub/Jira record (`SourceEvidenceIngestor`) 
 6. `extraction_timestamp` (`extracted_at` / `last_synced_at` UTC timestamps)
 7. `content_hash` / `version_info` (SHA-256 `content_hash`, HTTP `ETag` / `sync_cursor_json`, commit SHA / file version)
 
-### 2.4 Private Upload Storage & Document Routing (Confirmed)
+### 2.4 Private Upload Storage & Document Routing *(Confirmed & Updated Phase 2.9)*
 
 1. Uploaded files undergo extension, MIME, magic-byte, and size validation on the backend API *(implemented for `.pdf` and `.docx` in Phase 2.4A)*.
-2. Accepted files receive opaque storage keys (`<organisation_id>/<project_id>/<object_uuid>.enc`), are **encrypted at rest** (`AES-256-GCM` via `LocalPrivateStorageBackend`), and are written exclusively to **private backend storage** (`UPLOAD_STORAGE_PATH`) completely outside publicly served Next.js directories.
-3. The API persists `evidence_items` + a PostgreSQL `background_jobs` record and returns immediately; the **lightweight Python worker process** (`python -m app.worker`) claims the job (`SELECT ... FOR UPDATE SKIP LOCKED`), executes PDF/DOCX/OCR extraction, stores separated full text and ordered pages in `evidence_contents` and `evidence_page_contents`, and immediately queues `evidence_indexing` for `IndexingWorkerService` *(implemented in Phase 2.5)*:
+2. Accepted files receive opaque storage keys (`<organisation_id>/<project_id>/<object_uuid>.enc`), are **encrypted at rest** using the canonical AES-256-GCM + HKDF-SHA256 envelope (`IPKRH1\x01`, AAD bound to tenant/project/key) in `app/services/storage.py`, and are written by the configured `build_storage_backend()` provider (`STORAGE_PROVIDER=local_encrypted` under `UPLOAD_STORAGE_PATH`, or `STORAGE_PROVIDER=supabase_storage` into private bucket `project-evidence` via `SUPABASE_SERVICE_ROLE_KEY`), completely outside publicly served Next.js directories.
+3. Authenticated document downloads execute strictly through `GET /api/v1/evidence/{evidence_id}/download`, where FastAPI validates RBAC + PostgreSQL source ACLs (`SourceAccessPolicyService`), verifies the encrypted envelope (`key_id`, `Content-Length`, and `len(plaintext) + 35` bytes), decrypts in memory, and streams plaintext bytes directly—never exposing public URLs or signed Supabase download URLs.
+4. The API persists `evidence_items` + a PostgreSQL `background_jobs` record and returns immediately; the **lightweight Python worker process** (`python -m app.worker`) claims the job (`SELECT ... FOR UPDATE SKIP LOCKED`), instantiates the identical `build_storage_backend()` factory to decrypt bytes in memory, executes PDF/DOCX/OCR extraction, stores separated full text and ordered pages in `evidence_contents` and `evidence_page_contents`, and immediately queues `evidence_indexing` for `IndexingWorkerService` *(implemented in Phase 2.5)*:
 
 ```mermaid
 flowchart TD
