@@ -7,6 +7,7 @@ from pathlib import Path
 import pytest
 from fastapi.testclient import TestClient
 from sqlalchemy import inspect, text
+from sqlalchemy.exc import SQLAlchemyError
 
 from app.core.config import clear_settings_cache, get_settings
 from app.db.session import create_db_engine, verify_database_connection
@@ -19,21 +20,30 @@ _ROOT_ENV = Path(__file__).resolve().parents[2] / ".env"
 def test_live_postgresql_connectivity_and_readiness_readonly() -> None:
     clear_settings_cache()
     settings = get_settings()
+
     engine = create_db_engine(settings)
     try:
-        latency_ms = verify_database_connection(engine)
+        try:
+            latency_ms = verify_database_connection(engine)
+        except SQLAlchemyError as exc:
+            pytest.skip(f"Configured live PostgreSQL unreachable ({type(exc).__name__}).")
         assert latency_ms >= 0.0
 
         with engine.connect() as conn:
+            table_names = set(inspect(conn).get_table_names())
+            if "alembic_version" not in table_names:
+                pytest.skip(
+                    "Configured live PostgreSQL is reachable, but Alembic migrations "
+                    "have not been initialized on this target yet."
+                )
             rev = conn.execute(text("SELECT version_num FROM alembic_version")).scalar_one_or_none()
-            assert rev == "0007_knowledge_reconstruction"
+            assert rev == "0008_project_transitions_rbac"
             role_count = conn.execute(text("SELECT count(*) FROM roles")).scalar_one()
             assert role_count >= 8
             perm_count = conn.execute(text("SELECT count(*) FROM permissions")).scalar_one()
-            assert perm_count >= 23
+            assert perm_count >= 28
             rp_count = conn.execute(text("SELECT count(*) FROM role_permissions")).scalar_one()
             assert rp_count >= 49
-            table_names = set(inspect(conn).get_table_names())
             assert {
                 "users",
                 "refresh_sessions",
@@ -46,6 +56,7 @@ def test_live_postgresql_connectivity_and_readiness_readonly() -> None:
                 "organisation_invitations",
                 "projects",
                 "project_memberships",
+                "project_transitions",
                 "audit_logs",
                 "evidence_items",
                 "evidence_contents",

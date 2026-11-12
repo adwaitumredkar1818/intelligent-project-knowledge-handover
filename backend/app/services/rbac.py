@@ -37,6 +37,11 @@ class AuthenticatedPrincipal:
     roles: tuple[str, ...]
     permissions: frozenset[str]
 
+    @property
+    def user_id(self) -> uuid.UUID:
+        """Convenience property returning the user primary key."""
+        return self.user.id
+
     def has_permission(self, permission_code: str) -> bool:
         """Fail closed for unknown or unassigned permissions."""
         if permission_code not in KNOWN_PERMISSION_CODES:
@@ -53,6 +58,11 @@ class OrganisationContext:
     membership: OrganisationMembership
     role: Role
     permissions: frozenset[str]
+
+    @property
+    def user_id(self) -> uuid.UUID:
+        """Convenience property returning the user primary key."""
+        return self.principal.user.id
 
     def has_permission(self, permission_code: str) -> bool:
         """Fail closed for unknown or ungranted organisation permissions."""
@@ -73,6 +83,11 @@ class ProjectContext:
     project_membership: ProjectMembership | None
     project_role: Role | None
     permissions: frozenset[str]
+
+    @property
+    def user_id(self) -> uuid.UUID:
+        """Convenience property returning the user primary key."""
+        return self.principal.user.id
 
     def has_permission(self, permission_code: str) -> bool:
         """Fail closed for unknown or ungranted project permissions."""

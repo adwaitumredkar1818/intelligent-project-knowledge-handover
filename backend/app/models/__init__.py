@@ -28,7 +28,7 @@ from app.models.organisation import (
     OrganisationInvitation,
     OrganisationMembership,
 )
-from app.models.project import Project, ProjectMembership
+from app.models.project import Project, ProjectMembership, ProjectTransition
 from app.models.rbac import Permission, Role, RolePermission, UserRole
 from app.models.user import User
 
@@ -51,6 +51,7 @@ __all__ = [
     "Project",
     "ProjectMembership",
     "ProjectSourceMapping",
+    "ProjectTransition",
     "RefreshSession",
     "Role",
     "RolePermission",

@@ -10,8 +10,19 @@ from sqlalchemy import and_, func, or_, select, update
 from sqlalchemy.engine import CursorResult
 from sqlalchemy.orm import Session, selectinload
 
-from app.models.enums import ProjectMembershipStatus, ProjectStatus, ProjectVisibility
-from app.models.project import Project, ProjectMembership
+from app.models.audit import AuditLog
+from app.models.enums import (
+    EvidenceProcessingStatus,
+    KnowledgeCategory,
+    ProjectMembershipStatus,
+    ProjectSourceMappingStatus,
+    ProjectStatus,
+    ProjectVisibility,
+)
+from app.models.evidence import EvidenceItem
+from app.models.integration import ProjectSourceMapping
+from app.models.knowledge import KnowledgeItem
+from app.models.project import Project, ProjectMembership, ProjectTransition
 from app.models.rbac import Role, RolePermission
 
 
@@ -183,6 +194,7 @@ class ProjectRepository:
         role_id: uuid.UUID,
         assigned_by_id: uuid.UUID | None,
         joined_at: datetime | None = None,
+        responsibility_description: str | None = None,
     ) -> ProjectMembership:
         membership = ProjectMembership(
             project_id=project_id,
@@ -190,12 +202,170 @@ class ProjectRepository:
             role_id=role_id,
             status=ProjectMembershipStatus.ACTIVE.value,
             assigned_by_id=assigned_by_id,
+            responsibility_description=responsibility_description,
         )
         if joined_at is not None:
             membership.joined_at = joined_at
         self._session.add(membership)
         self._session.flush()
         return membership
+
+    def update_membership(
+        self,
+        membership: ProjectMembership,
+        *,
+        role_id: uuid.UUID | None = None,
+        responsibility_description: str | None = None,
+    ) -> ProjectMembership:
+        if role_id is not None:
+            membership.role_id = role_id
+        if responsibility_description is not None:
+            membership.responsibility_description = responsibility_description.strip() or None
+        self._session.flush()
+        return membership
+
+    def get_transition(self, project_id: uuid.UUID) -> ProjectTransition | None:
+        stmt = (
+            select(ProjectTransition)
+            .where(ProjectTransition.project_id == project_id)
+            .options(
+                selectinload(ProjectTransition.departing_user),
+                selectinload(ProjectTransition.successor_user),
+            )
+        )
+        return self._session.scalar(stmt)
+
+    def upsert_transition(
+        self,
+        *,
+        project_id: uuid.UUID,
+        departing_user_id: uuid.UUID,
+        successor_user_id: uuid.UUID,
+        workflow_stage: str,
+        handover_scope: str | None,
+        source_scope: list[str] | None,
+        capture_start_date: date | None,
+        capture_end_date: date | None,
+        context_notes: str | None,
+    ) -> ProjectTransition:
+        transition = self.get_transition(project_id)
+        if transition is None:
+            transition = ProjectTransition(
+                project_id=project_id,
+                departing_user_id=departing_user_id,
+                successor_user_id=successor_user_id,
+                workflow_stage=workflow_stage,
+                handover_scope=handover_scope,
+                source_scope=source_scope,
+                capture_start_date=capture_start_date,
+                capture_end_date=capture_end_date,
+                context_notes=context_notes,
+            )
+            self._session.add(transition)
+        else:
+            transition.departing_user_id = departing_user_id
+            transition.successor_user_id = successor_user_id
+            transition.workflow_stage = workflow_stage
+            transition.handover_scope = handover_scope
+            transition.source_scope = source_scope
+            transition.capture_start_date = capture_start_date
+            transition.capture_end_date = capture_end_date
+            transition.context_notes = context_notes
+        self._session.flush()
+        return transition
+
+    def get_project_activity(
+        self,
+        *,
+        project_id: uuid.UUID,
+        limit: int = 10,
+        offset: int = 0,
+    ) -> tuple[list[AuditLog], int]:
+        base = select(AuditLog).where(AuditLog.project_id == project_id)
+        total = int(self._session.scalar(select(func.count()).select_from(base.subquery())) or 0)
+        stmt = (
+            base.options(selectinload(AuditLog.actor_user))
+            .order_by(AuditLog.created_at.desc())
+            .offset(offset)
+            .limit(limit)
+        )
+        return list(self._session.scalars(stmt).all()), total
+
+    def get_source_metrics(self, project_id: uuid.UUID) -> dict[str, Any]:
+        stmt = (
+            select(ProjectSourceMapping)
+            .where(
+                ProjectSourceMapping.project_id == project_id,
+                ProjectSourceMapping.status.in_(
+                    [
+                        ProjectSourceMappingStatus.ACTIVE.value,
+                        ProjectSourceMappingStatus.ERROR.value,
+                    ]
+                ),
+            )
+            .options(selectinload(ProjectSourceMapping.source_connection))
+        )
+        mappings = list(self._session.scalars(stmt).all())
+        total_sources = len(mappings)
+        active_providers = sorted({m.provider for m in mappings})
+        last_synced = None
+        for m in mappings:
+            if m.last_synced_at and (last_synced is None or m.last_synced_at > last_synced):
+                last_synced = m.last_synced_at
+        has_error = any(
+            m.status == ProjectSourceMappingStatus.ERROR.value or m.last_sync_status == "failed"
+            for m in mappings
+        )
+        if has_error:
+            health_status = "needs_attention"
+        elif total_sources > 0:
+            health_status = "healthy"
+        else:
+            health_status = "not_configured"
+        return {
+            "total_sources": total_sources,
+            "active_providers": active_providers,
+            "health_status": health_status,
+            "last_synced_at": last_synced,
+            "mappings": mappings,
+        }
+
+    def list_active_evidence_items(self, project_id: uuid.UUID) -> list[EvidenceItem]:
+        stmt = (
+            select(EvidenceItem)
+            .where(
+                EvidenceItem.project_id == project_id,
+                EvidenceItem.deleted_at.is_(None),
+                EvidenceItem.processing_status != EvidenceProcessingStatus.DELETED.value,
+            )
+            .options(selectinload(EvidenceItem.source_access_policy))
+        )
+        return list(self._session.scalars(stmt).all())
+
+    def get_knowledge_metrics(self, project_id: uuid.UUID) -> dict[str, Any]:
+        stmt = (
+            select(KnowledgeItem.category, func.count(KnowledgeItem.id))
+            .where(
+                KnowledgeItem.project_id == project_id,
+                KnowledgeItem.is_deleted.is_(False),
+                KnowledgeItem.is_synthetic.is_(False),
+            )
+            .group_by(KnowledgeItem.category)
+        )
+        counts: dict[str, int] = {
+            str(category): int(count)
+            for category, count in self._session.execute(stmt).all()
+        }
+        return {
+            "decisions_count": counts.get(KnowledgeCategory.DECISIONS_RATIONALE.value, 0),
+            "tasks_count": counts.get(KnowledgeCategory.WORK_ITEMS.value, 0),
+            "risks_count": counts.get(KnowledgeCategory.BUGS_BLOCKERS_RISKS.value, 0),
+            "responsibilities_count": counts.get(
+                KnowledgeCategory.RESPONSIBILITIES_OWNERSHIP.value, 0
+            ),
+            "dependencies_count": counts.get(KnowledgeCategory.DEPENDENCIES.value, 0),
+            "availability": "available",
+        }
 
     def revoke_all_for_user_in_organisation(
         self,

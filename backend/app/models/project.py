@@ -7,6 +7,7 @@ from datetime import date, datetime
 from typing import TYPE_CHECKING
 
 from sqlalchemy import (
+    JSON,
     CheckConstraint,
     Date,
     DateTime,
@@ -19,6 +20,7 @@ from sqlalchemy import (
     func,
     text,
 )
+from sqlalchemy.dialects.postgresql import JSONB
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from app.db.base import Base
@@ -28,6 +30,8 @@ if TYPE_CHECKING:
     from app.models.organisation import Organisation
     from app.models.rbac import Role
     from app.models.user import User
+
+_JSON_VARIANT = JSON().with_variant(JSONB(astext_type=Text()), "postgresql")
 
 
 class Project(Base):
@@ -118,6 +122,11 @@ class Project(Base):
         back_populates="project",
         cascade="all, delete-orphan",
     )
+    transition: Mapped[ProjectTransition | None] = relationship(
+        back_populates="project",
+        uselist=False,
+        cascade="all, delete-orphan",
+    )
 
 
 class ProjectMembership(Base):
@@ -169,6 +178,10 @@ class ProjectMembership(Base):
         default=ProjectMembershipStatus.ACTIVE.value,
         server_default=ProjectMembershipStatus.ACTIVE.value,
     )
+    responsibility_description: Mapped[str | None] = mapped_column(
+        Text,
+        nullable=True,
+    )
     assigned_by_id: Mapped[uuid.UUID | None] = mapped_column(
         Uuid(as_uuid=True),
         ForeignKey("users.id", ondelete="SET NULL"),
@@ -195,3 +208,66 @@ class ProjectMembership(Base):
     user: Mapped[User] = relationship(foreign_keys=[user_id])
     assigned_by: Mapped[User | None] = relationship(foreign_keys=[assigned_by_id])
     role: Mapped[Role] = relationship(foreign_keys=[role_id])
+
+
+class ProjectTransition(Base):
+    """Configuration for departing knowledge owner, successor, and handover scope."""
+
+    __tablename__ = "project_transitions"
+    __table_args__ = (
+        CheckConstraint(
+            "departing_user_id != successor_user_id",
+            name="uq_project_transitions_distinct_participants",
+        ),
+    )
+
+    id: Mapped[uuid.UUID] = mapped_column(
+        Uuid(as_uuid=True),
+        primary_key=True,
+        default=uuid.uuid4,
+    )
+    project_id: Mapped[uuid.UUID] = mapped_column(
+        Uuid(as_uuid=True),
+        ForeignKey("projects.id", ondelete="CASCADE"),
+        nullable=False,
+        unique=True,
+        index=True,
+    )
+    departing_user_id: Mapped[uuid.UUID] = mapped_column(
+        Uuid(as_uuid=True),
+        ForeignKey("users.id", ondelete="RESTRICT"),
+        nullable=False,
+        index=True,
+    )
+    successor_user_id: Mapped[uuid.UUID] = mapped_column(
+        Uuid(as_uuid=True),
+        ForeignKey("users.id", ondelete="RESTRICT"),
+        nullable=False,
+        index=True,
+    )
+    workflow_stage: Mapped[str] = mapped_column(
+        String(64),
+        nullable=False,
+        default="planning",
+        server_default="planning",
+    )
+    handover_scope: Mapped[str | None] = mapped_column(Text, nullable=True)
+    source_scope: Mapped[list[str] | None] = mapped_column(_JSON_VARIANT, nullable=True)
+    capture_start_date: Mapped[date | None] = mapped_column(Date, nullable=True)
+    capture_end_date: Mapped[date | None] = mapped_column(Date, nullable=True)
+    context_notes: Mapped[str | None] = mapped_column(Text, nullable=True)
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True),
+        nullable=False,
+        server_default=func.now(),
+    )
+    updated_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True),
+        nullable=False,
+        server_default=func.now(),
+        onupdate=func.now(),
+    )
+
+    project: Mapped[Project] = relationship(back_populates="transition")
+    departing_user: Mapped[User] = relationship(foreign_keys=[departing_user_id])
+    successor_user: Mapped[User] = relationship(foreign_keys=[successor_user_id])

@@ -42,10 +42,12 @@ pnpm-debug.log*
 *.sqlite
 *.sqlite3
 chroma_data/
-data/
+/data/
+backend/data/
 uploads/
 logs/
 tmp/
+!frontend/src/features/prototype/data/
 
 # IDE, assistant tooling & OS artefacts
 .DS_Store
