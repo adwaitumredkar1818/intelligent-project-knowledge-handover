@@ -5,7 +5,7 @@ description = "Backend and worker runtime for the Intelligent Project Knowledge 
 readme = "../README.md"
 requires-python = ">=3.11,<3.12"
 
-# Core Phase 1.2 runtime baseline (installed in backend/.venv)
+# Core runtime baseline (Phase 1.2 + Phase 2.2 auth + Phase 2.4A ingestion/storage, installed in backend/.venv)
 dependencies = [
     "fastapi>=0.115.0,<1.0.0",
     "uvicorn[standard]>=0.32.0,<1.0.0",
@@ -18,21 +18,24 @@ dependencies = [
     "python-dotenv>=1.0.1,<2.0.0",
     "pyjwt>=2.9.0,<3.0.0",
     "pwdlib[argon2]>=0.2.1,<1.0.0",
+    "pymupdf>=1.24.0,<2.0.0",
+    "python-docx>=1.1.2,<2.0.0",
+    "python-multipart>=0.0.12,<1.0.0",
+    "cryptography>=43.0.0",
 ]
 
 # Separated optional dependency groups for later implementation phases.
 # Do NOT install heavyweight or phase-specific groups until their phase begins.
 [project.optional-dependencies]
 documents = [
-    "pymupdf>=1.24.0,<2.0.0",
-    "python-docx>=1.1.2,<2.0.0",
-    "python-multipart>=0.0.12,<1.0.0",
+    # Promoted into core dependencies in Phase 2.4A (PyMuPDF, python-docx, python-multipart).
 ]
 embeddings-rag = [
     "chromadb-client>=1.0.0,<2.0.0",
 ]
 integrations-security = [
-    "cryptography>=43.0.0",
+    # cryptography promoted into core dependencies in Phase 2.4A for at-rest upload encryption.
+    # Reserve this group for future OAuth 2.0 / external connector dependencies (Phase 2.4B).
 ]
 worker = [
     # Lightweight worker relies primarily on SQLAlchemy 2.x + Psycopg 3 in base dependencies.
