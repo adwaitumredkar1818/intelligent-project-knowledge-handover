@@ -1,5 +1,6 @@
 import React from "react";
 import type { Metadata, Viewport } from "next";
+import { Suspense } from "react";
 import { Manrope, JetBrains_Mono } from "next/font/google";
 import "./globals.css";
 import { LiveAppProvider } from "../context/LiveAppContext";
@@ -40,9 +41,9 @@ export default function RootLayout({
     <html lang="en" className={`${manrope.variable} ${jetbrainsMono.variable}`} suppressHydrationWarning>
       <body className="antialiased font-sans" suppressHydrationWarning>
         <LiveAppProvider>
-          <React.Suspense fallback={<div className="min-h-screen bg-[#F6F8FC]" />}>
+          <Suspense fallback={<div className="min-h-screen bg-[#F6F8FC]" />}>
             <AppLayout>{children}</AppLayout>
-          </React.Suspense>
+          </Suspense>
           <AgentationToolbar />
         </LiveAppProvider>
       </body>

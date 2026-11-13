@@ -1,6 +1,6 @@
 "use client";
 
-import React, { useState, useEffect, useSyncExternalStore } from "react";
+import React, { useState, useEffect } from "react";
 import { useRouter } from "next/navigation";
 import {
   FolderPlus,
@@ -37,18 +37,16 @@ export function DashboardRouter() {
     setIsAddMemberModalOpen,
   } = useLiveApp();
 
-  const mounted = useSyncExternalStore(
-    () => () => {},
-    () => true,
-    () => false
-  );
-
+  const [mounted, setMounted] = useState(false);
   const [greetingText, setGreetingText] = useState("Welcome back");
   const [todayText, setTodayText] = useState("Project Workspace");
 
   useEffect(() => {
+    setMounted(true);
     const h = new Date().getHours();
-    setGreetingText(h < 12 ? "Good morning" : h < 18 ? "Good afternoon" : "Good evening");
+    setGreetingText(
+      h < 12 ? "Good morning" : h < 18 ? "Good afternoon" : "Good evening"
+    );
     setTodayText(
       new Date().toLocaleDateString("en-GB", {
         weekday: "long",
