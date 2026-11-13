@@ -44,7 +44,7 @@ class BackgroundJob(Base):
             "'document_ingestion', 'source_sync', "
             "'evidence_chunking', 'evidence_embedding', 'evidence_indexing', "
             "'evidence_reindexing', 'evidence_index_cleanup', "
-            "'knowledge_reconstruction'"
+            "'knowledge_reconstruction', 'relationship_reconstruction'"
             ")",
             name="background_job_type",
         ),

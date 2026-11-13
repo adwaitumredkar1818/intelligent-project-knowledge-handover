@@ -177,6 +177,7 @@ class BackgroundJobType(StrEnum):
     EVIDENCE_REINDEXING = "evidence_reindexing"
     EVIDENCE_INDEX_CLEANUP = "evidence_index_cleanup"
     KNOWLEDGE_RECONSTRUCTION = "knowledge_reconstruction"
+    RELATIONSHIP_RECONSTRUCTION = "relationship_reconstruction"
 
 
 class EvidenceIndexingStatus(StrEnum):
@@ -392,3 +393,224 @@ class ConfidenceLevel(StrEnum):
     HIGH = "high"
     MEDIUM = "medium"
     LOW = "low"
+
+
+class EntityType(StrEnum):
+    """Canonical project-scoped entity types for the knowledge graph."""
+
+    PERSON = "person"
+    TEAM = "team"
+    DISCUSSION = "discussion"
+    DISCUSSION_THREAD = "discussion_thread"
+    DECISION = "decision"
+    WORK_ITEM = "work_item"
+    PULL_REQUEST = "pull_request"
+    COMMIT = "commit"
+    DOCUMENT = "document"
+    MEETING_NOTE = "meeting_note"
+    COMPONENT = "component"
+    TECHNICAL_COMPONENT = "technical_component"
+    DEPENDENCY = "dependency"
+    RISK = "risk"
+    BUG = "bug"
+    BLOCKER = "blocker"
+    PROCEDURE = "procedure"
+    REPOSITORY = "repository"
+    ORGANISATION = "organisation"
+
+
+class RelationshipType(StrEnum):
+    """Canonical controlled relationship types across project entities."""
+
+    # Part 6 Canonical Directed Types
+    DECIDED_BY = "DECIDED_BY"
+    INFLUENCED_BY = "INFLUENCED_BY"
+    IMPLEMENTED_BY = "IMPLEMENTED_BY"
+    SUPERSEDES = "SUPERSEDES"
+    ARCHITECTURAL_DEPENDENCY = "ARCHITECTURAL_DEPENDENCY"
+    AFFECTS_COMPONENT = "AFFECTS_COMPONENT"
+
+    IMPLEMENTS = "IMPLEMENTS"
+    FIXES = "FIXES"
+    PART_OF = "PART_OF"
+    BLOCKS = "BLOCKS"
+    BLOCKED_BY = "BLOCKED_BY"
+    DEPENDS_ON = "DEPENDS_ON"
+    MERGED_IN = "MERGED_IN"
+    BRANCHED_FROM = "BRANCHED_FROM"
+
+    OWNS = "OWNS"
+    MAINTAINS = "MAINTAINS"
+    ASSIGNED_TO = "ASSIGNED_TO"
+    AUTHORED_BY = "AUTHORED_BY"
+    REVIEWED_BY = "REVIEWED_BY"
+    REPORTED_BY = "REPORTED_BY"
+
+    DISCUSSED_IN = "DISCUSSED_IN"
+    DOCUMENTED_IN = "DOCUMENTED_IN"
+    REFERENCES = "REFERENCES"
+    DERIVED_FROM = "DERIVED_FROM"
+    RESOLVED_BY = "RESOLVED_BY"
+
+    INTRODUCES_RISK = "INTRODUCES_RISK"
+    MITIGATES_RISK = "MITIGATES_RISK"
+    CAUSED_BY = "CAUSED_BY"
+
+    # Decision relationships
+    DECISION_REFERENCED_IN_DISCUSSION = "DECISION_REFERENCED_IN_DISCUSSION"
+    DECISION_RECORDED_IN_DOCUMENT = "DECISION_RECORDED_IN_DOCUMENT"
+    DECISION_IMPLEMENTED_BY = "DECISION_IMPLEMENTED_BY"
+    DECISION_AFFECTS_COMPONENT = "DECISION_AFFECTS_COMPONENT"
+    DECISION_SUPERSEDES = "DECISION_SUPERSEDES"
+    DECISION_CONFLICTS_WITH = "DECISION_CONFLICTS_WITH"
+
+    # Work relationships
+    WORK_ITEM_TRACKED_BY = "WORK_ITEM_TRACKED_BY"
+    WORK_ITEM_IMPLEMENTED_BY = "WORK_ITEM_IMPLEMENTED_BY"
+    WORK_ITEM_BLOCKED_BY = "WORK_ITEM_BLOCKED_BY"
+    WORK_ITEM_DEPENDS_ON = "WORK_ITEM_DEPENDS_ON"
+    WORK_ITEM_RELATED_TO = "WORK_ITEM_RELATED_TO"
+    WORK_ITEM_ADDRESSED_BY_COMMIT = "WORK_ITEM_ADDRESSED_BY_COMMIT"
+
+    # GitHub relationships
+    COMMIT_BELONGS_TO_PULL_REQUEST = "COMMIT_BELONGS_TO_PULL_REQUEST"
+    PULL_REQUEST_REFERENCES_ISSUE = "PULL_REQUEST_REFERENCES_ISSUE"
+    PULL_REQUEST_MODIFIES_COMPONENT = "PULL_REQUEST_MODIFIES_COMPONENT"
+    COMMIT_MODIFIES_COMPONENT = "COMMIT_MODIFIES_COMPONENT"
+    PULL_REQUEST_REVIEWED_BY = "PULL_REQUEST_REVIEWED_BY"
+    PULL_REQUEST_AUTHORED_BY = "PULL_REQUEST_AUTHORED_BY"
+
+    # Person relationships
+    PERSON_AUTHORED = "PERSON_AUTHORED"
+    PERSON_REVIEWED = "PERSON_REVIEWED"
+    PERSON_ASSIGNED_TO = "PERSON_ASSIGNED_TO"
+    PERSON_RESPONSIBLE_FOR = "PERSON_RESPONSIBLE_FOR"
+    PERSON_DISCUSSIONS_PARTICIPANT = "PERSON_DISCUSSIONS_PARTICIPANT"
+    PERSON_CONTRIBUTED_TO = "PERSON_CONTRIBUTED_TO"
+
+    # Technical relationships
+    COMPONENT_DEPENDS_ON = "COMPONENT_DEPENDS_ON"
+    COMPONENT_CALLS_COMPONENT = "COMPONENT_CALLS_COMPONENT"
+    COMPONENT_USES_SERVICE = "COMPONENT_USES_SERVICE"
+    COMPONENT_STORES_DATA_IN = "COMPONENT_STORES_DATA_IN"
+    COMPONENT_EXPOSES_API = "COMPONENT_EXPOSES_API"
+    DOCUMENT_DESCRIBES_COMPONENT = "DOCUMENT_DESCRIBES_COMPONENT"
+    DOCUMENT_DESCRIBES_DECISION = "DOCUMENT_DESCRIBES_DECISION"
+
+    # Risk and bug relationships
+    RISK_AFFECTS_COMPONENT = "RISK_AFFECTS_COMPONENT"
+    BUG_FOUND_IN_COMPONENT = "BUG_FOUND_IN_COMPONENT"
+    RISK_BLOCKS_WORK_ITEM = "RISK_BLOCKS_WORK_ITEM"
+    BUG_RELATED_TO_WORK_ITEM = "BUG_RELATED_TO_WORK_ITEM"
+    RISK_DEPENDS_ON_EXTERNAL_FACTOR = "RISK_DEPENDS_ON_EXTERNAL_FACTOR"
+
+    # Evidence relationships
+    KNOWLEDGE_SUPPORTED_BY_EVIDENCE = "KNOWLEDGE_SUPPORTED_BY_EVIDENCE"
+    KNOWLEDGE_CORROBORATED_BY = "KNOWLEDGE_CORROBORATED_BY"
+    DOCUMENT_REFERENCES_EVIDENCE = "DOCUMENT_REFERENCES_EVIDENCE"
+    DISCUSSION_REFERENCES_WORK_ITEM = "DISCUSSION_REFERENCES_WORK_ITEM"
+
+
+class RelationshipBasis(StrEnum):
+    """How the relationship was established."""
+
+    EXPLICIT = "explicit"
+    INFERRED = "inferred"
+    HUMAN_CONFIRMED = "human_confirmed"
+
+
+class RelationshipVerificationStatus(StrEnum):
+    """Review lifecycle state for graph relationships."""
+
+    CANDIDATE = "candidate"
+    VERIFIED = "verified"
+    REJECTED = "rejected"
+    CONFLICTED = "conflicted"
+    UNRESOLVED = "unresolved"
+    STALE = "stale"
+
+
+class EntityResolutionStatus(StrEnum):
+    """Lifecycle and merge status of knowledge entities."""
+
+    UNRESOLVED = "unresolved"
+    CANONICAL = "canonical"
+    MERGED = "merged"
+    DISPUTED = "disputed"
+
+
+class AliasResolutionStatus(StrEnum):
+    """Review and resolution state for entity aliases."""
+
+    UNRESOLVED = "unresolved"
+    CANDIDATE = "candidate"
+    ACCEPTED = "accepted"
+    REJECTED = "rejected"
+
+
+class IdentityPolicyBand(StrEnum):
+    """Classification band determined by IdentityResolutionService."""
+
+    AUTO_MERGE = "auto_merge"
+    STRONG_CANDIDATE = "strong_candidate"
+    MANUAL_REVIEW = "manual_review"
+    SEPARATE = "separate"
+    UNRESOLVED = "unresolved"
+
+
+class IdentityCandidateStatus(StrEnum):
+    """Review decision status on identity merge candidates."""
+
+    PENDING = "pending"
+    ACCEPTED = "accepted"
+    REJECTED = "rejected"
+    REVERTED = "reverted"
+
+
+class TraceabilityCompletenessStatus(StrEnum):
+    """Completeness state for Decision-to-Implementation chains."""
+
+    COMPLETE = "complete"
+    PARTIALLY_TRACED = "partially_traced"
+    UNTRACED = "untraced"
+    CONFLICTING = "conflicting"
+
+
+class TimelinePrecision(StrEnum):
+    """Precision tier for extracted project timeline events."""
+
+    EXACT_DATETIME = "exact_datetime"
+    DATE_ONLY = "date_only"
+    MONTH_ONLY = "month_only"
+    UNKNOWN = "unknown"
+
+
+class TimelineOrigin(StrEnum):
+    """Source origin of timestamp."""
+
+    SOURCE_API = "source_api"
+    SOURCE_CHANGELOG = "source_changelog"
+    SOURCE_COMMIT = "source_commit"
+    DOCUMENT_HEADER = "document_header"
+    TEXT_DATE_MENTION = "text_date_mention"
+    UNKNOWN = "unknown"
+
+
+class RelationshipEvidenceRole(StrEnum):
+    """Role that supporting evidence plays in establishing a relationship."""
+
+    DIRECT_SUPPORT = "direct_support"
+    CORROBORATION = "corroboration"
+    CONTEXT = "context"
+    CONTRADICTION = "contradiction"
+
+
+class RelationshipRunStatus(StrEnum):
+    """Lifecycle states for relationship reconstruction runs."""
+
+    QUEUED = "queued"
+    RUNNING = "running"
+    COMPLETED = "completed"
+    FAILED = "failed"
+    CANCELLED = "cancelled"
+

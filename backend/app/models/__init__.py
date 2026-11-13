@@ -30,6 +30,16 @@ from app.models.organisation import (
 )
 from app.models.project import Project, ProjectMembership, ProjectTransition
 from app.models.rbac import Permission, Role, RolePermission, UserRole
+from app.models.relationship import (
+    DecisionTraceabilityChain,
+    EntityAlias,
+    IdentityResolutionCandidate,
+    KnowledgeEntity,
+    KnowledgeRelationship,
+    KnowledgeTimelineEvent,
+    RelationshipEvidenceLink,
+    RelationshipReconstructionRun,
+)
 from app.models.user import User
 from app.models.vector_index import ProjectVectorIndex
 
@@ -37,13 +47,19 @@ __all__ = [
     "AuditLog",
     "BackgroundJob",
     "Base",
+    "DecisionTraceabilityChain",
+    "EntityAlias",
     "EvidenceChunk",
     "EvidenceContent",
     "EvidenceItem",
     "EvidencePageContent",
+    "IdentityResolutionCandidate",
+    "KnowledgeEntity",
     "KnowledgeEvidenceLink",
     "KnowledgeExtractionRun",
     "KnowledgeItem",
+    "KnowledgeRelationship",
+    "KnowledgeTimelineEvent",
     "OAuthState",
     "Organisation",
     "OrganisationInvitation",
@@ -55,6 +71,8 @@ __all__ = [
     "ProjectTransition",
     "ProjectVectorIndex",
     "RefreshSession",
+    "RelationshipEvidenceLink",
+    "RelationshipReconstructionRun",
     "Role",
     "RolePermission",
     "SourceAccessPolicy",

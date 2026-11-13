@@ -10,6 +10,7 @@ from app.api.routes.knowledge import router as knowledge_router
 from app.api.routes.knowledge_intelligence import router as knowledge_intelligence_router
 from app.api.routes.organisations import router as organisations_router
 from app.api.routes.projects import router as projects_router
+from app.api.routes.relationships import router as relationships_router
 from app.api.routes.retrieval import router as retrieval_router
 from app.api.routes.sources import router as sources_router
 from app.api.routes.users import router as users_router
@@ -26,3 +27,4 @@ api_v1_router.include_router(integrations_router)
 api_v1_router.include_router(retrieval_router)
 api_v1_router.include_router(knowledge_router)
 api_v1_router.include_router(knowledge_intelligence_router)
+api_v1_router.include_router(relationships_router)

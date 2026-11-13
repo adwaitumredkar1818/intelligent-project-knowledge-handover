@@ -26,6 +26,7 @@ from app.services.integrations.sync_worker import SourceSyncWorkerService
 from app.services.llm import OllamaLLMClient
 from app.services.ocr import OllamaGLMOCRService
 from app.services.reconstruction_worker import ReconstructionWorkerService
+from app.services.relationship_worker import RelationshipWorkerService
 from app.services.storage_factory import build_storage_backend
 from app.services.token_encryption import LocalTokenEncryptionService
 from app.services.vector_store import ChromaV2HttpVectorStore
@@ -145,7 +146,7 @@ class SyncWorker:
 
 
 class CompositeWorkerService:
-    """Sequential composite worker polling extraction, sync, indexing & reconstruction queues."""
+    """Sequential composite worker polling extraction, sync, indexing, reconstruction & relationship queues."""
 
     def __init__(
         self,
@@ -154,11 +155,13 @@ class CompositeWorkerService:
         sync_worker: SourceSyncWorkerService,
         indexing_worker: IndexingWorkerService | None = None,
         reconstruction_worker: ReconstructionWorkerService | None = None,
+        relationship_worker: RelationshipWorkerService | None = None,
     ) -> None:
         self.ingestion_worker = ingestion_worker
         self.sync_worker = sync_worker
         self.indexing_worker = indexing_worker
         self.reconstruction_worker = reconstruction_worker
+        self.relationship_worker = relationship_worker
 
     @property
     def worker_id(self) -> str:
@@ -166,7 +169,7 @@ class CompositeWorkerService:
         return self.ingestion_worker.worker_id
 
     def process_next_job(self) -> bool:
-        """Claim one job across ingestion, sync, indexing, and knowledge extraction queues."""
+        """Claim one job across ingestion, sync, indexing, reconstruction, and relationship queues."""
         if self.ingestion_worker.process_next_job():
             return True
         if self.sync_worker.process_next_job():
@@ -176,6 +179,11 @@ class CompositeWorkerService:
         if (
             self.reconstruction_worker is not None
             and self.reconstruction_worker.process_next_job()
+        ):
+            return True
+        if (
+            self.relationship_worker is not None
+            and self.relationship_worker.process_next_job()
         ):
             return True
         return False
@@ -277,12 +285,18 @@ def build_worker_service(
         ingestion_settings=settings.ingestion,
         worker_id=f"{worker_id}-know" if worker_id else None,
     )
+    relationship_worker = RelationshipWorkerService(
+        session_factory=session_factory,
+        llm_client=llm_client,
+        worker_id=f"{worker_id}-rel" if worker_id else None,
+    )
     return (
         CompositeWorkerService(
             ingestion_worker=ingestion_worker,
             sync_worker=sync_worker,
             indexing_worker=indexing_worker,
             reconstruction_worker=reconstruction_worker,
+            relationship_worker=relationship_worker,
         ),
         engine,
     )
