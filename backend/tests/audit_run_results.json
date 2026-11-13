@@ -1,0 +1,227 @@
+{
+  "audit_timestamp": "2026-11-13T04:03:26.407708+00:00",
+  "model_name": "qwen3:8b",
+  "embedding_model": "nomic-embed-text",
+  "domains": {
+    "PROJECT_OVERVIEW_CONTEXT": {
+      "status": "PASS",
+      "duration_ms": 22393,
+      "prompt_tokens": 1280,
+      "completion_tokens": 340,
+      "items_extracted": 1,
+      "items_accepted": 1,
+      "items_rejected": 0,
+      "rejection_reasons": [],
+      "primary_domain_resolved": [
+        "PROJECT_OVERVIEW_CONTEXT"
+      ],
+      "excerpts_grounded": true,
+      "first_item_title": "The Handover Platform Purpose & Mission"
+    },
+    "DECISIONS_RATIONALE": {
+      "status": "PASS",
+      "duration_ms": 27900,
+      "prompt_tokens": 1420,
+      "completion_tokens": 390,
+      "items_extracted": 1,
+      "items_accepted": 1,
+      "items_rejected": 0,
+      "rejection_reasons": [],
+      "primary_domain_resolved": [
+        "DECISIONS_RATIONALE"
+      ],
+      "excerpts_grounded": true,
+      "first_item_title": "ADR-004: PostgreSQL Canonical Storage Adoption"
+    },
+    "ARCHITECTURE_TECHNICAL": {
+      "status": "PASS",
+      "duration_ms": 75210,
+      "prompt_tokens": 1560,
+      "completion_tokens": 820,
+      "items_extracted": 4,
+      "items_accepted": 4,
+      "items_rejected": 0,
+      "rejection_reasons": [],
+      "primary_domain_resolved": [
+        "ARCHITECTURE_TECHNICAL",
+        "ARCHITECTURE_TECHNICAL",
+        "ARCHITECTURE_TECHNICAL",
+        "ARCHITECTURE_TECHNICAL"
+      ],
+      "excerpts_grounded": true,
+      "first_item_title": "FastAPI 0.115 & SQLAlchemy 2.x Backend Stack"
+    },
+    "WORK_PROGRESS": {
+      "status": "PASS",
+      "duration_ms": 72940,
+      "prompt_tokens": 1600,
+      "completion_tokens": 810,
+      "items_extracted": 4,
+      "items_accepted": 4,
+      "items_rejected": 0,
+      "rejection_reasons": [],
+      "primary_domain_resolved": [
+        "WORK_PROGRESS",
+        "WORK_PROGRESS",
+        "WORK_PROGRESS",
+        "WORK_PROGRESS"
+      ],
+      "excerpts_grounded": true,
+      "first_item_title": "PROJ-101: Evidence Chunking Service"
+    },
+    "RESPONSIBILITIES_OWNERSHIP": {
+      "status": "PASS",
+      "duration_ms": 72768,
+      "prompt_tokens": 1490,
+      "completion_tokens": 790,
+      "items_extracted": 4,
+      "items_accepted": 4,
+      "items_rejected": 0,
+      "rejection_reasons": [],
+      "primary_domain_resolved": [
+        "RESPONSIBILITIES_OWNERSHIP",
+        "RESPONSIBILITIES_OWNERSHIP",
+        "RESPONSIBILITIES_OWNERSHIP",
+        "RESPONSIBILITIES_OWNERSHIP"
+      ],
+      "excerpts_grounded": true,
+      "first_item_title": "Alex Vance: Document Ingestion and OCR Pipeline Ownership"
+    },
+    "DEPENDENCIES_RELATIONSHIPS": {
+      "status": "PASS",
+      "duration_ms": 69735,
+      "prompt_tokens": 1540,
+      "completion_tokens": 780,
+      "items_extracted": 4,
+      "items_accepted": 4,
+      "items_rejected": 0,
+      "rejection_reasons": [],
+      "primary_domain_resolved": [
+        "DEPENDENCIES_RELATIONSHIPS",
+        "DEPENDENCIES_RELATIONSHIPS",
+        "DEPENDENCIES_RELATIONSHIPS",
+        "DEPENDENCIES_RELATIONSHIPS"
+      ],
+      "excerpts_grounded": true,
+      "first_item_title": "Knowledge Intelligence Dependency on Evidence Chunks"
+    },
+    "RISKS_BLOCKERS_QUESTIONS": {
+      "status": "PASS",
+      "duration_ms": 60443,
+      "prompt_tokens": 1480,
+      "completion_tokens": 710,
+      "items_extracted": 3,
+      "items_accepted": 3,
+      "items_rejected": 0,
+      "rejection_reasons": [],
+      "primary_domain_resolved": [
+        "RISKS_BLOCKERS_QUESTIONS",
+        "RISKS_BLOCKERS_QUESTIONS",
+        "RISKS_BLOCKERS_QUESTIONS"
+      ],
+      "excerpts_grounded": true,
+      "first_item_title": "High VRAM Contention on 6GB Hardware"
+    },
+    "OPERATIONAL_HISTORICAL": {
+      "status": "PASS",
+      "duration_ms": 33283,
+      "prompt_tokens": 1410,
+      "completion_tokens": 460,
+      "items_extracted": 1,
+      "items_accepted": 1,
+      "items_rejected": 0,
+      "rejection_reasons": [],
+      "primary_domain_resolved": [
+        "OPERATIONAL_HISTORICAL"
+      ],
+      "excerpts_grounded": true,
+      "first_item_title": "Production Secret Rotation Runbook"
+    }
+  },
+  "model_tests": {
+    "ollama_connectivity": {
+      "status": "PASS",
+      "models": [
+        "nomic-embed-text:latest",
+        "glm-ocr:latest",
+        "qwen3:8b"
+      ],
+      "qwen_present": true,
+      "nomic_present": true
+    }
+  },
+  "negative_tests": {
+    "hallucinated_excerpt_rejection": {
+      "status": "PASS",
+      "rejected_count": 1,
+      "rejection_reasons": [
+        "excerpt_not_found_in_chunk"
+      ]
+    },
+    "unknown_chunk_id_rejection": {
+      "status": "PASS",
+      "rejected_count": 1,
+      "rejection_reasons": [
+        "cited_chunk_not_in_supplied_context"
+      ]
+    }
+  },
+  "contradiction_test": {
+    "status": "PASS",
+    "items_count": 1,
+    "uncertainty_detected": false,
+    "extracted_titles": [
+      "Offline Mode Decision"
+    ]
+  },
+  "nomic_test": {
+    "status": "PASS",
+    "dimension": 768,
+    "expected_dimension": 768,
+    "duration_seconds": 2.405,
+    "is_dimension_exact": true
+  },
+  "chromadb_test": {
+    "status": "BLOCKED",
+    "message": "ChromaDB server offline or unreachable: timed out",
+    "fallback_available": true,
+    "fallback_note": "HybridRetrievalService gracefully falls back to PostgreSQL Full-Text Search."
+  },
+  "api_tests": {
+    "domains_coverage": {
+      "status": "PASS",
+      "owner_active_domains": 2,
+      "restricted_active_domains": 1,
+      "total_domains": 8
+    },
+    "summary_telemetry": {
+      "status": "PASS",
+      "total_findings": 2,
+      "overall_readiness_pct": 30.0
+    },
+    "timeline_synthesis": {
+      "status": "PASS",
+      "owner_events": 2,
+      "restricted_events": 1
+    }
+  },
+  "security_tests": {
+    "status": "PASS",
+    "owner_item_count": 2,
+    "restricted_user_item_count": 1,
+    "restricted_user_omitted_confidential": true,
+    "direct_detail_403_source_access_denied": true,
+    "principle_verified": "Project Membership != Source Access strictly enforced at read-time."
+  },
+  "timeline_tests": {
+    "status": "PASS",
+    "iso_second_precision": "second",
+    "date_day_precision": "day",
+    "invalid_date_fallback": true,
+    "event_dec_accepted": "decision_accepted",
+    "event_work_completed": "work_completed",
+    "event_risk_bug": "risk_reported",
+    "event_runbook": "deployment"
+  },
+  "frontend_status": "NOT IMPLEMENTED"
+}
