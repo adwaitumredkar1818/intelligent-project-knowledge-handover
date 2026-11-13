@@ -1,11 +1,11 @@
 "use client";
 
 import React, { useState } from "react";
-import { X, Users, Mail, ArrowRight, AlertCircle, Shield } from "lucide-react";
+import { X, Users, Mail, ArrowRight, AlertCircle } from "lucide-react";
 import { useLiveApp } from "../../context/LiveAppContext";
 
 export function AddMemberModal() {
-  const { isAddMemberModalOpen, setIsAddMemberModalOpen, addMember, activeProject } = useLiveApp();
+  const { isAddMemberModalOpen, setIsAddMemberModalOpen, addMember } = useLiveApp();
   const [email, setEmail] = useState("");
   const [roleName, setRoleName] = useState("project_contributor");
   const [transitionRole, setTransitionRole] = useState<string>("");
@@ -31,8 +31,8 @@ export function AddMemberModal() {
       setEmail("");
       setRoleName("project_contributor");
       setTransitionRole("");
-    } catch (err: any) {
-      setError(err.message || "Failed to add member to project workspace");
+    } catch (err: unknown) {
+      setError(err instanceof Error ? err.message : "Failed to add member to project workspace");
     } finally {
       setIsSubmitting(false);
     }

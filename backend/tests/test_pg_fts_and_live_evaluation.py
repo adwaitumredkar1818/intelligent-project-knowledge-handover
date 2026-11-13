@@ -187,7 +187,7 @@ def test_live_pg_fts_ollama_chroma_hybrid_retrieval_and_synthetic_evaluation(
     )
     temp_url = (
         f"postgresql+psycopg://{live_cfg.database.user}:{password}"
-        f"@127.0.0.1:{live_cfg.database.port}/{temp_db}"
+        f"@127.0.0.1:{live_cfg.database.port}/{temp_db}?sslmode=disable"
     )
 
     try:

@@ -15,8 +15,10 @@ from app.core.exceptions import (
 )
 from app.core.security import derive_slug_from_name, utc_now
 from app.models.enums import (
+    EvidenceSourceType,
     OrganisationStatus,
     ProjectMembershipStatus,
+    ProjectSourceMappingStatus,
     ProjectStatus,
     RoleName,
     RoleScopeType,
@@ -50,6 +52,7 @@ from app.schemas.project import (
     UpsertProjectTransitionRequest,
 )
 from app.services.audit import AuditService
+from app.services.integrations.access_policy import SourceAccessPolicyService
 from app.services.rbac import OrganisationContext, ProjectContext, RbacService
 
 VALID_PROJECT_STATUS_TRANSITIONS: dict[str, frozenset[str]] = {
@@ -754,7 +757,7 @@ class ProjectService:
 
     def get_project_transition(self, ctx: ProjectContext) -> ProjectTransitionResponse | None:
         """Retrieve configured transition participants and parameters."""
-        self._require_active_organisation_and_project(ctx=ctx)
+        self._require_active_organisation_and_project(ctx=ctx, allow_archived_project=True)
         transition = self._project_repo.get_transition(ctx.project.id)
         if transition is None:
             return None
@@ -818,11 +821,37 @@ class ProjectService:
 
     def get_project_overview(self, ctx: ProjectContext) -> ProjectOverviewResponse:
         """Compile aggregated dashboard metrics for the project workspace."""
-        self._require_active_organisation_and_project(ctx=ctx)
+        self._require_active_organisation_and_project(ctx=ctx, allow_archived_project=True)
         project = ctx.project
         transition = self._project_repo.get_transition(project.id)
         source_metrics = self._project_repo.get_source_metrics(project.id)
-        evidence_metrics = self._project_repo.get_evidence_metrics(project.id)
+        all_evidence = self._project_repo.list_active_evidence_items(project.id)
+        acl_service = SourceAccessPolicyService()
+        has_project_manage = ctx.has_permission("project.manage")
+        accessible_evidence = [
+            item
+            for item in all_evidence
+            if acl_service.can_user_access_evidence(
+                evidence=item,
+                user_id=ctx.principal.user.id,
+                has_project_manage=has_project_manage,
+            )
+        ]
+        by_provider: dict[str, int] = {}
+        by_status: dict[str, int] = {}
+        doc_count = 0
+        for item in accessible_evidence:
+            by_provider[item.source_type] = by_provider.get(item.source_type, 0) + 1
+            by_status[item.processing_status] = by_status.get(item.processing_status, 0) + 1
+            if item.source_type == EvidenceSourceType.DOCUMENT_UPLOAD.value:
+                doc_count += 1
+        evidence_metrics = {
+            "total_records": len(accessible_evidence),
+            "by_provider": by_provider,
+            "by_status": by_status,
+            "document_count": doc_count,
+        }
+        knowledge_metrics = self._project_repo.get_knowledge_metrics(project.id)
         members, _ = self._project_repo.list_memberships(project_id=project.id, limit=100)
         recent_audit, _ = self._project_repo.get_project_activity(
             project_id=project.id,
@@ -879,26 +908,27 @@ class ProjectService:
         )
 
         knowledge_card = KnowledgeOverviewCard(
-            decisions_count=0,
-            tasks_count=0,
-            risks_count=0,
-            responsibilities_count=0,
-            dependencies_count=0,
-            availability="not_implemented",
+            decisions_count=knowledge_metrics["decisions_count"],
+            tasks_count=knowledge_metrics["tasks_count"],
+            risks_count=knowledge_metrics["risks_count"],
+            responsibilities_count=knowledge_metrics["responsibilities_count"],
+            dependencies_count=knowledge_metrics["dependencies_count"],
+            availability=knowledge_metrics["availability"],
         )
 
         attention_items: list[AttentionItemCard] = []
         for mapping in source_metrics.get("mappings", []):
-            sync_status = getattr(mapping, "last_sync_status", None) or getattr(mapping, "status", None)
-            if sync_status in ("failed", "error"):
-                error_msg = getattr(mapping, "last_error_summary", None) or "Unknown error"
+            if (
+                mapping.status == ProjectSourceMappingStatus.ERROR.value
+                or mapping.last_sync_status == "failed"
+            ):
                 attention_items.append(
                     AttentionItemCard(
                         id=f"sync-err-{mapping.id}",
                         type="source_sync_failure",
                         message=(
                             f"Sync failed for {mapping.external_resource_name}: "
-                            f"{error_msg}"
+                            f"{mapping.last_error_summary or 'Unknown error'}"
                         ),
                         resource_id=str(mapping.id),
                     )
@@ -947,7 +977,7 @@ class ProjectService:
         offset: int = 0,
     ) -> ProjectActivityListResponse:
         """Return paginated project audit activity stream."""
-        self._require_active_organisation_and_project(ctx=ctx)
+        self._require_active_organisation_and_project(ctx=ctx, allow_archived_project=True)
         logs, total = self._project_repo.get_project_activity(
             project_id=ctx.project.id,
             limit=limit,

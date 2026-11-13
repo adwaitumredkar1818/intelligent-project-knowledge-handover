@@ -20,6 +20,7 @@ from sqlalchemy import (
     func,
     text,
 )
+from sqlalchemy.dialects.postgresql import JSONB
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from app.db.base import Base
@@ -29,6 +30,8 @@ if TYPE_CHECKING:
     from app.models.organisation import Organisation
     from app.models.rbac import Role
     from app.models.user import User
+
+_JSON_VARIANT = JSON().with_variant(JSONB(astext_type=Text()), "postgresql")
 
 
 class Project(Base):
@@ -249,7 +252,7 @@ class ProjectTransition(Base):
         server_default="planning",
     )
     handover_scope: Mapped[str | None] = mapped_column(Text, nullable=True)
-    source_scope: Mapped[list[str] | None] = mapped_column(JSON, nullable=True)
+    source_scope: Mapped[list[str] | None] = mapped_column(_JSON_VARIANT, nullable=True)
     capture_start_date: Mapped[date | None] = mapped_column(Date, nullable=True)
     capture_end_date: Mapped[date | None] = mapped_column(Date, nullable=True)
     context_notes: Mapped[str | None] = mapped_column(Text, nullable=True)

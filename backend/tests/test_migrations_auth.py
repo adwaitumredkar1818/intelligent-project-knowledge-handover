@@ -30,7 +30,8 @@ def test_isolated_postgres_auth_migration_upgrade_downgrade_cycle() -> None:
         f"postgresql://{db_cfg.user}:{password}@127.0.0.1:{db_cfg.port}/postgres"
     )
     temp_url = (
-        f"postgresql+psycopg://{db_cfg.user}:{password}@127.0.0.1:{db_cfg.port}/{temp_db}"
+        f"postgresql+psycopg://{db_cfg.user}:{password}"
+        f"@127.0.0.1:{db_cfg.port}/{temp_db}?sslmode=disable"
     )
 
     try:

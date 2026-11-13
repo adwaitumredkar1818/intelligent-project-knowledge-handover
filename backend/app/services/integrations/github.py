@@ -168,7 +168,9 @@ class GitHubIntegrationService:
                         title = f"Issue #{iss_num}: {iss.get('title', 'Untitled Issue')}"
                         iss_user = iss.get("user", {}).get("login")
                         iss_state = iss.get("state")
-                        raw_text = f"{title}\nReporter: {iss_user}\nState: {iss_state}\n\n{iss_body}"
+                        raw_text = (
+                            f"{title}\nReporter: {iss_user}\nState: {iss_state}\n\n{iss_body}"
+                        )
                         h = hashlib.sha256(raw_text.encode("utf-8")).hexdigest()
                         created_str = iss.get("created_at")
                         dt = (

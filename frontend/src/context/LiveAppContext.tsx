@@ -8,7 +8,7 @@ import React, {
   useCallback,
   type ReactNode,
 } from "react";
-import { api, setStoredToken, ApiError } from "../lib/api";
+import { api, setStoredToken } from "../lib/api";
 import type {
   User,
   Organisation,
@@ -217,14 +217,21 @@ export function LiveAppProvider({ children }: { children: ReactNode }) {
   }, [user]);
 
   useEffect(() => {
-    if (user) {
-      refreshOrganisations();
-    } else {
-      setOrganisations([]);
-      setActiveOrg(null);
-      setProjects([]);
-      setActiveProject(null);
-    }
+    let active = true;
+    void Promise.resolve().then(async () => {
+      if (!active) return;
+      if (user) {
+        await refreshOrganisations();
+      } else {
+        setOrganisations([]);
+        setActiveOrg(null);
+        setProjects([]);
+        setActiveProject(null);
+      }
+    });
+    return () => {
+      active = false;
+    };
   }, [user, refreshOrganisations]);
 
   // Load projects for active organization
@@ -243,12 +250,12 @@ export function LiveAppProvider({ children }: { children: ReactNode }) {
       } else {
         setActiveProject(null);
       }
-    } catch (err: any) {
+    } catch (err: unknown) {
       console.error("Error loading projects:", err);
       addToast({
         type: "error",
         title: "Failed to load projects",
-        message: err.message || "Could not retrieve projects",
+        message: err instanceof Error ? err.message : "Could not retrieve projects",
       });
     } finally {
       setIsLoadingProjects(false);
@@ -256,9 +263,16 @@ export function LiveAppProvider({ children }: { children: ReactNode }) {
   }, [activeOrg, addToast]);
 
   useEffect(() => {
-    if (activeOrg) {
-      refreshProjects();
-    }
+    if (!activeOrg) return;
+    let active = true;
+    void Promise.resolve().then(async () => {
+      if (active) {
+        await refreshProjects();
+      }
+    });
+    return () => {
+      active = false;
+    };
   }, [activeOrg, refreshProjects]);
 
   // Load project overview
@@ -271,7 +285,7 @@ export function LiveAppProvider({ children }: { children: ReactNode }) {
     try {
       const ov = await api.projects.getOverview(activeProject.id);
       setOverview(ov);
-    } catch (err: any) {
+    } catch (err: unknown) {
       console.error("Error loading project overview:", err);
     } finally {
       setIsLoadingOverview(false);
@@ -288,7 +302,7 @@ export function LiveAppProvider({ children }: { children: ReactNode }) {
     try {
       const m = await api.members.list(activeProject.id);
       setMembers(m);
-    } catch (err: any) {
+    } catch (err: unknown) {
       console.error("Error loading project members:", err);
     } finally {
       setIsLoadingMembers(false);
@@ -310,7 +324,7 @@ export function LiveAppProvider({ children }: { children: ReactNode }) {
       ]);
       setSourceMappings(mappings);
       setOrgConnections(conns);
-    } catch (err: any) {
+    } catch (err: unknown) {
       console.error("Error loading sources:", err);
     } finally {
       setIsLoadingSources(false);
@@ -338,7 +352,7 @@ export function LiveAppProvider({ children }: { children: ReactNode }) {
       if (items.length > 0 && !selectedEvidenceId && items[0]) {
         setSelectedEvidenceId(items[0].id);
       }
-    } catch (err: any) {
+    } catch (err: unknown) {
       console.error("Error loading evidence:", err);
     } finally {
       setIsLoadingEvidence(false);
@@ -356,7 +370,7 @@ export function LiveAppProvider({ children }: { children: ReactNode }) {
       try {
         const detail = await api.evidence.getDetail(selectedEvidenceId);
         setSelectedEvidence(detail);
-      } catch (err: any) {
+      } catch (err: unknown) {
         console.error("Error loading evidence detail:", err);
         setSelectedEvidence(null);
       } finally {
@@ -368,12 +382,18 @@ export function LiveAppProvider({ children }: { children: ReactNode }) {
 
   // Trigger data refreshes when active project changes
   useEffect(() => {
-    if (activeProject) {
-      refreshOverview();
-      refreshMembers();
-      refreshSources();
-      refreshEvidence();
-    }
+    if (!activeProject) return;
+    let active = true;
+    void Promise.resolve().then(() => {
+      if (!active) return;
+      void refreshOverview();
+      void refreshMembers();
+      void refreshSources();
+      void refreshEvidence();
+    });
+    return () => {
+      active = false;
+    };
   }, [activeProject, refreshOverview, refreshMembers, refreshSources, refreshEvidence]);
 
   // Auth actions
@@ -528,11 +548,11 @@ export function LiveAppProvider({ children }: { children: ReactNode }) {
       await refreshSources();
       await refreshEvidence();
       await refreshOverview();
-    } catch (err: any) {
+    } catch (err: unknown) {
       addToast({
         type: "error",
         title: "Sync Failed",
-        message: err.message || "Failed to trigger sync",
+        message: err instanceof Error ? err.message : "Failed to trigger sync",
       });
     }
   };
@@ -568,11 +588,11 @@ export function LiveAppProvider({ children }: { children: ReactNode }) {
         title: "Download Complete",
         message: `Decrypted ${filename || "evidence file"} successfully`,
       });
-    } catch (err: any) {
+    } catch (err: unknown) {
       addToast({
         type: "error",
         title: "Download Failed",
-        message: err.message || "Could not download decrypted evidence",
+        message: err instanceof Error ? err.message : "Could not download decrypted evidence",
       });
     }
   };

@@ -27,7 +27,10 @@ def test_isolated_postgres_workspace_migration_upgrade_downgrade_cycle() -> None
     temp_db = f"ipkrh_mig_ws_test_{uuid.uuid4().hex[:8]}"
 
     admin_dsn = f"postgresql://{db_cfg.user}:{password}@127.0.0.1:{db_cfg.port}/postgres"
-    temp_url = f"postgresql+psycopg://{db_cfg.user}:{password}@127.0.0.1:{db_cfg.port}/{temp_db}"
+    temp_url = (
+        f"postgresql+psycopg://{db_cfg.user}:{password}"
+        f"@127.0.0.1:{db_cfg.port}/{temp_db}?sslmode=disable"
+    )
 
     try:
         admin_conn = psycopg.connect(admin_dsn, autocommit=True, connect_timeout=2)

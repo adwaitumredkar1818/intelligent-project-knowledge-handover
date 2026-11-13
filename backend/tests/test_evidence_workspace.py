@@ -40,17 +40,17 @@ def _register_and_login(
 
 def _create_sample_pdf_bytes(title: str = "Architecture Decision Record") -> bytes:
     """Generate minimal valid PDF bytes in-memory using PyMuPDF."""
-    doc = pymupdf.open()
+    doc = pymupdf.open()  # type: ignore[no-untyped-call]
     doc.set_metadata({"title": title})
     page = doc.new_page()
     page.insert_text(
-        pymupdf.Point(50, 72),
+        pymupdf.Point(50, 72),  # type: ignore[no-untyped-call]
         f"# {title}\n\nDecision: Migrate monolithic core to event-driven services.\n"
         "Rationale: Unblock parallel team development and isolated deployments.",
         fontsize=12,
     )
-    pdf_bytes = doc.tobytes()
-    doc.close()
+    pdf_bytes = doc.tobytes()  # type: ignore[no-untyped-call]
+    doc.close()  # type: ignore[no-untyped-call]
     return bytes(pdf_bytes)
 
 

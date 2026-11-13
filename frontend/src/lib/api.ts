@@ -40,6 +40,69 @@ export function setStoredToken(token: string | null) {
   }
 }
 
+interface ApiErrorPayload {
+  error?: {
+    message?: string;
+    details?: unknown;
+  };
+  message?: string;
+  detail?: unknown;
+  details?: unknown;
+}
+
+interface ValidationDetailItem {
+  msg?: string;
+  loc?: unknown[];
+}
+
+interface RawOverviewResponse {
+  readiness?: ProjectOverview["readiness"];
+  sources?: ProjectOverview["sources"];
+  project_summary?: {
+    project_id?: string;
+    name?: string;
+    status?: string;
+    target_completion_date?: string | null;
+  };
+  connected_sources?: {
+    total_sources?: number;
+    active_providers?: string[];
+    health_status?: string;
+  };
+  evidence_overview?: {
+    total_records?: number;
+    document_count?: number;
+    by_provider?: Record<string, number>;
+  };
+  knowledge_overview?: {
+    decisions_count?: number;
+    tasks_count?: number;
+    risks_count?: number;
+    responsibilities_count?: number;
+    dependencies_count?: number;
+    availability?: string;
+  };
+  attention_required?: Array<{
+    id?: string;
+    type?: string;
+    message?: string;
+    resource_id?: string | null;
+  }>;
+  attention_items?: Array<{
+    id?: string;
+    type?: string;
+    message?: string;
+    resource_id?: string | null;
+  }>;
+  recent_activity?: Array<{
+    id?: string;
+    event_type?: string;
+    description?: string;
+    actor_name?: string | null;
+    timestamp?: string;
+  }>;
+}
+
 async function request<T>(
   path: string,
   options: RequestInit = {}
@@ -65,9 +128,9 @@ async function request<T>(
   });
 
   if (!res.ok) {
-    let errorData: any = null;
+    let errorData: ApiErrorPayload | null = null;
     try {
-      errorData = await res.json();
+      errorData = (await res.json()) as ApiErrorPayload;
     } catch {
       // ignore
     }
@@ -81,12 +144,13 @@ async function request<T>(
       if (typeof details === "string") {
         message = details;
       } else if (Array.isArray(details)) {
-        const detailMsgs = details.map((d: any) => {
+        const detailMsgs = details.map((d: unknown) => {
           if (typeof d === "string") return d;
-          if (d?.msg) {
-            const loc = Array.isArray(d.loc) ? d.loc.slice(-1)[0] : "";
-            const cleanMsg = String(d.msg).replace(/^Value error,\s*/i, "");
-            return loc && loc !== "body" ? `${loc}: ${cleanMsg}` : cleanMsg;
+          const item = d as ValidationDetailItem | null;
+          if (item?.msg) {
+            const loc = Array.isArray(item.loc) ? item.loc.slice(-1)[0] : "";
+            const cleanMsg = String(item.msg).replace(/^Value error,\s*/i, "");
+            return loc && loc !== "body" ? `${String(loc)}: ${cleanMsg}` : cleanMsg;
           }
           return JSON.stringify(d);
         });
@@ -103,10 +167,13 @@ async function request<T>(
   return res.json() as Promise<T>;
 }
 
-function unwrapList<T>(res: any): T[] {
+function unwrapList<T>(res: unknown): T[] {
   if (!res) return [];
-  if (Array.isArray(res)) return res;
-  if (Array.isArray(res.items)) return res.items;
+  if (Array.isArray(res)) return res as T[];
+  if (typeof res === "object" && "items" in res) {
+    const items = (res as { items?: unknown }).items;
+    if (Array.isArray(items)) return items as T[];
+  }
   return [];
 }
 
@@ -133,7 +200,7 @@ export const api = {
   // Organisations
   organisations: {
     async list(): Promise<Organisation[]> {
-      const res = await request<any>("/organisations");
+      const res = await request<unknown>("/organisations");
       return unwrapList<Organisation>(res);
     },
     async create(data: { name: string; slug?: string; description?: string }): Promise<Organisation> {
@@ -150,7 +217,7 @@ export const api = {
   // Projects
   projects: {
     async list(orgId: string): Promise<Project[]> {
-      const res = await request<any>(`/organisations/${orgId}/projects`);
+      const res = await request<unknown>(`/organisations/${orgId}/projects`);
       return unwrapList<Project>(res);
     },
     async create(orgId: string, data: { name: string; slug?: string; description?: string; target_handover_date?: string }): Promise<Project> {
@@ -163,9 +230,9 @@ export const api = {
       return request<Project>(`/projects/${projectId}`);
     },
     async getOverview(projectId: string): Promise<ProjectOverview> {
-      const raw = await request<any>(`/projects/${projectId}/overview`);
+      const raw = await request<RawOverviewResponse>(`/projects/${projectId}/overview`);
       if (raw && raw.readiness && raw.sources) {
-        return raw as ProjectOverview;
+        return raw as unknown as ProjectOverview;
       }
       const summary = raw?.project_summary || {};
       const connSources = raw?.connected_sources || {};
@@ -222,13 +289,13 @@ export const api = {
           dependencies_count: knowOverview.dependencies_count || 0,
           availability: knowOverview.availability || "available",
         },
-        attention_items: attention.map((a: any) => ({
+        attention_items: attention.map((a) => ({
           id: a.id || String(Math.random()),
           type: a.type || "notice",
           message: a.message || "",
           resource_id: a.resource_id || null,
         })),
-        recent_activity: activity.map((ac: any) => ({
+        recent_activity: activity.map((ac) => ({
           id: ac.id || String(Math.random()),
           event_type: ac.event_type || "activity",
           description: ac.description || "",
@@ -242,7 +309,7 @@ export const api = {
   // Project Members & Transition Roles
   members: {
     async list(projectId: string): Promise<ProjectMember[]> {
-      const res = await request<any>(`/projects/${projectId}/members`);
+      const res = await request<unknown>(`/projects/${projectId}/members`);
       return unwrapList<ProjectMember>(res);
     },
     async add(projectId: string, data: { user_id?: string; email?: string; role_name?: string; transition_role?: string }): Promise<ProjectMember> {
@@ -262,7 +329,7 @@ export const api = {
   // Sources & Connections
   sources: {
     async listOrgConnections(orgId: string): Promise<SourceConnection[]> {
-      const res = await request<any>(`/organisations/${orgId}/sources`);
+      const res = await request<unknown>(`/organisations/${orgId}/sources`);
       return unwrapList<SourceConnection>(res);
     },
     async connectSource(orgId: string, data: { provider: "github" | "jira"; access_token: string; account_identifier: string; granted_scopes?: string[] }): Promise<SourceConnection> {
@@ -272,7 +339,7 @@ export const api = {
       });
     },
     async listProjectMappings(projectId: string): Promise<ProjectSourceMapping[]> {
-      const res = await request<any>(`/projects/${projectId}/sources/mappings`);
+      const res = await request<unknown>(`/projects/${projectId}/sources/mappings`);
       return unwrapList<ProjectSourceMapping>(res);
     },
     async createProjectMapping(projectId: string, data: { source_connection_id: string; external_resource_key: string; external_resource_name: string; external_resource_url?: string }): Promise<ProjectSourceMapping> {
@@ -287,9 +354,9 @@ export const api = {
         { method: "POST" }
       );
     },
-    async getSyncJobs(projectId: string, mappingId: string): Promise<any[]> {
-      const res = await request<any>(`/projects/${projectId}/sources/mappings/${mappingId}/jobs`);
-      return unwrapList<any>(res);
+    async getSyncJobs(projectId: string, mappingId: string): Promise<Record<string, unknown>[]> {
+      const res = await request<unknown>(`/projects/${projectId}/sources/mappings/${mappingId}/jobs`);
+      return unwrapList<Record<string, unknown>>(res);
     },
   },
 
@@ -302,7 +369,7 @@ export const api = {
       if (params.limit) query.append("limit", params.limit.toString());
       if (params.offset) query.append("offset", params.offset.toString());
       const qs = query.toString() ? `?${query.toString()}` : "";
-      const res = await request<any>(`/projects/${projectId}/evidence${qs}`);
+      const res = await request<unknown>(`/projects/${projectId}/evidence${qs}`);
       return unwrapList<EvidenceSummary>(res);
     },
     async getMetrics(projectId: string): Promise<EvidenceMetrics> {

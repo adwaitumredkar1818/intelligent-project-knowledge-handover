@@ -48,10 +48,11 @@ class SyncWorker:
     def run_once(self) -> int:
         with self.session_factory() as session:
             from sqlalchemy import select
-            from app.models.job import BackgroundJob
+
             from app.models.enums import BackgroundJobStatus, BackgroundJobType
-            from app.models.integration import ProjectSourceMapping
             from app.models.evidence import EvidenceItem
+            from app.models.integration import ProjectSourceMapping
+            from app.models.job import BackgroundJob
             from app.services.integrations.github import GitHubIntegrationService
 
             job = session.execute(

@@ -1,11 +1,11 @@
 "use client";
 
 import React, { useState } from "react";
-import { X, PlugZap, ShieldAlert, ArrowRight, AlertCircle, GitBranch, CheckCircle2 } from "lucide-react";
+import { X, PlugZap, ShieldAlert, ArrowRight, AlertCircle } from "lucide-react";
 import { useLiveApp } from "../../context/LiveAppContext";
 
 export function ConnectSourceModal() {
-  const { isAddSourceModalOpen, setIsAddSourceModalOpen, connectSource, createMapping, activeProject } = useLiveApp();
+  const { isAddSourceModalOpen, setIsAddSourceModalOpen, connectSource, createMapping } = useLiveApp();
   const [provider, setProvider] = useState<"github" | "jira">("github");
   const [accountIdentifier, setAccountIdentifier] = useState("");
   const [token, setToken] = useState("");
@@ -38,8 +38,8 @@ export function ConnectSourceModal() {
       setToken("");
       setResourceKey("");
       setResourceName("");
-    } catch (err: any) {
-      setError(err.message || "Failed to connect source and map resource");
+    } catch (err: unknown) {
+      setError(err instanceof Error ? err.message : "Failed to connect source and map resource");
     } finally {
       setIsSubmitting(false);
     }

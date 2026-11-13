@@ -60,8 +60,8 @@ export function AuthModal() {
       } else {
         await register(email.trim(), password, fullName.trim());
       }
-    } catch (err: any) {
-      setErrorMessage(err.message || "Authentication failed");
+    } catch (err: unknown) {
+      setErrorMessage(err instanceof Error ? err.message : "Authentication failed");
     } finally {
       setIsSubmitting(false);
     }

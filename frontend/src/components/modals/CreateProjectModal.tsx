@@ -1,6 +1,6 @@
 "use client";
 
-import React, { useState, useEffect } from "react";
+import React, { useState } from "react";
 import { X, FolderGit2, Calendar, ArrowRight, AlertCircle, Building2, Plus } from "lucide-react";
 import { useLiveApp } from "../../context/LiveAppContext";
 
@@ -35,8 +35,12 @@ export function CreateProjectModal() {
       setIsCreatingNewOrg(true);
     }
   }, [activeOrg, organisations, isCreateProjectModalOpen]);
-
   if (!isCreateProjectModalOpen) return null;
+
+  const effectiveSelectedOrgId =
+    selectedOrgId && organisations.some((o) => o.id === selectedOrgId)
+      ? selectedOrgId
+      : activeOrg?.id || organisations[0]?.id || "";
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -56,7 +60,7 @@ export function CreateProjectModal() {
     try {
       const options = needsNewOrg
         ? { newOrgName: newOrgName.trim() }
-        : { orgId: selectedOrgId || activeOrg?.id };
+        : { orgId: effectiveSelectedOrgId || activeOrg?.id };
 
       await createProject(
         {
@@ -71,9 +75,10 @@ export function CreateProjectModal() {
       setDescription("");
       setTargetDate("");
       setNewOrgName("");
+      setSelectedOrgId("");
       setIsCreatingNewOrg(false);
-    } catch (err: any) {
-      setError(err.message || "Failed to create project");
+    } catch (err: unknown) {
+      setError(err instanceof Error ? err.message : "Failed to create project");
     } finally {
       setIsSubmitting(false);
     }
@@ -158,7 +163,7 @@ export function CreateProjectModal() {
               <div className="relative">
                 <Building2 className="w-4 h-4 text-[#69778D] absolute left-3 top-2.5 pointer-events-none" />
                 <select
-                  value={selectedOrgId}
+                  value={effectiveSelectedOrgId}
                   onChange={(e) => setSelectedOrgId(e.target.value)}
                   className="w-full pl-9 pr-3 py-2 rounded-lg border border-[#DCE3EB] text-xs focus:outline-none focus:ring-2 focus:ring-[#4774A9] text-[#25334B] bg-white"
                 >

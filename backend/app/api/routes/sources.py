@@ -4,23 +4,20 @@ from __future__ import annotations
 
 import logging
 import uuid
-from datetime import UTC, datetime
-from typing import Annotated, Any
+from datetime import datetime
+from typing import Annotated
 
-from fastapi import APIRouter, Depends, HTTPException, Query, Response, status
+from fastapi import APIRouter, Depends, status
 from pydantic import Field
+from sqlalchemy.orm import Session
 
 from app.api.deps import (
-    get_app_settings,
     get_current_principal,
     get_db_session,
     get_token_encryption_service,
-    require_organisation_permission,
     require_project_permission,
 )
-from app.core.config import Settings
-from app.core.exceptions import ForbiddenError, NotFoundError
-from app.core.security import utc_now
+from app.core.exceptions import NotFoundError
 from app.models.enums import BackgroundJobStatus, BackgroundJobType
 from app.models.integration import (
     ProjectSourceMapping,
@@ -30,7 +27,7 @@ from app.models.integration import (
 )
 from app.models.job import BackgroundJob
 from app.schemas.common import BaseSchema
-from app.services.rbac import AuthenticatedPrincipal, OrganisationContext, ProjectContext
+from app.services.rbac import AuthenticatedPrincipal, ProjectContext
 from app.services.token_encryption import TokenEncryptionService
 
 logger = logging.getLogger("app.api.routes.sources")
@@ -126,7 +123,7 @@ def create_organisation_source(
     organisation_id: uuid.UUID,
     payload: CreateSourceConnectionRequest,
     principal: Annotated[AuthenticatedPrincipal, Depends(get_current_principal)],
-    session: Annotated[Any, Depends(get_db_session)],
+    session: Annotated[Session, Depends(get_db_session)],
     token_encryption: Annotated[TokenEncryptionService, Depends(get_token_encryption_service)],
 ) -> SourceConnectionItemResponse:
     encrypted_payload = token_encryption.encrypt_token(
@@ -134,10 +131,12 @@ def create_organisation_source(
         organisation_id=organisation_id,
         user_id=principal.user.id,
         provider=payload.provider.lower(),
-        token_kind="access_token",
+        token_kind="access_token",  # noqa: S106
     )
 
-    display_name = payload.display_name or f"{payload.provider.capitalize()} ({payload.account_identifier})"
+    display_name = payload.display_name or (
+        f"{payload.provider.capitalize()} ({payload.account_identifier})"
+    )
     conn = SourceConnection(
         organisation_id=organisation_id,
         provider=payload.provider.lower(),
@@ -189,7 +188,7 @@ def create_organisation_source(
 def list_organisation_sources(
     organisation_id: uuid.UUID,
     principal: Annotated[AuthenticatedPrincipal, Depends(get_current_principal)],
-    session=Depends(get_db_session),
+    session: Annotated[Session, Depends(get_db_session)],
 ) -> SourceConnectionListResponse:
     from sqlalchemy import select
 
@@ -223,9 +222,10 @@ def patch_source_connection(
     connection_id: uuid.UUID,
     payload: PatchSourceConnectionRequest,
     principal: Annotated[AuthenticatedPrincipal, Depends(get_current_principal)],
-    session=Depends(get_db_session),
+    session: Annotated[Session, Depends(get_db_session)],
 ) -> SourceConnectionItemResponse:
     from sqlalchemy import select
+
     from app.models.evidence import EvidenceItem
 
     conn = session.execute(
@@ -283,7 +283,7 @@ def create_project_source_mapping(
         ProjectContext,
         Depends(require_project_permission("project.read")),
     ],
-    session=Depends(get_db_session),
+    session: Annotated[Session, Depends(get_db_session)],
 ) -> SourceMappingItemResponse:
     from sqlalchemy import select
 
@@ -354,9 +354,9 @@ def list_project_source_mappings(
         ProjectContext,
         Depends(require_project_permission("project.read")),
     ],
-    session=Depends(get_db_session),
+    session: Annotated[Session, Depends(get_db_session)],
 ) -> SourceMappingListResponse:
-    from sqlalchemy import func, select
+    from sqlalchemy import select
 
     stmt = select(ProjectSourceMapping).where(
         ProjectSourceMapping.project_id == project_id,
@@ -392,7 +392,7 @@ def trigger_source_mapping_sync(
         ProjectContext,
         Depends(require_project_permission("project.read")),
     ],
-    session=Depends(get_db_session),
+    session: Annotated[Session, Depends(get_db_session)],
 ) -> SourceSyncTriggerResponse:
     from sqlalchemy import select
 
@@ -437,7 +437,7 @@ def list_source_mapping_jobs(
         ProjectContext,
         Depends(require_project_permission("project.read")),
     ],
-    session=Depends(get_db_session),
+    session: Annotated[Session, Depends(get_db_session)],
 ) -> SourceSyncJobsListResponse:
     from sqlalchemy import select
 

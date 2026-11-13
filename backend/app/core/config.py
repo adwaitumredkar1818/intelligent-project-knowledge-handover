@@ -439,6 +439,7 @@ class Settings(BaseSettings):
     postgres_password: SecretStr
     database_url: SecretStr
     postgres_ssl_mode: PostgresSslMode = "prefer"
+    postgres_connect_timeout_seconds: int = Field(default=5, ge=1, le=60)
 
     # ChromaDB configuration fields (grouped into `settings.chroma`)
     chroma_host: str = Field(default="localhost", min_length=1)
@@ -720,6 +721,7 @@ class Settings(BaseSettings):
             password=self.postgres_password,
             url=self.database_url,
             ssl_mode=self.postgres_ssl_mode,
+            connect_timeout_seconds=self.postgres_connect_timeout_seconds,
         )
 
     @cached_property

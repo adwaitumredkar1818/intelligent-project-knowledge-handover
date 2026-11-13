@@ -20,6 +20,7 @@ from app.schemas.evidence import (
     EvidencePageContentResponse,
     EvidenceSummaryResponse,
 )
+from app.schemas.health import HealthResponse, ReadinessResponse
 from app.schemas.integrations import (
     CancelSyncResponse,
     CreateGitHubMappingRequest,
@@ -42,7 +43,6 @@ from app.schemas.integrations import (
     VerifySourceAccessRequest,
     VerifySourceAccessResponse,
 )
-from app.schemas.health import HealthResponse, ReadinessResponse
 from app.schemas.organisation import (
     AcceptInvitationResponse,
     AuditLogEntryResponse,

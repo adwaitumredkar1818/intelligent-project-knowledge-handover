@@ -164,8 +164,8 @@ class DocumentUploadResponse(BaseSchema):
                 ev = data.get("evidence")
                 if isinstance(ev, dict) and "id" in ev:
                     data["evidence_item_id"] = ev["id"]
-                elif hasattr(ev, "id"):
-                    data["evidence_item_id"] = getattr(ev, "id")
+                elif ev is not None and hasattr(ev, "id"):
+                    data["evidence_item_id"] = ev.id
         return data
 
 

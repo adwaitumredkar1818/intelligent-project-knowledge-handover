@@ -128,12 +128,14 @@ def test_rejects_unsupported_database_driver_and_bad_urls() -> None:
 def test_supabase_style_pooler_url_and_ssl_require() -> None:
     settings = build_test_settings(
         postgres_ssl_mode="require",
+        postgres_connect_timeout_seconds=20,
         database_url=(
             "postgresql+psycopg://postgres.example_ref:p%40ss%23word%3A1"
             "@region-1.pooler.supabase.com:5432/postgres"
         ),
     )
     assert settings.database.ssl_mode == "require"
+    assert settings.database.connect_timeout_seconds == 20
     assert settings.database.sqlalchemy_url().startswith("postgresql+psycopg://")
     rendered = f"{repr(settings)} {str(settings)} {repr(settings.database)}"
     assert "p%40ss%23word%3A1" not in rendered

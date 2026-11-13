@@ -1,22 +1,22 @@
 """Add supabase_auth_id to users and project_vector_indexes table.
 
 Revision ID: 0009_supabase_and_vector_indexes
-Revises: 0008_project_transitions
+Revises: 0008_project_transitions_rbac
 Create Date: 2026-11-13 00:45:00.000000
 """
 
 from __future__ import annotations
 
-from typing import Sequence, Union
+from collections.abc import Sequence
 
-from alembic import op
 import sqlalchemy as sa
+from alembic import op
 
 # revision identifiers, used by Alembic.
 revision: str = "0009_supabase_and_vector_indexes"
-down_revision: Union[str, None] = "0008_project_transitions_rbac"
-branch_labels: Union[str, Sequence[str], None] = None
-depends_on: Union[str, Sequence[str], None] = None
+down_revision: str | None = "0008_project_transitions_rbac"
+branch_labels: str | Sequence[str] | None = None
+depends_on: str | Sequence[str] | None = None
 
 
 def upgrade() -> None:
@@ -56,7 +56,12 @@ def upgrade() -> None:
             unique=True,
         ),
         sa.Column("collection_name", sa.String(128), nullable=False, unique=True),
-        sa.Column("embedding_model", sa.String(128), nullable=False, server_default="nomic-embed-text"),
+        sa.Column(
+            "embedding_model",
+            sa.String(128),
+            nullable=False,
+            server_default="nomic-embed-text",
+        ),
         sa.Column("embedding_dimension", sa.Integer(), nullable=False, server_default="768"),
         sa.Column("collection_version", sa.String(32), nullable=False, server_default="v1"),
         sa.Column("index_status", sa.String(32), nullable=False, server_default="ready"),
@@ -75,14 +80,17 @@ def upgrade() -> None:
         ),
     )
     op.create_index(
-        "ix_project_vector_indexes_org",
+        "ix_project_vector_indexes_organisation_id",
         "project_vector_indexes",
         ["organisation_id"],
     )
 
 
 def downgrade() -> None:
-    op.drop_index("ix_project_vector_indexes_org", table_name="project_vector_indexes")
+    op.drop_index(
+        "ix_project_vector_indexes_organisation_id",
+        table_name="project_vector_indexes",
+    )
     op.drop_table("project_vector_indexes")
     op.alter_column(
         "users",

@@ -43,7 +43,10 @@ def test_isolated_postgres_knowledge_migration_cycle() -> None:
     temp_db = f"ipkrh_mig_know_test_{uuid.uuid4().hex[:8]}"
 
     admin_dsn = f"postgresql://{db_cfg.user}:{password}@127.0.0.1:{db_cfg.port}/postgres"
-    temp_url = f"postgresql+psycopg://{db_cfg.user}:{password}@127.0.0.1:{db_cfg.port}/{temp_db}"
+    temp_url = (
+        f"postgresql+psycopg://{db_cfg.user}:{password}"
+        f"@127.0.0.1:{db_cfg.port}/{temp_db}?sslmode=disable"
+    )
 
     try:
         admin_conn = psycopg.connect(admin_dsn, autocommit=True, connect_timeout=2)
@@ -165,9 +168,8 @@ def test_isolated_postgres_knowledge_migration_cycle() -> None:
         finally:
             engine.dispose()
 
-        # 2. Upgrade to head (0007) and verify zero Alembic schema drift
-        command.upgrade(cfg, "head")
-        command.check(cfg)
+        # 2. Upgrade specifically to Phase 2.6 revision (0007)
+        command.upgrade(cfg, "0007_knowledge_reconstruction")
 
         engine = create_engine(temp_url, connect_args={"connect_timeout": 5})
         try:

@@ -11,9 +11,17 @@ from sqlalchemy.engine import CursorResult
 from sqlalchemy.orm import Session, selectinload
 
 from app.models.audit import AuditLog
-from app.models.enums import ProjectMembershipStatus, ProjectStatus, ProjectVisibility
+from app.models.enums import (
+    EvidenceProcessingStatus,
+    KnowledgeCategory,
+    ProjectMembershipStatus,
+    ProjectSourceMappingStatus,
+    ProjectStatus,
+    ProjectVisibility,
+)
 from app.models.evidence import EvidenceItem
 from app.models.integration import ProjectSourceMapping
+from app.models.knowledge import KnowledgeItem
 from app.models.project import Project, ProjectMembership, ProjectTransition
 from app.models.rbac import Role, RolePermission
 
@@ -284,20 +292,30 @@ class ProjectRepository:
         return list(self._session.scalars(stmt).all()), total
 
     def get_source_metrics(self, project_id: uuid.UUID) -> dict[str, Any]:
-        stmt = select(ProjectSourceMapping).where(
-            ProjectSourceMapping.project_id == project_id,
-            ProjectSourceMapping.status == "active",
-        ).options(selectinload(ProjectSourceMapping.source_connection))
+        stmt = (
+            select(ProjectSourceMapping)
+            .where(
+                ProjectSourceMapping.project_id == project_id,
+                ProjectSourceMapping.status.in_(
+                    [
+                        ProjectSourceMappingStatus.ACTIVE.value,
+                        ProjectSourceMappingStatus.ERROR.value,
+                    ]
+                ),
+            )
+            .options(selectinload(ProjectSourceMapping.source_connection))
+        )
         mappings = list(self._session.scalars(stmt).all())
         total_sources = len(mappings)
-        active_providers = sorted(
-            list({m.source_connection.provider for m in mappings if m.source_connection})
-        )
+        active_providers = sorted({m.provider for m in mappings})
         last_synced = None
         for m in mappings:
             if m.last_synced_at and (last_synced is None or m.last_synced_at > last_synced):
                 last_synced = m.last_synced_at
-        has_error = any(m.last_sync_status == "failed" for m in mappings)
+        has_error = any(
+            m.status == ProjectSourceMappingStatus.ERROR.value or m.last_sync_status == "failed"
+            for m in mappings
+        )
         if has_error:
             health_status = "needs_attention"
         elif total_sources > 0:
@@ -312,29 +330,41 @@ class ProjectRepository:
             "mappings": mappings,
         }
 
-    def get_evidence_metrics(self, project_id: uuid.UUID) -> dict[str, Any]:
-        stmt = select(EvidenceItem).where(
-            EvidenceItem.project_id == project_id,
-            EvidenceItem.deleted_at.is_(None),
+    def list_active_evidence_items(self, project_id: uuid.UUID) -> list[EvidenceItem]:
+        stmt = (
+            select(EvidenceItem)
+            .where(
+                EvidenceItem.project_id == project_id,
+                EvidenceItem.deleted_at.is_(None),
+                EvidenceItem.processing_status != EvidenceProcessingStatus.DELETED.value,
+            )
+            .options(selectinload(EvidenceItem.source_access_policy))
         )
-        items = list(self._session.scalars(stmt).all())
-        by_provider: dict[str, int] = {}
-        by_status: dict[str, int] = {}
-        doc_count = 0
-        for item in items:
-            provider = getattr(item, "source_provider", None) or "unknown"
-            status = getattr(item, "processing_status", None) or "unknown"
-            by_provider[provider] = by_provider.get(provider, 0) + 1
-            by_status[status] = by_status.get(status, 0) + 1
-            if getattr(item, "source_type", None) == "document_upload":
-                doc_count += 1
+        return list(self._session.scalars(stmt).all())
 
+    def get_knowledge_metrics(self, project_id: uuid.UUID) -> dict[str, Any]:
+        stmt = (
+            select(KnowledgeItem.category, func.count(KnowledgeItem.id))
+            .where(
+                KnowledgeItem.project_id == project_id,
+                KnowledgeItem.is_deleted.is_(False),
+                KnowledgeItem.is_synthetic.is_(False),
+            )
+            .group_by(KnowledgeItem.category)
+        )
+        counts: dict[str, int] = {
+            str(category): int(count)
+            for category, count in self._session.execute(stmt).all()
+        }
         return {
-            "total_records": len(items),
-            "by_provider": by_provider,
-            "by_status": by_status,
-            "document_count": doc_count,
-            "items": items,
+            "decisions_count": counts.get(KnowledgeCategory.DECISIONS_RATIONALE.value, 0),
+            "tasks_count": counts.get(KnowledgeCategory.WORK_ITEMS.value, 0),
+            "risks_count": counts.get(KnowledgeCategory.BUGS_BLOCKERS_RISKS.value, 0),
+            "responsibilities_count": counts.get(
+                KnowledgeCategory.RESPONSIBILITIES_OWNERSHIP.value, 0
+            ),
+            "dependencies_count": counts.get(KnowledgeCategory.DEPENDENCIES.value, 0),
+            "availability": "available",
         }
 
     def revoke_all_for_user_in_organisation(

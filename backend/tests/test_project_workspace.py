@@ -201,7 +201,7 @@ def test_project_workspace_full_lifecycle(monkeypatch: pytest.MonkeyPatch) -> No
         assert ov_data["evidence_overview"]["document_count"] == 0
 
         # Verify Knowledge Overview Card
-        assert ov_data["knowledge_overview"]["availability"] == "not_implemented"
+        assert ov_data["knowledge_overview"]["availability"] == "available"
         assert ov_data["knowledge_overview"]["decisions_count"] == 0
 
         # Verify Team Ownership Card

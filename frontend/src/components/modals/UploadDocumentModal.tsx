@@ -1,11 +1,11 @@
 "use client";
 
 import React, { useState, useRef } from "react";
-import { X, UploadCloud, FileText, Shield, ArrowRight, AlertCircle, CheckCircle2 } from "lucide-react";
+import { X, UploadCloud, Shield, ArrowRight, AlertCircle, CheckCircle2 } from "lucide-react";
 import { useLiveApp } from "../../context/LiveAppContext";
 
 export function UploadDocumentModal() {
-  const { isUploadModalOpen, setIsUploadModalOpen, uploadDocument, activeProject } = useLiveApp();
+  const { isUploadModalOpen, setIsUploadModalOpen, uploadDocument } = useLiveApp();
   const [selectedFile, setSelectedFile] = useState<File | null>(null);
   const [customTitle, setCustomTitle] = useState("");
   const [isUploading, setIsUploading] = useState(false);
@@ -47,8 +47,8 @@ export function UploadDocumentModal() {
       await uploadDocument(selectedFile, customTitle.trim() || undefined);
       setSelectedFile(null);
       setCustomTitle("");
-    } catch (err: any) {
-      setError(err.message || "Failed to upload document");
+    } catch (err: unknown) {
+      setError(err instanceof Error ? err.message : "Failed to upload document");
     } finally {
       setIsUploading(false);
     }

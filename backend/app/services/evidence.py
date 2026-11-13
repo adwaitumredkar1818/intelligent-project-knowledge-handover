@@ -624,18 +624,30 @@ class EvidenceService:
                     expected_plaintext_size=evidence.file_size_bytes,
                 )
                 text = ""
-                if evidence.category == EvidenceCategory.PDF_DOCUMENT.value or (evidence.mime_type or "").endswith("pdf"):
+                if evidence.category == EvidenceCategory.PDF_DOCUMENT.value or (
+                    evidence.mime_type or ""
+                ).endswith("pdf"):
                     import pymupdf
-                    with pymupdf.Document(stream=raw_bytes, filetype="pdf") as doc:
+
+                    with pymupdf.Document(  # type: ignore[no-untyped-call]
+                        stream=raw_bytes,
+                        filetype="pdf",
+                    ) as doc:
                         text = "\n".join(page.get_text() for page in doc).strip()
-                elif evidence.category == EvidenceCategory.DOCX_DOCUMENT.value or "wordprocessing" in (evidence.mime_type or ""):
+                elif (
+                    evidence.category == EvidenceCategory.DOCX_DOCUMENT.value
+                    or "wordprocessing" in (evidence.mime_type or "")
+                ):
                     import io
+
                     import docx
+
                     parsed = docx.Document(io.BytesIO(raw_bytes))
                     text = "\n".join(p.text for p in parsed.paragraphs if p.text).strip()
 
                 if text:
                     import hashlib
+
                     from app.models.evidence import EvidenceChunk
 
                     chunk = EvidenceChunk(

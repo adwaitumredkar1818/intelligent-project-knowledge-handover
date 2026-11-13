@@ -98,7 +98,7 @@ def test_live_qwen3_knowledge_reconstruction_grounding_and_metrics(
     )
     temp_url = (
         f"postgresql+psycopg://{live_cfg.database.user}:{password}"
-        f"@127.0.0.1:{live_cfg.database.port}/{temp_db}"
+        f"@127.0.0.1:{live_cfg.database.port}/{temp_db}?sslmode=disable"
     )
 
     try:

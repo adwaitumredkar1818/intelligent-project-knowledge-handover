@@ -26,8 +26,8 @@ export function CreateOrganisationModal() {
       setName("");
       setDescription("");
       setIsCreateOrgModalOpen(false);
-    } catch (err: any) {
-      setError(err.message || "Failed to create organisation");
+    } catch (err: unknown) {
+      setError(err instanceof Error ? err.message : "Failed to create organisation");
     } finally {
       setIsSubmitting(false);
     }
