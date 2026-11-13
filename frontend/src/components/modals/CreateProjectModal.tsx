@@ -1,6 +1,6 @@
 "use client";
 
-import React, { useState } from "react";
+import React, { useState, useEffect } from "react";
 import { X, FolderGit2, Calendar, ArrowRight, AlertCircle, Building2, Plus } from "lucide-react";
 import { useLiveApp } from "../../context/LiveAppContext";
 
