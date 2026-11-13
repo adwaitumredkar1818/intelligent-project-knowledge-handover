@@ -17,7 +17,7 @@ from dataclasses import dataclass
 from typing import Any
 
 from sqlalchemy import select
-from sqlalchemy.orm import Session
+from sqlalchemy.orm import Session, selectinload
 
 from app.models.enums import (
     EntityType,
@@ -192,7 +192,9 @@ class RelationshipDiscoveryEngine:
 
         entities = list(
             self._session.execute(
-                select(KnowledgeEntity).where(
+                select(KnowledgeEntity)
+                .options(selectinload(KnowledgeEntity.aliases))
+                .where(
                     KnowledgeEntity.project_id == project_id,
                     KnowledgeEntity.is_deleted.is_(False),
                 )
@@ -528,7 +530,9 @@ class RelationshipDiscoveryEngine:
         # Preload project entities
         entities = list(
             self._session.execute(
-                select(KnowledgeEntity).where(
+                select(KnowledgeEntity)
+                .options(selectinload(KnowledgeEntity.aliases))
+                .where(
                     KnowledgeEntity.project_id == project_id,
                     KnowledgeEntity.is_deleted.is_(False),
                 )

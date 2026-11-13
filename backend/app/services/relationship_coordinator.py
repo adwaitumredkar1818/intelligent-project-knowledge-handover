@@ -19,7 +19,7 @@ import time
 import uuid
 
 from sqlalchemy import select
-from sqlalchemy.orm import Session
+from sqlalchemy.orm import Session, selectinload
 
 from app.models.enums import (
     EntityType,
@@ -84,6 +84,7 @@ class RelationshipCoordinatorService:
     ) -> int:
         """Seed KnowledgeEntity records from existing KnowledgeItems and EvidenceItems."""
         seeded = 0
+        seen_people: dict[str, Any] = {}
 
         # 1. From KnowledgeItems
         k_items = list(
@@ -123,22 +124,25 @@ class RelationshipCoordinatorService:
                 "author"
             )
             if owner_name and isinstance(owner_name, str) and len(owner_name.strip()) > 1:
-                p_ent = self._entity_repo.create_or_get_entity(
-                    organisation_id=organisation_id,
-                    project_id=project_id,
-                    entity_type=EntityType.PERSON.value,
-                    canonical_name=owner_name.strip(),
-                    source_provider="metadata",
-                    is_synthetic=k.is_synthetic,
-                )
-                self._entity_repo.add_alias(
-                    entity_id=p_ent.id,
-                    organisation_id=organisation_id,
-                    project_id=project_id,
-                    alias_value=owner_name.strip(),
-                    source_provider="metadata",
-                    is_synthetic=k.is_synthetic,
-                )
+                norm_owner = owner_name.strip().lower()
+                if norm_owner not in seen_people:
+                    p_ent = self._entity_repo.create_or_get_entity(
+                        organisation_id=organisation_id,
+                        project_id=project_id,
+                        entity_type=EntityType.PERSON.value,
+                        canonical_name=owner_name.strip(),
+                        source_provider="metadata",
+                        is_synthetic=k.is_synthetic,
+                    )
+                    self._entity_repo.add_alias(
+                        entity_id=p_ent.id,
+                        organisation_id=organisation_id,
+                        project_id=project_id,
+                        alias_value=owner_name.strip(),
+                        source_provider="metadata",
+                        is_synthetic=k.is_synthetic,
+                    )
+                    seen_people[norm_owner] = p_ent
 
         # 2. From EvidenceItems (GitHub PRs, Commits, Jira Issues)
         evidence_items = list(
@@ -186,22 +190,25 @@ class RelationshipCoordinatorService:
             # Seed author/creator aliases
             author = meta.get("author") or meta.get("user") or meta.get("reporter")
             if author and isinstance(author, str) and len(author.strip()) > 1:
-                p_ent = self._entity_repo.create_or_get_entity(
-                    organisation_id=organisation_id,
-                    project_id=project_id,
-                    entity_type=EntityType.PERSON.value,
-                    canonical_name=author.strip(),
-                    source_provider=ev.source_type,
-                    is_synthetic=getattr(ev, "is_synthetic", False),
-                )
-                self._entity_repo.add_alias(
-                    entity_id=p_ent.id,
-                    organisation_id=organisation_id,
-                    project_id=project_id,
-                    alias_value=author.strip(),
-                    source_provider=ev.source_type,
-                    is_synthetic=getattr(ev, "is_synthetic", False),
-                )
+                norm_author = author.strip().lower()
+                if norm_author not in seen_people:
+                    p_ent = self._entity_repo.create_or_get_entity(
+                        organisation_id=organisation_id,
+                        project_id=project_id,
+                        entity_type=EntityType.PERSON.value,
+                        canonical_name=author.strip(),
+                        source_provider=ev.source_type,
+                        is_synthetic=getattr(ev, "is_synthetic", False),
+                    )
+                    self._entity_repo.add_alias(
+                        entity_id=p_ent.id,
+                        organisation_id=organisation_id,
+                        project_id=project_id,
+                        alias_value=author.strip(),
+                        source_provider=ev.source_type,
+                        is_synthetic=getattr(ev, "is_synthetic", False),
+                    )
+                    seen_people[norm_author] = p_ent
 
         self._session.flush()
         return seeded
@@ -277,7 +284,9 @@ class RelationshipCoordinatorService:
             # 6. Run Identity Resolution across entities of the same type
             all_entities = list(
                 self._session.execute(
-                    select(KnowledgeEntity).where(
+                    select(KnowledgeEntity)
+                    .options(selectinload(KnowledgeEntity.aliases))
+                    .where(
                         KnowledgeEntity.project_id == project_id,
                         KnowledgeEntity.is_deleted.is_(False),
                     )
@@ -303,6 +312,11 @@ class RelationshipCoordinatorService:
             )
 
             # 8. Index Timeline Events from Evidence Items
+            ents_by_ev: dict[uuid.UUID, list[KnowledgeEntity]] = {}
+            for e in all_entities:
+                if e.primary_evidence_id:
+                    ents_by_ev.setdefault(e.primary_evidence_id, []).append(e)
+
             evidence_items = list(
                 self._session.execute(
                     select(EvidenceItem).where(
@@ -314,18 +328,7 @@ class RelationshipCoordinatorService:
                 .all()
             )
             for ev in evidence_items:
-                # Find matching entities
-                matched_ents = (
-                    self._session.execute(
-                        select(KnowledgeEntity).where(
-                            KnowledgeEntity.project_id == project_id,
-                            KnowledgeEntity.primary_evidence_id == ev.id,
-                            KnowledgeEntity.is_deleted.is_(False),
-                        )
-                    )
-                    .scalars()
-                    .all()
-                )
+                matched_ents = ents_by_ev.get(ev.id, [])
                 for matched_ent in matched_ents:
                     evt_title = (
                         f"{matched_ent.entity_type.replace('_', ' ').title()}: "

@@ -116,7 +116,7 @@ class DatabaseSettings(BaseModel):
     password: SecretStr
     url: SecretStr
     ssl_mode: PostgresSslMode = "prefer"
-    connect_timeout_seconds: int = Field(default=5, ge=1, le=60)
+    connect_timeout_seconds: int = Field(default=30, ge=1, le=60)
 
     @model_validator(mode="after")
     def _validate_database(self) -> DatabaseSettings:

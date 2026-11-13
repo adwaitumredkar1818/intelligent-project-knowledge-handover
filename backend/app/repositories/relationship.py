@@ -50,7 +50,6 @@ from app.models.relationship import (
     RelationshipEvidenceLink,
     RelationshipReconstructionRun,
 )
-from app.services.integrations.access_policy import SourceAccessPolicyService
 
 # ==============================================================================
 # Helper ACL Methods
@@ -145,6 +144,8 @@ class EntityRepository:
 
     def __init__(self, session: Session) -> None:
         self._session = session
+        from app.services.integrations.access_policy import SourceAccessPolicyService
+
         self._access_policy = SourceAccessPolicyService()
 
     def create_or_get_entity(
@@ -536,6 +537,8 @@ class RelationshipRepository:
 
     def __init__(self, session: Session) -> None:
         self._session = session
+        from app.services.integrations.access_policy import SourceAccessPolicyService
+
         self._access_policy = SourceAccessPolicyService()
 
     @staticmethod
@@ -827,6 +830,8 @@ class TraceabilityRepository:
 
     def __init__(self, session: Session) -> None:
         self._session = session
+        from app.services.integrations.access_policy import SourceAccessPolicyService
+
         self._access_policy = SourceAccessPolicyService()
 
     def create_or_update_chain(
@@ -965,6 +970,8 @@ class TimelineRepository:
 
     def __init__(self, session: Session) -> None:
         self._session = session
+        from app.services.integrations.access_policy import SourceAccessPolicyService
+
         self._access_policy = SourceAccessPolicyService()
 
     @staticmethod
