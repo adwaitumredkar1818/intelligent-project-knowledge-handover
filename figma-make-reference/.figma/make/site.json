@@ -1,0 +1,14 @@
+{
+  "description": "Helps project teams capture, verify, and transfer evidence-backed knowledge, responsibilities, and risks so incoming members can continue work with confidence.",
+  "robots": {
+    "index": false
+  },
+  "accessibility": {
+    "addBypassLinks": false,
+    "ignoreReducedMotion": false
+  },
+  "title": "Handover \u2014 Knowledge continues",
+  "icons": {
+    "icon": "/favicon.png"
+  }
+}
