@@ -36,6 +36,7 @@ from app.services.evidence import EvidenceService
 from app.services.health import HealthService
 from app.services.integrations.service import SourceIntegrationService
 from app.services.knowledge import KnowledgeReconstructionService
+from app.services.knowledge_intelligence import KnowledgeIntelligenceService
 from app.services.llm import OllamaLLMClient, StructuredLLMClient
 from app.services.organisation import OrganisationService
 from app.services.project import ProjectService
@@ -400,6 +401,17 @@ def get_knowledge_reconstruction_service(
     )
 
 
+def get_knowledge_intelligence_service(
+    db_session: Session = Depends(get_db_session),  # noqa: B008
+    reconstruction_service: KnowledgeReconstructionService = Depends(  # noqa: B008
+        get_knowledge_reconstruction_service
+    ),
+) -> KnowledgeIntelligenceService:
+    """Construct KnowledgeIntelligenceService for the current request scope."""
+    return KnowledgeIntelligenceService(
+        session=db_session,
+        reconstruction_service=reconstruction_service,
+    )
 def get_current_principal(
     credentials: HTTPAuthorizationCredentials | None = Depends(_bearer_scheme),  # noqa: B008
     settings: Settings = Depends(get_app_settings),  # noqa: B008

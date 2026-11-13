@@ -12,12 +12,14 @@ from app.models.evidence import EvidenceChunk, EvidenceItem
 DEFAULT_PROMPT_VERSION = "p2.6-v1"
 
 ALL_EXTRACTION_CATEGORIES: tuple[KnowledgeCategory, ...] = (
+    KnowledgeCategory.PROJECT_OVERVIEW_CONTEXT,
     KnowledgeCategory.DECISIONS_RATIONALE,
     KnowledgeCategory.WORK_ITEMS,
     KnowledgeCategory.RESPONSIBILITIES_OWNERSHIP,
     KnowledgeCategory.TECHNICAL_ARCHITECTURE,
     KnowledgeCategory.BUGS_BLOCKERS_RISKS,
     KnowledgeCategory.DEPENDENCIES,
+    KnowledgeCategory.OPERATIONAL_HISTORICAL,
 )
 
 
@@ -83,6 +85,47 @@ STRICT GROUNDING & SAFETY RULES:
 
 
 _CATEGORY_INSTRUCTIONS: dict[KnowledgeCategory, tuple[str, str]] = {
+    KnowledgeCategory.PROJECT_OVERVIEW_CONTEXT: (
+        "overview_context_v1",
+        """Target Category: PROJECT OVERVIEW AND CONTEXT (mission, core objectives, problem statement,
+scope boundary, key stakeholders, target users, success criteria, constraints, and project terminology).
+Extract high-level project framing, purpose, objectives, and scope boundaries explicitly documented in evidence.
+Do NOT invent high-level goals not stated in evidence.
+Allowed overview_category values: purpose_mission, core_objectives, problem_statement,
+scope_boundary, stakeholder_ecosystem, target_audience, success_criteria, constraints, terminology, other.
+
+Expected JSON shape:
+{
+  "items": [
+    {
+      "title": "Concise project overview finding",
+      "description": "Factual description of project purpose, problem statement, scope boundary, or stakeholder context",
+      "overview_category": "purpose_mission|core_objectives|problem_statement|scope_boundary|stakeholder_ecosystem|target_audience|success_criteria|constraints|terminology|other",
+      "problem_statement": "Documented problem statement or null",
+      "objectives": ["Primary goal 1", "Primary goal 2"],
+      "in_scope": ["Documented in-scope item"],
+      "out_of_scope": ["Explicitly excluded item"],
+      "key_stakeholders": ["Stakeholder name/group"],
+      "target_users": ["Target user persona/audience"],
+      "success_criteria": ["Documented success criteria"],
+      "constraints": ["Documented organizational or technical constraint"],
+      "glossary_terms": ["TERM: Definition from evidence"],
+      "status": "current|legacy|superseded|proposed|unknown",
+      "is_interpretation": false,
+      "is_uncertain": false,
+      "uncertainty_reason": null,
+      "confidence_level": "high|medium|low",
+      "evidence_refs": [
+        {
+          "chunk_id": "EXACT-UUID-FROM-HEADER",
+          "supporting_excerpt": "VERBATIM QUOTE FROM CHUNK TEXT",
+          "support_type": "direct"
+        }
+      ]
+    }
+  ]
+}""",
+    ),
     KnowledgeCategory.DECISIONS_RATIONALE: (
         "decisions_v1",
         """Target Category: DECISIONS AND RATIONALE (architectural, product, process, infra,
@@ -313,7 +356,56 @@ Expected JSON shape:
   ]
 }""",
     ),
+    KnowledgeCategory.OPERATIONAL_HISTORICAL: (
+        "operational_historical_v1",
+        """Target Category: OPERATIONAL AND HISTORICAL CONTEXT (deployment runbooks, incident response procedures,
+troubleshooting guides, backup/restore procedures, migration steps, monitoring/alerting, chronological project events,
+timeline milestones, postmortem takeaways, and historical decisions).
+Preserve step-by-step procedures, commands, prerequisites, target environments, and historical timestamps accurately.
+Allowed knowledge_type values: deployment_runbook, incident_response, troubleshooting_guide,
+backup_restore, migration_procedure, monitoring_alerting, historical_context, key_event_chronology,
+legacy_decision_history, other.
+
+Expected JSON shape:
+{
+  "items": [
+    {
+      "title": "Concise operational procedure or historical milestone title",
+      "description": "Factual description of the operational procedure, runbook step, or historical event",
+      "knowledge_type": "deployment_runbook|incident_response|troubleshooting_guide|backup_restore|migration_procedure|monitoring_alerting|historical_context|key_event_chronology|legacy_decision_history|other",
+      "procedure_name": "Name of standard procedure or null",
+      "target_environment": "production|staging|dev|all|null",
+      "prerequisites": ["Required tools, credentials, or states"],
+      "execution_steps": ["Step 1...", "Step 2..."],
+      "verification_steps": ["How to verify completion"],
+      "rollback_steps": ["How to revert if failed"],
+      "event_timestamp": "Exact event date/time if historical, else null",
+      "historical_significance": "Why this historical context matters for handover, else null",
+      "lessons_learned": ["Documented postmortem takeaway"],
+      "superseded_reason": "Why superseded or obsolete if applicable, else null",
+      "status": "active|superseded|deprecated|draft|unknown",
+      "is_interpretation": false,
+      "is_uncertain": false,
+      "uncertainty_reason": null,
+      "confidence_level": "high|medium|low",
+      "evidence_refs": [
+        {
+          "chunk_id": "EXACT-UUID-FROM-HEADER",
+          "supporting_excerpt": "VERBATIM QUOTE FROM CHUNK TEXT",
+          "support_type": "direct"
+        }
+      ]
+    }
+  ]
+}""",
+    ),
 }
+
+# Aliases for canonical domain names
+_CATEGORY_INSTRUCTIONS[KnowledgeCategory.WORK_PROGRESS] = _CATEGORY_INSTRUCTIONS[KnowledgeCategory.WORK_ITEMS]
+_CATEGORY_INSTRUCTIONS[KnowledgeCategory.ARCHITECTURE_TECHNICAL] = _CATEGORY_INSTRUCTIONS[KnowledgeCategory.TECHNICAL_ARCHITECTURE]
+_CATEGORY_INSTRUCTIONS[KnowledgeCategory.DEPENDENCIES_RELATIONSHIPS] = _CATEGORY_INSTRUCTIONS[KnowledgeCategory.DEPENDENCIES]
+_CATEGORY_INSTRUCTIONS[KnowledgeCategory.RISKS_BLOCKERS_QUESTIONS] = _CATEGORY_INSTRUCTIONS[KnowledgeCategory.BUGS_BLOCKERS_RISKS]
 
 
 def build_chunk_prompt_input(

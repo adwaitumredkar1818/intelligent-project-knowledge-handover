@@ -23,12 +23,15 @@ from app.schemas.knowledge import (
     ConfidenceMetadata,
     DecisionCandidate,
     DependencyCandidate,
+    OperationalHistoricalCandidate,
+    ProjectOverviewCandidate,
     ResponsibilityCandidate,
     RiskBlockerCandidate,
     TechnicalKnowledgeCandidate,
     WorkItemCandidate,
 )
 from app.services.extraction_prompts import ChunkPromptInput
+from app.services.knowledge_domains import map_category_to_domain
 
 _WHITESPACE_RE = re.compile(r"\s+")
 _FINGERPRINT_SLUG_RE = re.compile(r"[^a-z0-9]+")
@@ -41,12 +44,19 @@ _EXPLICIT_SEVERITY_RE = re.compile(
 )
 
 _CANDIDATE_MODEL_BY_CATEGORY: dict[KnowledgeCategory, type[Any]] = {
+    KnowledgeCategory.PROJECT_OVERVIEW_CONTEXT: ProjectOverviewCandidate,
     KnowledgeCategory.DECISIONS_RATIONALE: DecisionCandidate,
     KnowledgeCategory.WORK_ITEMS: WorkItemCandidate,
     KnowledgeCategory.RESPONSIBILITIES_OWNERSHIP: ResponsibilityCandidate,
     KnowledgeCategory.TECHNICAL_ARCHITECTURE: TechnicalKnowledgeCandidate,
     KnowledgeCategory.BUGS_BLOCKERS_RISKS: RiskBlockerCandidate,
     KnowledgeCategory.DEPENDENCIES: DependencyCandidate,
+    KnowledgeCategory.OPERATIONAL_HISTORICAL: OperationalHistoricalCandidate,
+    # Domain aliases
+    KnowledgeCategory.WORK_PROGRESS: WorkItemCandidate,
+    KnowledgeCategory.ARCHITECTURE_TECHNICAL: TechnicalKnowledgeCandidate,
+    KnowledgeCategory.DEPENDENCIES_RELATIONSHIPS: DependencyCandidate,
+    KnowledgeCategory.RISKS_BLOCKERS_QUESTIONS: RiskBlockerCandidate,
 }
 
 
@@ -83,6 +93,8 @@ class ValidatedKnowledgeItemDraft:
     source_observed_at: datetime | None
     is_synthetic: bool
     evidence_links: tuple[VerifiedEvidenceLinkDraft, ...]
+    primary_domain: str | None = None
+    secondary_domains: tuple[str, ...] = ()
 
 
 @dataclass(slots=True)
@@ -138,14 +150,21 @@ def _slugify_key(value: str) -> str:
 
 def _extract_normalised_status(category: KnowledgeCategory, payload: dict[str, Any]) -> str | None:
     field_map = {
+        KnowledgeCategory.PROJECT_OVERVIEW_CONTEXT: "status",
         KnowledgeCategory.DECISIONS_RATIONALE: "decision_status",
         KnowledgeCategory.WORK_ITEMS: "work_status",
+        KnowledgeCategory.WORK_PROGRESS: "work_status",
         KnowledgeCategory.RESPONSIBILITIES_OWNERSHIP: "ownership_status",
         KnowledgeCategory.TECHNICAL_ARCHITECTURE: "technical_status",
+        KnowledgeCategory.ARCHITECTURE_TECHNICAL: "technical_status",
         KnowledgeCategory.BUGS_BLOCKERS_RISKS: "risk_status",
+        KnowledgeCategory.RISKS_BLOCKERS_QUESTIONS: "risk_status",
         KnowledgeCategory.DEPENDENCIES: "dependency_status",
+        KnowledgeCategory.DEPENDENCIES_RELATIONSHIPS: "dependency_status",
+        KnowledgeCategory.OPERATIONAL_HISTORICAL: "status",
     }
-    raw = payload.get(field_map[category])
+    field_name = field_map.get(category, "status")
+    raw = payload.get(field_name)
     return str(raw).strip() if raw is not None else None
 
 
@@ -153,13 +172,13 @@ def _extract_person_label(category: KnowledgeCategory, payload: dict[str, Any]) 
     if category == KnowledgeCategory.RESPONSIBILITIES_OWNERSHIP:
         val = payload.get("person_identity")
         return str(val).strip() if val else None
-    if category == KnowledgeCategory.WORK_ITEMS:
+    if category in {KnowledgeCategory.WORK_ITEMS, KnowledgeCategory.WORK_PROGRESS}:
         val = payload.get("assignee") or payload.get("creator")
         return str(val).strip() if val else None
     if category == KnowledgeCategory.DECISIONS_RATIONALE:
         val = payload.get("decision_maker")
         return str(val).strip() if val else None
-    if category == KnowledgeCategory.BUGS_BLOCKERS_RISKS:
+    if category in {KnowledgeCategory.BUGS_BLOCKERS_RISKS, KnowledgeCategory.RISKS_BLOCKERS_QUESTIONS}:
         val = payload.get("responsible_person")
         return str(val).strip() if val else None
     return None
@@ -181,12 +200,21 @@ def compute_conservative_fingerprint(
         comp_slug = _slugify_key(str(payload.get("component_or_workstream") or ""))
         role_slug = _slugify_key(str(payload.get("ownership_role") or ""))
         material = f"{category.value}|{raw_identity}|{comp_slug}|{role_slug}|{status_key}"
-    elif category == KnowledgeCategory.DEPENDENCIES:
+    elif category in {KnowledgeCategory.DEPENDENCIES, KnowledgeCategory.DEPENDENCIES_RELATIONSHIPS}:
         src_slug = _slugify_key(str(payload.get("source_item") or ""))
         dst_slug = _slugify_key(str(payload.get("target_item") or ""))
         dep_type = _slugify_key(str(payload.get("dependency_type") or ""))
         direction = _slugify_key(str(payload.get("direction") or ""))
         material = f"{category.value}|{src_slug}|{dst_slug}|{dep_type}|{direction}|{status_key}"
+    elif category == KnowledgeCategory.PROJECT_OVERVIEW_CONTEXT:
+        overview_cat = _slugify_key(str(payload.get("overview_category") or ""))
+        title_slug = _slugify_key(title)
+        material = f"{category.value}|{overview_cat}|{title_slug}|{status_key}"
+    elif category == KnowledgeCategory.OPERATIONAL_HISTORICAL:
+        know_type = _slugify_key(str(payload.get("knowledge_type") or ""))
+        proc_name = _slugify_key(str(payload.get("procedure_name") or title))
+        env = _slugify_key(str(payload.get("target_environment") or "any"))
+        material = f"{category.value}|{know_type}|{proc_name}|{env}|{status_key}"
     else:
         title_slug = _slugify_key(title)
         identity_suffix = (person_or_owner_label or "").strip().lower()
@@ -233,11 +261,19 @@ def _build_confidence_and_uncertainty(
     elif category == KnowledgeCategory.RESPONSIBILITIES_OWNERSHIP:
         if not payload.get("start_or_observed_date"):
             missing_fields.append("start_or_observed_date")
-    elif category == KnowledgeCategory.BUGS_BLOCKERS_RISKS:
+    elif category in {KnowledgeCategory.BUGS_BLOCKERS_RISKS, KnowledgeCategory.RISKS_BLOCKERS_QUESTIONS}:
         if payload.get("severity") == "unspecified":
             missing_fields.append("severity")
         if not payload.get("reported_date"):
             missing_fields.append("reported_date")
+    elif category == KnowledgeCategory.PROJECT_OVERVIEW_CONTEXT:
+        if not payload.get("overview_category"):
+            missing_fields.append("overview_category")
+    elif category == KnowledgeCategory.OPERATIONAL_HISTORICAL:
+        if not payload.get("knowledge_type"):
+            missing_fields.append("knowledge_type")
+        if payload.get("knowledge_type") in {"deployment_runbook", "incident_response"} and not payload.get("execution_steps"):
+            missing_fields.append("execution_steps")
 
     has_date = bool(
         payload.get("decision_date")
@@ -246,6 +282,7 @@ def _build_confidence_and_uncertainty(
         or payload.get("created_date")
         or payload.get("start_or_observed_date")
         or payload.get("reported_date")
+        or payload.get("event_timestamp")
     )
     temporal_certainty = "exact_date" if has_date else "missing"
 
@@ -482,6 +519,7 @@ class KnowledgeCandidateValidator:
                 "evidence_count": len({link.evidence_id for link in verified_links}),
             }
 
+            primary_dom = map_category_to_domain(category.value).value
             report.accepted_items.append(
                 ValidatedKnowledgeItemDraft(
                     category=category,
@@ -500,6 +538,8 @@ class KnowledgeCandidateValidator:
                     source_observed_at=_parse_optional_source_timestamp(cited_chunks),
                     is_synthetic=is_synthetic,
                     evidence_links=tuple(verified_links),
+                    primary_domain=primary_dom,
+                    secondary_domains=(),
                 )
             )
 

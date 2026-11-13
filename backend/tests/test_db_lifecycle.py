@@ -118,9 +118,10 @@ def test_alembic_configuration_and_revisions() -> None:
     cfg = Config(str(ini_path))
     script_dir = ScriptDirectory.from_config(cfg)
     heads = script_dir.get_heads()
-    assert heads == ["0009_supabase_and_vector_indexes"]
+    assert heads == ["0010_knowledge_domains"]
     revisions = [rev.revision for rev in script_dir.walk_revisions()]
     assert revisions == [
+        "0010_knowledge_domains",
         "0009_supabase_and_vector_indexes",
         "0008_project_transitions_rbac",
         "0007_knowledge_reconstruction",

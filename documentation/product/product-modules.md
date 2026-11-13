@@ -45,13 +45,13 @@ The Handover is structured into seven primary functional modules accessed via si
 - **Outputs**: Canonical `evidence_items`, `document_files`, `evidence_contents`, `source_connections`, `source_sync_jobs`.
 - **Interactions**: Supplies raw evidence and chunk references to Knowledge Intelligence and the retrieval index. Serves as the immutable proof backing all findings.
 
-### Module 3: Knowledge Intelligence (Architecturally Supported)
-- **Purpose**: Extracts structured knowledge findings across the eight project knowledge domains from evidence chunks using local LLM inference.
+### Module 3: Knowledge Intelligence (Fully Implemented Backend)
+- **Purpose**: Extracts structured knowledge findings across all eight canonical project knowledge domains from evidence chunks using local LLM inference (`qwen3:8b`), strictly backed by verified verbatim evidence excerpts.
 - **Sidebar Location**: `PROJECT INTELLIGENCE > Knowledge Intelligence`.
 - **Inputs**: Permission-filtered evidence text chunks from Evidence Workspace.
-- **Processing**: Ollama (`qwen3:8b`) prompt execution, Pydantic schema validation, confidence calculation, missing-information detection.
-- **Outputs**: Candidate knowledge records (decisions, tasks, risks, responsibilities, dependencies).
-- **Current Scope**: Data models and enum contracts defined. Automated LLM extraction pipeline is deferred to subsequent phases.
+- **Processing**: Ollama (`qwen3:8b`) prompt execution across the 8 domains, Pydantic schema validation, confidence calculation, verbatim excerpt verification against chunk content, strict source ACL filtering, and chronological timeline synthesis.
+- **Outputs**: Canonical `knowledge_items`, `knowledge_evidence_links`, domain coverage telemetry, executive readiness scores, and chronological timeline event stream.
+- **Current Scope**: Backend service, models, database migration (`0010_knowledge_domains`), timeline service, extraction prompts, and REST APIs fully implemented and verified. Frontend UI integration deferred to frontend phase.
 
 ### Module 4: Relationship Explorer (Architecturally Supported)
 - **Purpose**: Reconstructs and visualizes relationships between fragmented items (e.g. decision to commit, PR to Jira task, owner to component).

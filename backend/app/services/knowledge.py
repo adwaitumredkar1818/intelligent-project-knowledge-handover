@@ -58,6 +58,7 @@ from app.services.audit import AuditService
 from app.services.evidence import to_background_job_response
 from app.services.extraction_prompts import ALL_EXTRACTION_CATEGORIES
 from app.services.integrations.access_policy import SourceAccessPolicyService
+from app.services.knowledge_domains import is_valid_domain, resolve_canonical_domain
 from app.services.rbac import ProjectContext
 
 logger = logging.getLogger("app.services.knowledge")
@@ -727,6 +728,7 @@ class KnowledgeReconstructionService:
         *,
         project_ctx: ProjectContext,
         category: str | None = None,
+        domain: str | None = None,
         epistemic_status: str | None = None,
         review_status: str | None = None,
         support_classification: str | None = None,
@@ -742,8 +744,17 @@ class KnowledgeReconstructionService:
         limit: int = 20,
         offset: int = 0,
     ) -> KnowledgeItemListResponse:
-        if category is not None and category not in _VALID_CATEGORIES:
-            raise BadRequestError("Unsupported category filter.", code="INVALID_FILTER")
+        filter_domain = domain
+        filter_category = category
+        if category is not None:
+            cat_clean = category.strip()
+            if is_valid_domain(cat_clean):
+                filter_domain = cat_clean
+            elif cat_clean not in _VALID_CATEGORIES and cat_clean.lower() not in _VALID_CATEGORIES:
+                raise BadRequestError("Unsupported category filter.", code="INVALID_FILTER")
+        if filter_domain is not None and not is_valid_domain(filter_domain):
+            raise BadRequestError("Unsupported domain filter.", code="INVALID_FILTER")
+
         if epistemic_status is not None and epistemic_status not in _VALID_EPISTEMIC:
             raise BadRequestError("Unsupported epistemic_status filter.", code="INVALID_FILTER")
         if review_status is not None and review_status not in _VALID_REVIEW:
@@ -759,7 +770,8 @@ class KnowledgeReconstructionService:
             project_id=project_ctx.project.id,
             viewer_user_id=project_ctx.principal.user.id,
             has_project_manage=project_ctx.has_permission("project.manage"),
-            category=category,
+            category=filter_category,
+            domain=filter_domain,
             epistemic_status=epistemic_status,
             review_status=review_status,
             support_classification=support_classification,

@@ -24,6 +24,7 @@ export function CreateProjectModal() {
 
   // Sync selected organisation when modal opens or org list updates
   useEffect(() => {
+    setError(null);
     if (activeOrg) {
       setSelectedOrgId(activeOrg.id);
       setIsCreatingNewOrg(false);

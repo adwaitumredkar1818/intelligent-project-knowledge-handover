@@ -321,14 +321,21 @@ class SourceSyncRunStatus(StrEnum):
 
 
 class KnowledgeCategory(StrEnum):
-    """Six canonical knowledge extraction categories implemented in Phase 2.6."""
+    """Eight canonical knowledge domains and Phase 2.6 extraction categories."""
 
+    PROJECT_OVERVIEW_CONTEXT = "project_overview_context"
     DECISIONS_RATIONALE = "decisions_rationale"
     WORK_ITEMS = "work_items"
     RESPONSIBILITIES_OWNERSHIP = "responsibilities_ownership"
     TECHNICAL_ARCHITECTURE = "technical_architecture"
     BUGS_BLOCKERS_RISKS = "bugs_blockers_risks"
     DEPENDENCIES = "dependencies"
+    OPERATIONAL_HISTORICAL = "operational_historical"
+    # Canonical domain aliases
+    WORK_PROGRESS = "work_progress"
+    ARCHITECTURE_TECHNICAL = "architecture_technical"
+    DEPENDENCIES_RELATIONSHIPS = "dependencies_relationships"
+    RISKS_BLOCKERS_QUESTIONS = "risks_blockers_questions"
 
 
 class EpistemicStatus(StrEnum):
@@ -352,9 +359,13 @@ class SupportClassification(StrEnum):
     """How strongly supporting evidence backs an extracted knowledge item."""
 
     DIRECT = "direct"
+    DIRECT_SUPPORT = "direct_support"
     CORROBORATED = "corroborated"
+    CORROBORATION = "corroboration"
     INTERPRETATION = "interpretation"
+    CONTEXT = "context"
     UNCERTAIN = "uncertain"
+    CONTRADICTION = "contradiction"
 
 
 class ExtractionRunScope(StrEnum):

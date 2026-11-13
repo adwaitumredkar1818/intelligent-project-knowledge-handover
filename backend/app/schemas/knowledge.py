@@ -118,6 +118,34 @@ DependencyDirectionLiteral = Literal[
 ]
 DependencyStatusLiteral = Literal["active", "resolved", "blocked", "proposed", "unclear"]
 
+ProjectOverviewCategoryLiteral = Literal[
+    "purpose_mission",
+    "core_objectives",
+    "problem_statement",
+    "scope_boundary",
+    "stakeholder_ecosystem",
+    "target_audience",
+    "success_criteria",
+    "constraints",
+    "terminology",
+    "other",
+]
+ProjectOverviewStatusLiteral = Literal["current", "legacy", "superseded", "proposed", "unknown"]
+
+OperationalKnowledgeTypeLiteral = Literal[
+    "deployment_runbook",
+    "incident_response",
+    "troubleshooting_guide",
+    "backup_restore",
+    "migration_procedure",
+    "monitoring_alerting",
+    "historical_context",
+    "key_event_chronology",
+    "legacy_decision_history",
+    "other",
+]
+OperationalStatusLiteral = Literal["active", "superseded", "deprecated", "draft", "unknown"]
+
 
 def _clean_optional_text(value: str | None) -> str | None:
     if value is None:
@@ -147,7 +175,16 @@ class CandidateEvidenceRef(BaseSchema):
 
     chunk_id: str = Field(min_length=1, max_length=64)
     supporting_excerpt: str = Field(min_length=8, max_length=1200)
-    support_type: Literal["direct", "interpretation", "uncertain"] = "direct"
+    support_type: Literal[
+        "direct",
+        "direct_support",
+        "corroborated",
+        "corroboration",
+        "interpretation",
+        "context",
+        "uncertain",
+        "contradiction",
+    ] = "direct"
 
     @field_validator("chunk_id", "supporting_excerpt", mode="before")
     @classmethod
@@ -349,6 +386,83 @@ class DependencyCandidate(_BaseCandidateItem):
         return _clean_optional_text(None if value is None else str(value))
 
 
+class ProjectOverviewCandidate(_BaseCandidateItem):
+    """Structured candidate for Domain 1: Project Overview & Context."""
+
+    overview_category: ProjectOverviewCategoryLiteral = "purpose_mission"
+    problem_statement: str | None = Field(default=None, max_length=2000)
+    objectives: list[str] = Field(default_factory=list)
+    in_scope: list[str] = Field(default_factory=list)
+    out_of_scope: list[str] = Field(default_factory=list)
+    key_stakeholders: list[str] = Field(default_factory=list)
+    target_users: list[str] = Field(default_factory=list)
+    success_criteria: list[str] = Field(default_factory=list)
+    constraints: list[str] = Field(default_factory=list)
+    glossary_terms: list[str] = Field(default_factory=list)
+    status: ProjectOverviewStatusLiteral = "current"
+
+    @field_validator("problem_statement", mode="before")
+    @classmethod
+    def _clean_opt(cls, value: Any) -> str | None:
+        return _clean_optional_text(None if value is None else str(value))
+
+    @field_validator(
+        "objectives",
+        "in_scope",
+        "out_of_scope",
+        "key_stakeholders",
+        "target_users",
+        "success_criteria",
+        "constraints",
+        "glossary_terms",
+        mode="before",
+    )
+    @classmethod
+    def _clean_lists(cls, value: Any) -> list[str]:
+        return _clean_string_list(list(value) if isinstance(value, (list, tuple)) else None)
+
+
+class OperationalHistoricalCandidate(_BaseCandidateItem):
+    """Structured candidate for Domain 8: Operational & Historical Context."""
+
+    knowledge_type: OperationalKnowledgeTypeLiteral = "historical_context"
+    procedure_name: str | None = Field(default=None, max_length=255)
+    target_environment: str | None = Field(default=None, max_length=100)
+    prerequisites: list[str] = Field(default_factory=list)
+    execution_steps: list[str] = Field(default_factory=list)
+    verification_steps: list[str] = Field(default_factory=list)
+    rollback_steps: list[str] = Field(default_factory=list)
+    event_timestamp: str | None = Field(default=None, max_length=100)
+    historical_significance: str | None = Field(default=None, max_length=2000)
+    lessons_learned: list[str] = Field(default_factory=list)
+    superseded_reason: str | None = Field(default=None, max_length=1000)
+    status: OperationalStatusLiteral = "active"
+
+    @field_validator(
+        "procedure_name",
+        "target_environment",
+        "event_timestamp",
+        "historical_significance",
+        "superseded_reason",
+        mode="before",
+    )
+    @classmethod
+    def _clean_opt(cls, value: Any) -> str | None:
+        return _clean_optional_text(None if value is None else str(value))
+
+    @field_validator(
+        "prerequisites",
+        "execution_steps",
+        "verification_steps",
+        "rollback_steps",
+        "lessons_learned",
+        mode="before",
+    )
+    @classmethod
+    def _clean_lists(cls, value: Any) -> list[str]:
+        return _clean_string_list(list(value) if isinstance(value, (list, tuple)) else None)
+
+
 # ==============================================================================
 # API Request & Response Schemas
 # ==============================================================================
@@ -357,7 +471,7 @@ class DependencyCandidate(_BaseCandidateItem):
 class EvidenceExtractRequest(BaseSchema):
     """Request payload for triggering knowledge extraction on one evidence item."""
 
-    categories: list[KnowledgeCategory] | None = Field(default=None, min_length=1, max_length=6)
+    categories: list[KnowledgeCategory] | None = Field(default=None, min_length=1, max_length=16)
     force_rerun: bool = False
 
 
@@ -365,7 +479,7 @@ class ProjectKnowledgeExtractRequest(BaseSchema):
     """Request payload for triggering project-wide or multi-evidence extraction."""
 
     evidence_ids: list[uuid.UUID] | None = Field(default=None, min_length=1, max_length=100)
-    categories: list[KnowledgeCategory] | None = Field(default=None, min_length=1, max_length=6)
+    categories: list[KnowledgeCategory] | None = Field(default=None, min_length=1, max_length=16)
     force_rerun: bool = False
     include_synthetic: bool = False
 
@@ -450,7 +564,9 @@ class KnowledgeItemSummaryResponse(BaseSchema):
     organisation_id: uuid.UUID
     project_id: uuid.UUID
     extraction_run_id: uuid.UUID | None
-    category: KnowledgeCategory
+    category: str
+    primary_domain: str | None = None
+    secondary_domains: list[str] = Field(default_factory=list)
     epistemic_status: EpistemicStatus
     review_status: KnowledgeReviewStatus
     support_classification: SupportClassification

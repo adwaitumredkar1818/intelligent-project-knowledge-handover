@@ -200,7 +200,12 @@ class KnowledgeItem(Base):
         CheckConstraint(
             "category IN ("
             "'decisions_rationale', 'work_items', 'responsibilities_ownership', "
-            "'technical_architecture', 'bugs_blockers_risks', 'dependencies'"
+            "'technical_architecture', 'bugs_blockers_risks', 'dependencies', "
+            "'project_overview_context', 'work_progress', 'architecture_technical', "
+            "'dependencies_relationships', 'risks_blockers_questions', 'operational_historical', "
+            "'PROJECT_OVERVIEW_CONTEXT', 'DECISIONS_RATIONALE', 'ARCHITECTURE_TECHNICAL', "
+            "'WORK_PROGRESS', 'RESPONSIBILITIES_OWNERSHIP', 'DEPENDENCIES_RELATIONSHIPS', "
+            "'RISKS_BLOCKERS_QUESTIONS', 'OPERATIONAL_HISTORICAL'"
             ")",
             name="knowledge_item_category",
         ),
@@ -221,6 +226,11 @@ class KnowledgeItem(Base):
             "project_id",
             "category",
             "fingerprint",
+        ),
+        Index(
+            "ix_knowledge_items_project_primary_domain",
+            "project_id",
+            "primary_domain",
         ),
         Index(
             "ix_knowledge_items_project_filters",
@@ -252,6 +262,10 @@ class KnowledgeItem(Base):
     )
 
     category: Mapped[str] = mapped_column(String(64), nullable=False)
+    primary_domain: Mapped[str | None] = mapped_column(String(64), nullable=True)
+    secondary_domains: Mapped[list[str]] = mapped_column(
+        _JSON_VARIANT, nullable=False, default=list, server_default=text("'[]'")
+    )
     epistemic_status: Mapped[str] = mapped_column(
         String(32),
         nullable=False,
@@ -340,7 +354,10 @@ class KnowledgeEvidenceLink(Base):
     __tablename__ = "knowledge_evidence_links"
     __table_args__ = (
         CheckConstraint(
-            "support_type IN ('direct', 'corroborated', 'interpretation', 'uncertain')",
+            "support_type IN ("
+            "'direct', 'direct_support', 'corroborated', 'corroboration', "
+            "'interpretation', 'context', 'uncertain', 'contradiction'"
+            ")",
             name="knowledge_evidence_link_support_type",
         ),
         CheckConstraint(

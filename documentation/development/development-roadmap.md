@@ -65,9 +65,23 @@
 
 ---
 
-### Phase 5 *(Backend Phase 2.6 Extraction Complete; Relationships & Frontend UI Pending)*: Knowledge Reconstruction & Relationship Explorer (`RECONSTRUCT`)
+### Phase 5 *(Backend Knowledge Intelligence Complete across all 8 Domains; Relationships & Frontend UI Pending)*: Knowledge Reconstruction & Knowledge Intelligence (`RECONSTRUCT`)
 - **Scope**:
-  - **Implemented (Backend Phase 2.6 — Knowledge Reconstruction via revision `0007_knowledge_reconstruction`)**: Replaceable `StructuredLLMClient` (`OllamaLLMClient` using `qwen3:8b` with `think=false` and `format="json"`), category-specific Pydantic candidate extraction across 6 core domains (`decisions_rationale`, `work_items`, `responsibilities_ownership`, `technical_architecture`, `bugs_blockers_risks`, `dependencies`), strict `NO EVIDENCE -> NO CLAIM` validator (`KnowledgeCandidateValidator` enforcing chunk membership, verbatim/normalized-whitespace substring match, epistemic cap `"extracted"`/`"ai_interpreted"`, and ungrounded-severity downgrade to `"unspecified"`), conservative corroboration deduplication, re-chunk/deletion staleness tracking, invalid-JSON repair retries, fail-closed ACL enforcement across trigger/worker/read paths (`ReconstructionWorkerService` in `CompositeWorkerService`), and `/api/v1/projects/{id}/knowledge/*` + `/evidence/{id}/extract` endpoints.
+  - **Implemented (Backend Knowledge Reconstruction & 8-Domain Intelligence via revisions `0007_knowledge_reconstruction` and `0010_knowledge_domains`)**:
+    1. **Eight Canonical Knowledge Domains**: Implemented complete domain modeling, extraction prompt definitions, Pydantic candidate validators, and database schema mappings across:
+       - `PROJECT_OVERVIEW_CONTEXT` (Domain 1)
+       - `DECISIONS_RATIONALE` (Domain 2)
+       - `ARCHITECTURE_TECHNICAL` (Domain 3)
+       - `WORK_STATUS_PROGRESS` (Domain 4)
+       - `OWNERSHIP_RESPONSIBILITIES` (Domain 5)
+       - `DEPENDENCIES_INTEGRATIONS` (Domain 6)
+       - `RISKS_BLOCKERS_BUGS` (Domain 7)
+       - `OPERATIONAL_HISTORICAL` (Domain 8)
+    2. **Epistemic Integrity & Grounding**: `NO EVIDENCE -> NO CLAIM` strictly enforced. Verbatim excerpt matching against chunks, SHA-256 integrity, epistemic status categorization (`extracted`, `interpreted`, `human_verified`).
+    3. **Fail-Closed Source ACL Enforcement**: Strict `Project Membership != Source Access` validation at read time across `/domains`, `/summary`, `/findings`, `/findings/{id}`, and `/timeline`. Restricted items are completely omitted from unauthorized callers; direct item access returns `403 SOURCE_ACCESS_DENIED`.
+    4. **Project Timeline Service**: Chronological event synthesis from decisions, milestones, commits, and incidents with second- and day-precision timestamp normalization.
+    5. **REST API Suite**: Complete `/api/v1/projects/{id}/knowledge-intelligence/...` endpoints for domain coverage, executive summary, findings, timeline, and async extraction runs.
+  - **Remaining in Phase 5**: Module 4 (Relationship Explorer graph relations backend and visualization) and Frontend UI integration.
   - **Remaining in Phase 5 / Frontend Integration**: Implement **Relationship management** (`knowledge_relationships` PostgreSQL graph + cross-source identity/entity resolution in Phase 2.7+), remaining domain coverage (operational procedures / historical discussions where needed), and **Knowledge Intelligence** + **Relationship Explorer** Next.js / React Flow UI.
 - **Exit Criteria**: Tests validate rejection of ungrounded claims lacking `chunk_id` & verified excerpt attribution, strict separation of `extracted` vs `ai_interpreted` records, zero cross-ACL LLM prompt leakage, and accurate PostgreSQL graph queries (for Phase 2.7+).
 

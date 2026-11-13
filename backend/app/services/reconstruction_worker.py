@@ -38,6 +38,7 @@ from app.repositories.rbac import RbacRepository
 from app.repositories.user import UserRepository
 from app.services.audit import AuditService
 from app.services.extraction_prompts import (
+    ALL_EXTRACTION_CATEGORIES,
     ChunkPromptInput,
     build_category_extraction_prompt,
     build_chunk_prompt_input,
@@ -211,13 +212,36 @@ class ReconstructionWorkerService:
                 ev_ids.append(run.evidence_id)
 
             categories: list[KnowledgeCategory] = []
+            seen_cats: set[str] = set()
             for raw_cat in payload.get("categories") or run.target_categories or []:
                 try:
-                    categories.append(KnowledgeCategory(str(raw_cat)))
+                    cat_enum = KnowledgeCategory(str(raw_cat))
+                    if cat_enum in {KnowledgeCategory.WORK_PROGRESS, KnowledgeCategory.WORK_ITEMS}:
+                        canonical = KnowledgeCategory.WORK_ITEMS
+                    elif cat_enum in {
+                        KnowledgeCategory.ARCHITECTURE_TECHNICAL,
+                        KnowledgeCategory.TECHNICAL_ARCHITECTURE,
+                    }:
+                        canonical = KnowledgeCategory.TECHNICAL_ARCHITECTURE
+                    elif cat_enum in {
+                        KnowledgeCategory.DEPENDENCIES_RELATIONSHIPS,
+                        KnowledgeCategory.DEPENDENCIES,
+                    }:
+                        canonical = KnowledgeCategory.DEPENDENCIES
+                    elif cat_enum in {
+                        KnowledgeCategory.RISKS_BLOCKERS_QUESTIONS,
+                        KnowledgeCategory.BUGS_BLOCKERS_RISKS,
+                    }:
+                        canonical = KnowledgeCategory.BUGS_BLOCKERS_RISKS
+                    else:
+                        canonical = cat_enum
+                    if canonical.value not in seen_cats:
+                        seen_cats.add(canonical.value)
+                        categories.append(canonical)
                 except ValueError:
                     continue
             if not categories:
-                categories = list(KnowledgeCategory)
+                categories = list(ALL_EXTRACTION_CATEGORIES)
 
             run.status = ExtractionRunStatus.RUNNING.value
             run.started_at = run.started_at or now

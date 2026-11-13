@@ -34,6 +34,7 @@ def test_live_postgresql_connectivity_and_readiness_readonly() -> None:
                 "0008_project_transitions",
                 "0008_project_transitions_rbac",
                 "0009_supabase_and_vector_indexes",
+                "0010_knowledge_domains",
             )
             role_count = conn.execute(text("SELECT count(*) FROM roles")).scalar_one()
             assert role_count >= 8

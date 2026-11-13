@@ -274,6 +274,8 @@ class KnowledgeRepository:
             updated_attr = dict(matched.source_attribution_json or {})
             updated_attr["evidence_count"] = len(distinct_evidence_ids)
             matched.source_attribution_json = updated_attr
+            if matched.primary_domain is None and draft.primary_domain:
+                matched.primary_domain = draft.primary_domain
             if added_any:
                 matched.extraction_run_id = extraction_run_id
                 matched.extraction_model = model_name
@@ -286,6 +288,8 @@ class KnowledgeRepository:
             project_id=project_id,
             extraction_run_id=extraction_run_id,
             category=draft.category.value,
+            primary_domain=draft.primary_domain or draft.category.value,
+            secondary_domains=list(draft.secondary_domains),
             epistemic_status=draft.epistemic_status,
             review_status=draft.review_status,
             support_classification=draft.support_classification,
@@ -506,6 +510,7 @@ class KnowledgeRepository:
         viewer_user_id: uuid.UUID,
         has_project_manage: bool,
         category: str | None = None,
+        domain: str | None = None,
         epistemic_status: str | None = None,
         review_status: str | None = None,
         support_classification: str | None = None,
@@ -559,8 +564,28 @@ class KnowledgeRepository:
         elif not include_stale:
             filters.append(KnowledgeItem.is_stale.is_(False))
 
-        if category is not None:
-            filters.append(KnowledgeItem.category == category)
+        if domain is not None and domain.strip():
+            dom_upper = domain.strip().upper()
+            dom_lower = domain.strip().lower()
+            filters.append(
+                or_(
+                    KnowledgeItem.primary_domain == dom_upper,
+                    KnowledgeItem.primary_domain == dom_lower,
+                    KnowledgeItem.category == domain.strip(),
+                    KnowledgeItem.category == dom_lower,
+                )
+            )
+        elif category is not None and category.strip():
+            cat_clean = category.strip()
+            cat_upper = cat_clean.upper()
+            cat_lower = cat_clean.lower()
+            filters.append(
+                or_(
+                    KnowledgeItem.category == cat_clean,
+                    KnowledgeItem.category == cat_lower,
+                    KnowledgeItem.primary_domain == cat_upper,
+                )
+            )
         if epistemic_status is not None:
             filters.append(KnowledgeItem.epistemic_status == epistemic_status)
         if review_status is not None:
