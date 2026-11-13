@@ -12,6 +12,7 @@ from typing import Any
 
 import httpx
 from sqlalchemy import Engine
+from sqlalchemy.exc import DBAPIError, OperationalError
 
 from app.core.config import Settings, get_settings
 from app.core.logging import configure_logging
@@ -147,7 +148,8 @@ class SyncWorker:
 
 
 class CompositeWorkerService:
-    """Sequential composite worker polling extraction, sync, indexing, reconstruction & relationship queues."""
+    """Sequential composite worker polling extraction, sync, indexing,
+    reconstruction & relationship queues."""
 
     def __init__(
         self,
@@ -170,7 +172,8 @@ class CompositeWorkerService:
         return self.ingestion_worker.worker_id
 
     def process_next_job(self) -> bool:
-        """Claim one job across ingestion, sync, indexing, reconstruction, and relationship queues."""
+        """Claim one job across ingestion, sync, indexing, reconstruction,
+        and relationship queues."""
         if self.ingestion_worker.process_next_job():
             return True
         if self.sync_worker.process_next_job():
@@ -332,10 +335,24 @@ def run_worker(*, once: bool = False, max_jobs: int = 100) -> int:
 
         poll_interval = settings.ingestion.worker_poll_interval_seconds
         while not stop_requested:
-            did_work = worker.process_next_job()
-            if did_work:
-                total_processed += 1
-            else:
+            try:
+                did_work = worker.process_next_job()
+                if did_work:
+                    total_processed += 1
+                else:
+                    time.sleep(poll_interval)
+            except (OperationalError, DBAPIError) as db_err:
+                logger.warning(
+                    "Database connection transient error in worker loop; sleeping before retry: %s",
+                    db_err,
+                )
+                time.sleep(min(max(poll_interval, 2.0) * 2, 10.0))
+            except Exception as loop_err:
+                logger.error(
+                    "Unexpected error in background worker loop: %s",
+                    loop_err,
+                    exc_info=True,
+                )
                 time.sleep(poll_interval)
     finally:
         dispose = getattr(engine, "dispose", None)
