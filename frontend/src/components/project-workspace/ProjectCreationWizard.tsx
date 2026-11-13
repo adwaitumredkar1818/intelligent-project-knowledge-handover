@@ -116,14 +116,16 @@ export function ProjectCreationWizard({
   const [category, setCategory] = useState("Backend platform");
   const [visibility, setVisibility] = useState<"private" | "organisation">("private");
   const [ownerId, setOwnerId] = useState<string>(currentUser?.id || "");
-  const [startDate, setStartDate] = useState(
-    () => new Date().toISOString().split("T")[0]
-  );
-  const [targetDate, setTargetDate] = useState(() => {
+  const [startDate, setStartDate] = useState("");
+  const [targetDate, setTargetDate] = useState("");
+
+  useEffect(() => {
+    const now = new Date();
+    setStartDate(now.toISOString().split("T")[0] || "");
     const d = new Date();
     d.setMonth(d.getMonth() + 3);
-    return d.toISOString().split("T")[0];
-  });
+    setTargetDate(d.toISOString().split("T")[0] || "");
+  }, []);
 
   // Org members for team selection
   const [orgMembers, setOrgMembers] = useState<OrganisationMember[]>([]);

@@ -22,6 +22,7 @@ import {
   StatusBadge,
   SeverityBadge,
   PersonCell,
+  Avatar,
   EmptyState,
 } from "../ui";
 import { Ring, StackedBar } from "../dashboard/DashboardCharts";

@@ -404,6 +404,15 @@ export function ProjectSettingsTab({
               />
             </Field>
 
+            <Field label="Capture End Date">
+              <Input
+                type="date"
+                value={captureEnd}
+                onChange={(e) => setCaptureEnd(e.target.value)}
+                disabled={!canManage || isSavingTransition}
+              />
+            </Field>
+
             <Field
               label="Handover Scope & Boundaries"
               className="sm:col-span-2"

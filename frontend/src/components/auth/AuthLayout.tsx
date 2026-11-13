@@ -189,7 +189,7 @@ export function AuthLayout({ children }: { children: ReactNode }) {
         </div>
 
         <p className="text-center text-xs text-[#718096] lg:text-left">
-          © {new Date().getFullYear()} The Handover ·{" "}
+          © 2026 The Handover ·{" "}
           <Link href="/#security" className="hover:text-[#203653] transition">
             Security
           </Link>{" "}
