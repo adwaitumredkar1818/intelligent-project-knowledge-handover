@@ -246,12 +246,12 @@ export function DashboardRouter() {
       <header className="flex flex-col gap-4 lg:flex-row lg:items-end lg:justify-between">
         <div className="max-w-2xl">
           <p className="flex flex-wrap items-center gap-2 text-[12.5px] text-muted">
-            <span>{today}</span>
+            <span>{todayText}</span>
             <span className="text-slate-300">·</span>
             <RoleBadge role={roleDisplayLabel} />
           </p>
           <h1 className="mt-2 text-[28px] font-semibold tracking-[-0.03em] text-navy sm:text-[32px]">
-            {greeting()}, {userName}
+            {greetingText}, {userName}
           </h1>
           <p className="mt-1.5 text-[14.5px] leading-relaxed text-[#4a5d7c]">
             {summary}
