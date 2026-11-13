@@ -93,9 +93,17 @@ _ALL_PUBLIC_BASE_TABLES: tuple[str, ...] = (
 )
 
 
+def _is_offline() -> bool:
+    """Safely check if Alembic is running in offline mode."""
+    try:
+        return bool(context.is_offline_mode())
+    except (AttributeError, NameError, RuntimeError):
+        return False
+
+
 def _verify_schema_integrity(bind: sa.engine.Connection) -> None:
-    """Pre-flight check verifying all 56 tables exist in public schema before applying DDL."""
-    if context.is_offline_mode():
+    """Pre-flight check verifying all 61 tables exist in public schema before applying DDL."""
+    if _is_offline():
         return
 
     inspector = sa.inspect(bind)
@@ -108,10 +116,47 @@ def _verify_schema_integrity(bind: sa.engine.Connection) -> None:
         )
 
 
+def _enforce_connection_timeouts(bind: sa.engine.Connection) -> None:
+    """Enforce strict lock_timeout and statement_timeout on the active migration connection.
+
+    Requirements:
+      - lock_timeout <= 2000ms (2s) to prevent blocking concurrent transactions.
+      - statement_timeout <= 30000ms (30s) to abort runaway operations.
+    Fails closed if the effective settings cannot be verified.
+    """
+    if _is_offline():
+        return
+
+    # Apply transaction-local timeout configuration
+    bind.execute(sa.text("SET LOCAL lock_timeout = '2000ms';"))
+    bind.execute(sa.text("SET LOCAL statement_timeout = '30000ms';"))
+
+    # Verify effective values directly from PostgreSQL engine
+    lt_str = bind.execute(sa.text("SHOW lock_timeout;")).scalar_one()
+    st_str = bind.execute(sa.text("SHOW statement_timeout;")).scalar_one()
+
+    # Parse and assert lock_timeout (e.g. '2s' or '2000ms')
+    lt_normalized = str(lt_str).strip().lower()
+    if lt_normalized not in {"2s", "2000ms"}:
+        raise RuntimeError(
+            f"Pre-migration timeout assertion failed: effective lock_timeout is '{lt_str}', "
+            "expected '2s' or '2000ms'."
+        )
+
+    # Parse and assert statement_timeout (e.g. '30s' or '30000ms')
+    st_normalized = str(st_str).strip().lower()
+    if st_normalized not in {"30s", "30000ms"}:
+        raise RuntimeError(
+            f"Pre-migration timeout assertion failed: effective statement_timeout is '{st_str}', "
+            "expected '30s' or '30000ms'."
+        )
+
+
 def upgrade() -> None:
-    """Enable Row Level Security on all 56 public base tables."""
+    """Enable Row Level Security on all 61 public base tables."""
     bind = op.get_bind()
     _verify_schema_integrity(bind)
+    _enforce_connection_timeouts(bind)
 
     for table in _ALL_PUBLIC_BASE_TABLES:
         # PostgreSQL 17 standard DDL enabling RLS.
@@ -121,9 +166,10 @@ def upgrade() -> None:
 
 
 def downgrade() -> None:
-    """Disable Row Level Security on all 56 public base tables."""
+    """Disable Row Level Security on all 61 public base tables."""
     bind = op.get_bind()
     _verify_schema_integrity(bind)
+    _enforce_connection_timeouts(bind)
 
     for table in _ALL_PUBLIC_BASE_TABLES:
         op.execute(f'ALTER TABLE public."{table}" DISABLE ROW LEVEL SECURITY;')

@@ -20,12 +20,27 @@ export interface Project {
   name: string;
   slug: string;
   description: string | null;
-  status: "active" | "archived" | "completed";
-  target_handover_date: string | null;
+  status: "planning" | "active" | "on_hold" | "completed" | "archived" | string;
+  visibility?: "private" | "organisation";
+  start_date?: string | null;
+  target_completion_date?: string | null;
+  target_handover_date?: string | null;
   created_at: string;
   updated_at: string;
   owner_id?: UUID;
   my_project_role?: string | null;
+  effective_permissions?: string[];
+}
+
+export interface OrganisationMember {
+  id: UUID;
+  organisation_id: UUID;
+  user_id: UUID;
+  full_name: string;
+  email: string;
+  role_name: string;
+  status: string;
+  joined_at: string;
 }
 
 export interface ProjectMember {
@@ -41,6 +56,22 @@ export interface ProjectMember {
   email?: string | null;
   status?: string;
   responsibility_description?: string | null;
+  assigned_by_id?: UUID | null;
+}
+
+export interface ProjectTransition {
+  id: UUID;
+  project_id: UUID;
+  departing_user: { id: UUID; full_name: string; email: string };
+  successor_user: { id: UUID; full_name: string; email: string };
+  workflow_stage: string;
+  handover_scope?: string | null;
+  source_scope?: string[] | null;
+  capture_start_date?: string | null;
+  capture_end_date?: string | null;
+  context_notes?: string | null;
+  created_at: string;
+  updated_at: string;
 }
 
 export interface ReadinessScoreCard {

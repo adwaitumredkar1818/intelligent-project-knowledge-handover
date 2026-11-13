@@ -1134,3 +1134,205 @@ export function Tooltip({
     </span>
   );
 }
+
+export function CardHeader({
+  title,
+  subtitle,
+  action,
+  icon: Icon,
+  className,
+}: {
+  title: ReactNode;
+  subtitle?: ReactNode;
+  action?: ReactNode;
+  icon?: LucideIcon;
+  className?: string;
+}) {
+  return (
+    <div className={cn("flex items-start justify-between gap-3 px-5 pt-5 pb-3", className)}>
+      <div className="flex min-w-0 items-start gap-2.5">
+        {Icon && <Icon className="mt-0.5 size-4 shrink-0 text-sky" />}
+        <div className="min-w-0">
+          <h3 className="text-sm font-semibold text-navy leading-tight">{title}</h3>
+          {subtitle && <p className="mt-0.5 text-xs text-muted">{subtitle}</p>}
+        </div>
+      </div>
+      {action && <div className="shrink-0">{action}</div>}
+    </div>
+  );
+}
+
+export function Table({ children, className }: { children: ReactNode; className?: string }) {
+  return (
+    <div className={cn("scrollbar-thin overflow-x-auto", className)}>
+      <table className="w-full min-w-[640px] text-left text-sm">{children}</table>
+    </div>
+  );
+}
+
+export function Th({ children, className }: { children?: ReactNode; className?: string }) {
+  return (
+    <th
+      className={cn(
+        "whitespace-nowrap border-b border-line bg-slate-50/70 px-4 py-2.5 text-xs font-semibold text-muted first:pl-5 last:pr-5",
+        className
+      )}
+    >
+      {children}
+    </th>
+  );
+}
+
+export function Td({ children, className }: { children?: ReactNode; className?: string }) {
+  return (
+    <td
+      className={cn(
+        "border-b border-line/70 px-4 py-3 text-sm text-navy first:pl-5 last:pr-5 align-middle",
+        className
+      )}
+    >
+      {children}
+    </td>
+  );
+}
+
+export function Segmented<T extends string>({
+  options,
+  value,
+  onChange,
+  className,
+}: {
+  options: { id: T; label?: string; icon?: LucideIcon }[];
+  value: T;
+  onChange: (v: T) => void;
+  className?: string;
+}) {
+  return (
+    <div className={cn("inline-flex rounded-xl border border-line bg-slate-50 p-0.5", className)}>
+      {options.map((o) => (
+        <button
+          key={o.id}
+          type="button"
+          onClick={() => onChange(o.id)}
+          aria-label={o.label ?? o.id}
+          className={cn(
+            "flex h-7 items-center gap-1.5 rounded-lg px-2.5 text-xs font-medium transition cursor-pointer",
+            value === o.id
+              ? "bg-white text-navy shadow-xs font-semibold"
+              : "text-muted hover:text-navy"
+          )}
+        >
+          {o.icon && <o.icon className="size-3.5" />}
+          {o.label && <span>{o.label}</span>}
+        </button>
+      ))}
+    </div>
+  );
+}
+
+export function Callout({
+  children,
+  title,
+  icon: Icon,
+  tone = "blue",
+  className,
+}: {
+  children: ReactNode;
+  title?: string;
+  icon?: LucideIcon;
+  tone?: "blue" | "amber" | "green" | "red";
+  className?: string;
+}) {
+  const toneMap = {
+    blue: "bg-tint/40 border-brand/20 text-navy",
+    amber: "bg-amber-50 border-amber-200 text-amber-900",
+    green: "bg-teal-50 border-teal-200 text-teal-900",
+    red: "bg-rose-50 border-rose-200 text-rose-900",
+  };
+  const iconTone = {
+    blue: "text-brand",
+    amber: "text-warn",
+    green: "text-ok",
+    red: "text-bad",
+  };
+  return (
+    <div className={cn("flex items-start gap-3 rounded-xl border p-4 text-xs", toneMap[tone], className)}>
+      {Icon && <Icon className={cn("size-4 shrink-0 mt-0.5", iconTone[tone])} />}
+      <div className="flex-1">
+        {title && <p className="font-semibold mb-0.5">{title}</p>}
+        <div>{children}</div>
+      </div>
+    </div>
+  );
+}
+
+export function PersonCell({
+  name,
+  email,
+  sub,
+}: {
+  name?: string;
+  email?: string;
+  sub?: ReactNode;
+  avatarUrl?: string;
+}) {
+  const displayName = name || email?.split("@")[0] || "Member";
+  return (
+    <div className="flex min-w-0 items-center gap-2.5">
+      <Avatar name={displayName} size={28} />
+      <div className="min-w-0">
+        <p className="truncate text-xs font-medium text-navy">{displayName}</p>
+        {(sub || email) && (
+          <p className="truncate text-[11px] text-muted">{sub || email}</p>
+        )}
+      </div>
+    </div>
+  );
+}
+
+export function ConfirmDialog({
+  open,
+  onClose,
+  onConfirm,
+  title,
+  body,
+  confirmLabel = "Confirm",
+  cancelLabel = "Cancel",
+  tone = "danger",
+  isLoading = false,
+}: {
+  open: boolean;
+  onClose: () => void;
+  onConfirm: () => void;
+  title: string;
+  body: ReactNode;
+  confirmLabel?: string;
+  cancelLabel?: string;
+  tone?: "danger" | "brand";
+  isLoading?: boolean;
+}) {
+  if (!open) return null;
+  return (
+    <Modal
+      open={open}
+      onClose={onClose}
+      title={title}
+      footer={
+        <>
+          <Button variant="secondary" onClick={onClose} disabled={isLoading}>
+            {cancelLabel}
+          </Button>
+          <Button
+            variant={tone === "danger" ? "danger" : "primary"}
+            onClick={onConfirm}
+            disabled={isLoading}
+          >
+            {isLoading ? "Processing..." : confirmLabel}
+          </Button>
+        </>
+      }
+    >
+      <div className="text-xs text-muted leading-relaxed">{body}</div>
+    </Modal>
+  );
+}

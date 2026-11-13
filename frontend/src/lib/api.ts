@@ -1,9 +1,12 @@
 import type {
   User,
   Organisation,
+  OrganisationMember,
   Project,
   ProjectOverview,
   ProjectMember,
+  ProjectTransition,
+  ProjectActivityCard,
   SourceConnection,
   ProjectSourceMapping,
   EvidenceSummary,
@@ -295,6 +298,10 @@ export const api = {
     async get(orgId: string): Promise<Organisation> {
       return request<Organisation>(`/organisations/${orgId}`);
     },
+    async listMembers(orgId: string): Promise<OrganisationMember[]> {
+      const res = await request<unknown>(`/organisations/${orgId}/members`);
+      return unwrapList<OrganisationMember>(res);
+    },
   },
 
   // Projects
@@ -390,12 +397,66 @@ export const api = {
         owner: summary.owner || null,
       };
     },
-    async getTransition(projectId: string): Promise<Record<string, unknown> | null> {
+    async getTransition(projectId: string): Promise<ProjectTransition | null> {
       try {
-        return await request<Record<string, unknown>>(`/projects/${projectId}/transition`);
+        return await request<ProjectTransition>(`/projects/${projectId}/transition`);
       } catch {
         return null;
       }
+    },
+    async update(
+      projectId: string,
+      data: {
+        name?: string;
+        slug?: string;
+        description?: string;
+        status?: string;
+        visibility?: "private" | "organisation";
+        owner_id?: string;
+        start_date?: string;
+        target_completion_date?: string;
+      }
+    ): Promise<Project> {
+      return request<Project>(`/projects/${projectId}`, {
+        method: "PATCH",
+        body: JSON.stringify(data),
+      });
+    },
+    async archive(projectId: string): Promise<Project> {
+      return request<Project>(`/projects/${projectId}/archive`, {
+        method: "POST",
+      });
+    },
+    async getActivity(
+      projectId: string,
+      limit: number = 20,
+      offset: number = 0
+    ): Promise<{ items: ProjectActivityCard[]; total: number }> {
+      const res = await request<{ items?: ProjectActivityCard[]; total?: number }>(
+        `/projects/${projectId}/activity?limit=${limit}&offset=${offset}`
+      );
+      return {
+        items: res?.items || [],
+        total: res?.total || 0,
+      };
+    },
+    async upsertTransition(
+      projectId: string,
+      data: {
+        departing_user_id: string;
+        successor_user_id: string;
+        workflow_stage?: string;
+        handover_scope?: string;
+        source_scope?: string[];
+        capture_start_date?: string;
+        capture_end_date?: string;
+        context_notes?: string;
+      }
+    ): Promise<ProjectTransition> {
+      return request<ProjectTransition>(`/projects/${projectId}/transition`, {
+        method: "PUT",
+        body: JSON.stringify(data),
+      });
     },
   },
 
@@ -412,10 +473,28 @@ export const api = {
         full_name: (m.full_name as string | null) || (m.user_full_name as string | null) || null,
       }));
     },
-    async add(projectId: string, data: { user_id?: string; email?: string; role_name?: string; transition_role?: string }): Promise<ProjectMember> {
+    async add(
+      projectId: string,
+      data: { user_id?: string; email?: string; role_name?: string; transition_role?: string; responsibility_description?: string }
+    ): Promise<ProjectMember> {
       return request<ProjectMember>(`/projects/${projectId}/members`, {
         method: "POST",
         body: JSON.stringify(data),
+      });
+    },
+    async updateRole(
+      projectId: string,
+      userId: string,
+      data: { role_name: string; responsibility_description?: string | null }
+    ): Promise<ProjectMember> {
+      return request<ProjectMember>(`/projects/${projectId}/members/${userId}/role`, {
+        method: "PATCH",
+        body: JSON.stringify(data),
+      });
+    },
+    async remove(projectId: string, userId: string): Promise<{ success: boolean; message: string }> {
+      return request<{ success: boolean; message: string }>(`/projects/${projectId}/members/${userId}`, {
+        method: "DELETE",
       });
     },
     async update(projectId: string, memberId: string, data: { role_name?: string; transition_role?: string }): Promise<ProjectMember> {

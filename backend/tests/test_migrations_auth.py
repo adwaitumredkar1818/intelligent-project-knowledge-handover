@@ -12,6 +12,7 @@ from alembic.config import Config
 from sqlalchemy import create_engine, inspect, text
 
 from app.core.config import clear_settings_cache, get_settings
+from tests.migration_guard import validate_url_isolation, verify_migration_target_isolation
 
 _ROOT_ENV = Path(__file__).resolve().parents[2] / ".env"
 
@@ -34,6 +35,10 @@ def test_isolated_postgres_auth_migration_upgrade_downgrade_cycle() -> None:
         f"@127.0.0.1:{db_cfg.port}/{temp_db}?sslmode=disable"
     )
 
+    # Enforce static URL isolation guard
+    validate_url_isolation(admin_dsn)
+    validate_url_isolation(temp_url)
+
     try:
         admin_conn = psycopg.connect(admin_dsn, autocommit=True, connect_timeout=2)
     except (psycopg.OperationalError, psycopg.errors.ConnectionTimeout):
@@ -51,6 +56,8 @@ def test_isolated_postgres_auth_migration_upgrade_downgrade_cycle() -> None:
         command.upgrade(cfg, "0002_auth_identity_rbac")
 
         engine = create_engine(temp_url, connect_args={"connect_timeout": 5})
+        with engine.connect() as conn:
+            verify_migration_target_isolation(temp_url, conn)
         try:
             tables = set(inspect(engine).get_table_names())
             assert {

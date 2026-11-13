@@ -13,6 +13,7 @@ from sqlalchemy import inspect, text
 
 from app.core.config import get_settings
 from app.db.session import create_db_engine
+from tests.migration_guard import verify_migration_target_isolation
 
 _PROJECT_ROOT = Path(__file__).resolve().parents[2]
 _ALEMBIC_INI = _PROJECT_ROOT / "backend" / "alembic.ini"
@@ -91,7 +92,10 @@ def test_migration_0016_isolated_rls_engine_behavior() -> None:
 
     try:
         with engine.connect() as conn:
-            # 1. Verify connection and inspect that all 56 expected tables exist in schema
+            # Enforce permanent fail-closed test isolation guard before any inspection or DDL
+            verify_migration_target_isolation(settings.database.url.get_secret_value(), conn)
+
+            # 1. Verify connection and inspect that all 61 expected tables exist in schema
             inspector = inspect(conn)
             public_tables = set(inspector.get_table_names(schema="public"))
             mod = _load_migration_module()
@@ -136,6 +140,32 @@ def test_migration_0016_isolated_rls_engine_behavior() -> None:
                     """)).scalar_one()
                     assert res_disabled is False
 
+                finally:
+                    trans.rollback()
+
+            # 3. Test _enforce_connection_timeouts on active connection
+            with conn.begin() as trans:
+                try:
+                    mod._enforce_connection_timeouts(conn)
+                    lt = conn.execute(text("SHOW lock_timeout;")).scalar_one()
+                    st = conn.execute(text("SHOW statement_timeout;")).scalar_one()
+                    assert str(lt).strip().lower() in {"2s", "2000ms"}
+                    assert str(st).strip().lower() in {"30s", "30000ms"}
+                finally:
+                    trans.rollback()
+
+            # 4. Test pre-flight timeout failure aborts before DDL
+            with conn.begin() as trans:
+                try:
+                    # Mock or poison the timeout assertion by testing bad check
+                    # Ensure RuntimeError is raised if values do not match
+                    with pytest.raises(RuntimeError) as exc_info:
+                        # Call internal function with a mock that returns wrong SHOW value
+                        from unittest.mock import MagicMock
+                        mock_bind = MagicMock()
+                        mock_bind.execute.return_value.scalar_one.side_effect = ["10s", "30s"]
+                        mod._enforce_connection_timeouts(mock_bind)
+                    assert "effective lock_timeout" in str(exc_info.value)
                 finally:
                     trans.rollback()
     finally:
