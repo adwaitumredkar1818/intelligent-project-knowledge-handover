@@ -1,6 +1,6 @@
 "use client";
 
-import React, { useSyncExternalStore } from "react";
+import React, { useState, useEffect } from "react";
 import { useRouter } from "next/navigation";
 import {
   FolderPlus,
@@ -37,28 +37,24 @@ export function DashboardRouter() {
     setIsAddMemberModalOpen,
   } = useLiveApp();
 
-  const mounted = useSyncExternalStore(
-    () => () => {},
-    () => true,
-    () => false
-  );
+  const [mounted, setMounted] = useState(false);
+  const [greetingText, setGreetingText] = useState("Welcome back");
+  const [todayText, setTodayText] = useState("Project Workspace");
 
-  const h = new Date().getHours();
-  const greetingText = mounted
-    ? h < 12
-      ? "Good morning"
-      : h < 18
-      ? "Good afternoon"
-      : "Good evening"
-    : "Welcome back";
-
-  const todayText = mounted
-    ? new Date().toLocaleDateString("en-GB", {
+  useEffect(() => {
+    setMounted(true);
+    const h = new Date().getHours();
+    setGreetingText(
+      h < 12 ? "Good morning" : h < 18 ? "Good afternoon" : "Good evening"
+    );
+    setTodayText(
+      new Date().toLocaleDateString("en-GB", {
         weekday: "long",
         day: "numeric",
         month: "long",
       })
-    : "Project Workspace";
+    );
+  }, []);
 
   // 1. Authoritative role resolution from real ProjectMember, ProjectTransition and Overview
   let resolvedRole: DashboardRole = "empty";
