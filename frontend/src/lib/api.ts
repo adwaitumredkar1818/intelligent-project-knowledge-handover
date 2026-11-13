@@ -99,6 +99,9 @@ interface RawOverviewResponse {
     name?: string;
     status?: string;
     target_completion_date?: string | null;
+    owner?: { id: string; full_name: string; email: string };
+    departing_member?: { id: string; full_name: string; email: string } | null;
+    successor?: { id: string; full_name: string; email: string } | null;
   };
   connected_sources?: {
     total_sources?: number;
@@ -382,7 +385,17 @@ export const api = {
           actor_name: ac.actor_name || null,
           timestamp: ac.timestamp || new Date().toISOString(),
         })),
+        departing_member: summary.departing_member || null,
+        successor: summary.successor || null,
+        owner: summary.owner || null,
       };
+    },
+    async getTransition(projectId: string): Promise<Record<string, unknown> | null> {
+      try {
+        return await request<Record<string, unknown>>(`/projects/${projectId}/transition`);
+      } catch {
+        return null;
+      }
     },
   },
 
@@ -390,7 +403,14 @@ export const api = {
   members: {
     async list(projectId: string): Promise<ProjectMember[]> {
       const res = await request<unknown>(`/projects/${projectId}/members`);
-      return unwrapList<ProjectMember>(res);
+      const raw = unwrapList<Record<string, unknown>>(res);
+      return raw.map((m) => ({
+        ...(m as unknown as ProjectMember),
+        user_email: (m.user_email as string | null) || (m.email as string | null) || null,
+        user_full_name: (m.user_full_name as string | null) || (m.full_name as string | null) || null,
+        email: (m.email as string | null) || (m.user_email as string | null) || null,
+        full_name: (m.full_name as string | null) || (m.user_full_name as string | null) || null,
+      }));
     },
     async add(projectId: string, data: { user_id?: string; email?: string; role_name?: string; transition_role?: string }): Promise<ProjectMember> {
       return request<ProjectMember>(`/projects/${projectId}/members`, {

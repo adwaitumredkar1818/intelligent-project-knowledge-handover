@@ -47,7 +47,7 @@ interface LiveAppContextType {
   // Projects
   projects: Project[];
   activeProject: Project | null;
-  setActiveProject: (project: Project) => void;
+  setActiveProject: (project: Project | null) => void;
   createProject: (
     data: { name: string; slug?: string; description?: string; target_handover_date?: string },
     options?: { orgId?: string; newOrgName?: string }
@@ -128,7 +128,7 @@ export function LiveAppProvider({ children }: { children: ReactNode }) {
   const [organisations, setOrganisations] = useState<Organisation[]>([]);
   const [activeOrg, setActiveOrg] = useState<Organisation | null>(null);
   const [projects, setProjects] = useState<Project[]>([]);
-  const [activeProject, setActiveProject] = useState<Project | null>(null);
+  const [activeProject, setActiveProjectInternal] = useState<Project | null>(null);
   const [isLoadingProjects, setIsLoadingProjects] = useState(false);
 
   // Overview state
@@ -143,6 +143,22 @@ export function LiveAppProvider({ children }: { children: ReactNode }) {
   const [sourceMappings, setSourceMappings] = useState<ProjectSourceMapping[]>([]);
   const [orgConnections, setOrgConnections] = useState<SourceConnection[]>([]);
   const [isLoadingSources, setIsLoadingSources] = useState(false);
+
+  // Project selector wrapper that resets stale project-specific caches
+  const setActiveProject = useCallback(
+    (action: Project | null | ((prev: Project | null) => Project | null)) => {
+      setActiveProjectInternal((prev) => {
+        const next = typeof action === "function" ? action(prev) : action;
+        if (prev?.id === next?.id) return prev;
+        setOverview(null);
+        setMembers([]);
+        setEvidenceList([]);
+        setSourceMappings([]);
+        return next;
+      });
+    },
+    []
+  );
 
   // Evidence state
   const [evidenceList, setEvidenceList] = useState<EvidenceSummary[]>([]);
@@ -341,10 +357,16 @@ export function LiveAppProvider({ children }: { children: ReactNode }) {
       setOverview(null);
       return;
     }
+    const currentProjectId = activeProject.id;
     setIsLoadingOverview(true);
     try {
-      const ov = await api.projects.getOverview(activeProject.id);
-      setOverview(ov);
+      const ov = await api.projects.getOverview(currentProjectId);
+      setActiveProjectInternal((curr) => {
+        if (curr?.id === currentProjectId) {
+          setOverview(ov);
+        }
+        return curr;
+      });
     } catch (err: unknown) {
       if (err instanceof ApiError && err.status === 401) return;
       console.error("Error loading project overview:", err);
@@ -359,17 +381,50 @@ export function LiveAppProvider({ children }: { children: ReactNode }) {
       setMembers([]);
       return;
     }
+    const currentProjectId = activeProject.id;
     setIsLoadingMembers(true);
     try {
-      const m = await api.members.list(activeProject.id);
-      setMembers(m);
+      const [membersRes, transRes] = await Promise.allSettled([
+        api.members.list(currentProjectId),
+        api.projects.getTransition(currentProjectId),
+      ]);
+      const rawMembers = membersRes.status === "fulfilled" ? membersRes.value : [];
+      const transitionData = transRes.status === "fulfilled"
+        ? (transRes.value as { departing_user?: { id?: string }; successor_user?: { id?: string } } | null)
+        : null;
+
+      const currentOverview = overview && overview.project_id === currentProjectId ? overview : null;
+      const departingId = transitionData?.departing_user?.id || currentOverview?.departing_member?.id;
+      const successorId = transitionData?.successor_user?.id || currentOverview?.successor?.id;
+
+      const annotated = rawMembers.map((mem) => {
+        let tRole: "departing_owner" | "incoming_assignee" | "reviewer" | null = null;
+        if (mem.user_id === departingId) {
+          tRole = "departing_owner";
+        } else if (mem.user_id === successorId) {
+          tRole = "incoming_assignee";
+        } else if (mem.role_name === "reviewer") {
+          tRole = "reviewer";
+        }
+        return {
+          ...mem,
+          transition_role: tRole,
+        };
+      });
+
+      setActiveProjectInternal((curr) => {
+        if (curr?.id === currentProjectId) {
+          setMembers(annotated);
+        }
+        return curr;
+      });
     } catch (err: unknown) {
       if (err instanceof ApiError && err.status === 401) return;
       console.error("Error loading project members:", err);
     } finally {
       setIsLoadingMembers(false);
     }
-  }, [user, activeProject]);
+  }, [user, activeProject, overview]);
 
   // Load project sources & org connections
   const refreshSources = useCallback(async () => {

@@ -1,6 +1,6 @@
 "use client";
 
-import React, { useEffect, useState } from "react";
+import React, { useSyncExternalStore } from "react";
 import { useRouter } from "next/navigation";
 import {
   FolderPlus,
@@ -10,18 +10,18 @@ import {
   Inbox,
   UserPlus,
   Layers,
-  ArrowRight,
 } from "lucide-react";
 import { useLiveApp } from "../../context/LiveAppContext";
 import { Button, RoleBadge, cn } from "../ui";
 import { ManagerDashboard } from "./ManagerDashboard";
+import { ReviewerDashboard } from "./ReviewerDashboard";
 import { OutgoingDashboard } from "./OutgoingDashboard";
 import { IncomingDashboard } from "./IncomingDashboard";
 import { MemberDashboard } from "./MemberDashboard";
 import { WorkspaceDashboard } from "./WorkspaceDashboard";
 import { EmptyWorkspaceDashboard } from "./EmptyWorkspaceDashboard";
 
-export type DashboardRole = "manager" | "outgoing" | "incoming" | "member" | "workspace" | "empty";
+export type DashboardRole = "manager" | "reviewer" | "outgoing" | "incoming" | "member" | "workspace" | "empty";
 
 export function DashboardRouter() {
   const router = useRouter();
@@ -37,33 +37,30 @@ export function DashboardRouter() {
     setIsAddMemberModalOpen,
   } = useLiveApp();
 
-  const [mounted, setMounted] = useState(false);
-  const [roleOverride, setRoleOverride] = useState<DashboardRole | null>(null);
-  const [greetingText, setGreetingText] = useState("Welcome back");
-  const [todayText, setTodayText] = useState("Project Workspace");
+  const mounted = useSyncExternalStore(
+    () => () => {},
+    () => true,
+    () => false
+  );
 
-  useEffect(() => {
-    setMounted(true);
-    const h = new Date().getHours();
-    setGreetingText(h < 12 ? "Good morning" : h < 18 ? "Good afternoon" : "Good evening");
-    setTodayText(
-      new Date().toLocaleDateString("en-GB", {
+  const h = new Date().getHours();
+  const greetingText = mounted
+    ? h < 12
+      ? "Good morning"
+      : h < 18
+      ? "Good afternoon"
+      : "Good evening"
+    : "Welcome back";
+
+  const todayText = mounted
+    ? new Date().toLocaleDateString("en-GB", {
         weekday: "long",
         day: "numeric",
         month: "long",
       })
-    );
+    : "Project Workspace";
 
-    if (typeof window !== "undefined") {
-      const params = new URLSearchParams(window.location.search);
-      const forcedRole = params.get("role") as DashboardRole | null;
-      if (forcedRole && ["manager", "outgoing", "incoming", "member", "workspace", "empty"].includes(forcedRole)) {
-        setRoleOverride(forcedRole);
-      }
-    }
-  }, []);
-
-  // 1. Resolve role from real ProjectMember and transition_role
+  // 1. Authoritative role resolution from real ProjectMember, ProjectTransition and Overview
   let resolvedRole: DashboardRole = "empty";
 
   if (projects.length === 0) {
@@ -71,34 +68,55 @@ export function DashboardRouter() {
   } else if (!activeProject) {
     resolvedRole = "workspace";
   } else {
-    const currentMember = members.find(
-      (m) => m.user_id === user?.id || m.user_email === user?.email
-    );
-    const transRole = currentMember?.transition_role;
-    const roleName = currentMember?.role_name?.toLowerCase() || "";
+    // Isolate context to the currently active project
+    const currentOverview = overview && overview.project_id === activeProject.id ? overview : null;
+    const currentMembers = members.filter((m) => m.project_id === activeProject.id);
 
-    if (transRole === "departing_owner") {
+    // Match current user in active project membership
+    const currentMember = currentMembers.find(
+      (m) =>
+        m.user_id === user?.id ||
+        (m.user_email && m.user_email === user?.email) ||
+        (m.email && m.email === user?.email)
+    );
+
+    const isDeparting =
+      currentMember?.transition_role === "departing_owner" ||
+      (currentOverview?.departing_member?.id != null && currentOverview?.departing_member?.id === user?.id) ||
+      (currentOverview?.departing_member?.email != null && currentOverview?.departing_member?.email === user?.email);
+
+    const isSuccessor =
+      currentMember?.transition_role === "incoming_assignee" ||
+      (currentOverview?.successor?.id != null && currentOverview?.successor?.id === user?.id) ||
+      (currentOverview?.successor?.email != null && currentOverview?.successor?.email === user?.email);
+
+    const roleName =
+      currentMember?.role_name?.toLowerCase() ||
+      activeProject.my_project_role?.toLowerCase() ||
+      "";
+
+    if (isDeparting) {
       resolvedRole = "outgoing";
-    } else if (transRole === "incoming_assignee") {
+    } else if (isSuccessor) {
       resolvedRole = "incoming";
+    } else if (roleName === "reviewer") {
+      resolvedRole = "reviewer";
     } else if (
-      transRole === "reviewer" ||
       roleName.includes("manager") ||
       roleName.includes("admin") ||
       roleName.includes("owner") ||
-      roleName.includes("lead")
+      activeProject.owner_id === user?.id
     ) {
       resolvedRole = "manager";
     } else if (currentMember) {
       resolvedRole = "member";
     } else {
-      // Default to manager for project owner/lead
-      resolvedRole = "manager";
+      resolvedRole = "member";
     }
   }
 
-  // Allow URL query parameter for testing/audit without bypassing auth
-  const activeRole: DashboardRole = roleOverride ?? resolvedRole;
+  // Security enforcement: Role cannot be spoofed or overridden via URL query parameters
+  const activeRole: DashboardRole = resolvedRole;
 
   const userName = user?.full_name?.split(" ")[0] || (mounted && user?.email?.split("@")[0]) || "there";
 
@@ -106,6 +124,8 @@ export function DashboardRouter() {
   const roleDisplayLabel =
     activeRole === "manager"
       ? "Manager"
+      : activeRole === "reviewer"
+      ? "Reviewer"
       : activeRole === "outgoing"
       ? "Outgoing"
       : activeRole === "incoming"
@@ -131,6 +151,11 @@ export function DashboardRouter() {
     ) : (
       <>Cross-project command center across your accessible workspaces.</>
     ),
+    reviewer: activeProject ? (
+      <>
+        Reviewing <span className="font-semibold text-navy">{activeProject.name}</span>. Inspect reconstructed knowledge, resolve conflicts, and issue handover approvals.
+      </>
+    ) : null,
     outgoing: activeProject ? (
       <>
         You&apos;re handing over <span className="font-semibold text-navy">{activeProject.name}</span>. Verify what the AI found and fill the gaps only you know.
@@ -171,6 +196,20 @@ export function DashboardRouter() {
         label: "Manage handovers",
         icon: Plus,
         action: () => router.push("/handover"),
+        primary: true,
+      },
+    ],
+    reviewer: [
+      {
+        label: "Conflicts",
+        icon: Sparkles,
+        action: () => router.push("/conflicts"),
+        primary: false,
+      },
+      {
+        label: "Verification Center",
+        icon: ClipboardCheck,
+        action: () => router.push("/verification"),
         primary: true,
       },
     ],
@@ -292,8 +331,7 @@ export function DashboardRouter() {
               role="tab"
               aria-selected={!activeProject && activeRole === "workspace"}
               onClick={() => {
-                setActiveProject(null as unknown as any);
-                setRoleOverride(null);
+                setActiveProject(null);
               }}
               className={cn(
                 "flex shrink-0 items-center gap-2 rounded-[10px] border px-3 py-1.5 text-left transition-all duration-200 cursor-pointer",
@@ -321,7 +359,6 @@ export function DashboardRouter() {
                   aria-selected={isSelected}
                   onClick={() => {
                     setActiveProject(p);
-                    setRoleOverride(null);
                   }}
                   className={cn(
                     "flex shrink-0 items-center gap-2.5 rounded-[10px] border px-3 py-1.5 text-left transition-all duration-200 cursor-pointer",
@@ -356,6 +393,7 @@ export function DashboardRouter() {
         {activeRole === "empty" && <EmptyWorkspaceDashboard />}
         {activeRole === "workspace" && <WorkspaceDashboard />}
         {activeRole === "manager" && <ManagerDashboard />}
+        {activeRole === "reviewer" && <ReviewerDashboard />}
         {activeRole === "outgoing" && <OutgoingDashboard />}
         {activeRole === "incoming" && <IncomingDashboard />}
         {activeRole === "member" && <MemberDashboard />}

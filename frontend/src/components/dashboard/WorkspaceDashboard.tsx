@@ -105,7 +105,15 @@ export function WorkspaceDashboard() {
                     >
                       {code}
                     </span>
-                    <RoleBadge role="Member" />
+                    <RoleBadge
+                      role={
+                        p.my_project_role === "project_manager"
+                          ? "Manager"
+                          : p.my_project_role === "reviewer"
+                          ? "Reviewer"
+                          : "Member"
+                      }
+                    />
                   </div>
                   <h3 className="text-base font-semibold text-navy group-hover:text-brand transition-colors line-clamp-1">
                     {p.name}

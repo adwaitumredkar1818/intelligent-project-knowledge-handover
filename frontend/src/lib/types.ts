@@ -24,6 +24,8 @@ export interface Project {
   target_handover_date: string | null;
   created_at: string;
   updated_at: string;
+  owner_id?: UUID;
+  my_project_role?: string | null;
 }
 
 export interface ProjectMember {
@@ -33,8 +35,12 @@ export interface ProjectMember {
   role_name: string;
   transition_role: "departing_owner" | "incoming_assignee" | "reviewer" | "observer" | null;
   created_at: string;
-  user_full_name: string | null;
-  user_email: string | null;
+  user_full_name?: string | null;
+  user_email?: string | null;
+  full_name?: string | null;
+  email?: string | null;
+  status?: string;
+  responsibility_description?: string | null;
 }
 
 export interface ReadinessScoreCard {
@@ -93,6 +99,9 @@ export interface ProjectOverview {
   knowledge: KnowledgeOverviewCard;
   attention_items: AttentionItemCard[];
   recent_activity: ProjectActivityCard[];
+  departing_member?: { id: UUID; full_name: string; email: string } | null;
+  successor?: { id: UUID; full_name: string; email: string } | null;
+  owner?: { id: UUID; full_name: string; email: string } | null;
 }
 
 export interface SourceConnection {
