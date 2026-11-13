@@ -45,8 +45,8 @@ def test_live_postgresql_connectivity_and_readiness_readonly() -> None:
                 "0009_supabase_and_vector_indexes",
                 "0010_knowledge_domains",
                 "0011_relationship_explorer",
+                "0012_verification_center",
             ) or not rev.startswith(("0001_", "0002_", "0003_", "0004_", "0005_", "0006_"))
-            )
             role_count = conn.execute(text("SELECT count(*) FROM roles")).scalar_one()
             assert role_count >= 8
             perm_count = conn.execute(text("SELECT count(*) FROM permissions")).scalar_one()
@@ -84,6 +84,25 @@ def test_live_postgresql_connectivity_and_readiness_readonly() -> None:
             }
             if rev == "0009_supabase_and_vector_indexes":
                 expected_tables.add("project_vector_indexes")
+            if rev in ("0011_relationship_explorer", "0012_verification_center"):
+                expected_tables.update({
+                    "knowledge_entities",
+                    "entity_aliases",
+                    "identity_resolution_candidates",
+                    "knowledge_relationships",
+                    "relationship_evidence_links",
+                    "decision_traceability_chains",
+                    "knowledge_timeline_events",
+                    "relationship_reconstruction_runs",
+                })
+            if rev == "0012_verification_center":
+                expected_tables.update({
+                    "verification_cases",
+                    "verification_issues",
+                    "verification_conflicts",
+                    "verification_review_events",
+                    "verification_context_requests",
+                })
             assert expected_tables.issubset(table_names)
     finally:
         engine.dispose()

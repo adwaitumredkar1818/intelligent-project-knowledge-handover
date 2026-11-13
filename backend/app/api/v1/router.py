@@ -14,6 +14,7 @@ from app.api.routes.relationships import router as relationships_router
 from app.api.routes.retrieval import router as retrieval_router
 from app.api.routes.sources import router as sources_router
 from app.api.routes.users import router as users_router
+from app.api.routes.verification import router as verification_router
 
 api_v1_router = APIRouter()
 api_v1_router.include_router(v1_health_router)
@@ -28,3 +29,4 @@ api_v1_router.include_router(retrieval_router)
 api_v1_router.include_router(knowledge_router)
 api_v1_router.include_router(knowledge_intelligence_router)
 api_v1_router.include_router(relationships_router)
+api_v1_router.include_router(verification_router)

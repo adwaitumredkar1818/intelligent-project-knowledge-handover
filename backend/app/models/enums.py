@@ -614,3 +614,135 @@ class RelationshipRunStatus(StrEnum):
     FAILED = "failed"
     CANCELLED = "cancelled"
 
+
+# =============================================================================
+# Verification Center Enums (Module 3 / Validation Area)
+# =============================================================================
+
+
+class VerificationTargetType(StrEnum):
+    """Polymorphic entity type undergoing verification."""
+
+    KNOWLEDGE_ITEM = "knowledge_item"
+    RELATIONSHIP = "relationship"
+
+
+class VerificationCaseStatus(StrEnum):
+    """Workflow state of a verification review case."""
+
+    CANDIDATE = "candidate"
+    PENDING_REVIEW = "pending_review"
+    VERIFIED = "verified"
+    CONFLICTED = "conflicted"
+    REJECTED = "rejected"
+    UNRESOLVED = "unresolved"
+    ARCHIVED = "archived"
+
+
+class MachineAssessmentStatus(StrEnum):
+    """Deterministic & AI automated evaluation outcome."""
+
+    PASSED = "passed"
+    ISSUES_DETECTED = "issues_detected"
+    CONFLICT_DETECTED = "conflict_detected"
+    UNCERTAIN = "uncertain"
+    INSUFFICIENT_EVIDENCE = "insufficient_evidence"
+
+
+class VerificationPriority(StrEnum):
+    """Urgency level for human review routing."""
+
+    CRITICAL = "critical"
+    HIGH = "high"
+    MEDIUM = "medium"
+    LOW = "low"
+
+
+class VerificationIssueType(StrEnum):
+    """Taxonomy of detected flaws, missing evidence, or conflicts."""
+
+    MISSING_EVIDENCE = "missing_evidence"
+    INVALID_SOURCE_REFERENCE = "invalid_source_reference"
+    UNSUPPORTED_CLAIM = "unsupported_claim"
+    CONFLICTING_SOURCES = "conflicting_sources"
+    INCONSISTENT_STATUS = "inconsistent_status"
+    OUTDATED_INFORMATION = "outdated_information"
+    STALE_KNOWLEDGE = "stale_knowledge"
+    DUPLICATE_RECORD = "duplicate_record"
+    UNCERTAIN_RELATIONSHIP = "uncertain_relationship"
+    INVALID_ENTITY_MAPPING = "invalid_entity_mapping"
+    INCORRECT_ATTRIBUTION = "incorrect_attribution"
+    MISSING_SOURCE_CONTEXT = "missing_source_context"
+    INSUFFICIENT_INFORMATION = "insufficient_information"
+    INCOMPLETE_TRACEABILITY = "incomplete_traceability"
+
+
+class VerificationSeverity(StrEnum):
+    """Impact tier of a verification issue."""
+
+    CRITICAL = "critical"
+    HIGH = "high"
+    MEDIUM = "medium"
+    LOW = "low"
+    INFO = "info"
+
+
+class IssueResolutionState(StrEnum):
+    """Lifecycle state of an individual verification issue."""
+
+    OPEN = "open"
+    RESOLVED = "resolved"
+    DISMISSED = "dismissed"
+    ACKNOWLEDGED = "acknowledged"
+
+
+class ConflictType(StrEnum):
+    """Category of contradiction detected across sources."""
+
+    STATUS_CONFLICT = "status_conflict"
+    OWNERSHIP_CONFLICT = "ownership_conflict"
+    DECISION_CONFLICT = "decision_conflict"
+    TECHNICAL_CONFLICT = "technical_conflict"
+    TEMPORAL_CONFLICT = "temporal_conflict"
+    RELATIONSHIP_CONFLICT = "relationship_conflict"
+
+
+class TemporalComparison(StrEnum):
+    """Time-based precedence analysis between conflicting claims."""
+
+    SIMULTANEOUS = "simultaneous"
+    B_SUPERSEDES_A = "b_supersedes_a"
+    A_SUPERSEDES_B = "a_supersedes_b"
+    AMBIGUOUS = "ambiguous"
+
+
+class ConflictResolutionState(StrEnum):
+    """Resolution status for side-by-side contradiction records."""
+
+    UNRESOLVED = "unresolved"
+    RECONCILED = "reconciled"
+    SUPERSEDED = "superseded"
+    DISMISSED = "dismissed"
+
+
+class ReviewActionType(StrEnum):
+    """Atomic human review action performed on a verification case."""
+
+    APPROVE = "approve"
+    REJECT = "reject"
+    EDIT = "edit"
+    REQUEST_CONTEXT = "request_context"
+    MARK_UNRESOLVED = "mark_unresolved"
+    RETURN_FOR_CORRECTION = "return_for_correction"
+    ASSIGN = "assign"
+
+
+class ContextRequestStatus(StrEnum):
+    """Lifecycle state of an outbound clarification query."""
+
+    PENDING = "pending"
+    RESPONDED = "responded"
+    CANCELLED = "cancelled"
+    EXPIRED = "expired"
+
+

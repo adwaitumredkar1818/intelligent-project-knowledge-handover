@@ -42,6 +42,13 @@ from app.models.relationship import (
 )
 from app.models.user import User
 from app.models.vector_index import ProjectVectorIndex
+from app.models.verification import (
+    VerificationCase,
+    VerificationConflict,
+    VerificationContextRequest,
+    VerificationIssue,
+    VerificationReviewEvent,
+)
 
 __all__ = [
     "AuditLog",
@@ -81,4 +88,9 @@ __all__ = [
     "User",
     "UserRole",
     "UserSourceAuthorisation",
+    "VerificationCase",
+    "VerificationConflict",
+    "VerificationContextRequest",
+    "VerificationIssue",
+    "VerificationReviewEvent",
 ]
