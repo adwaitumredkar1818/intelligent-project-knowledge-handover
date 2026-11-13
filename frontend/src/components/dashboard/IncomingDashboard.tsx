@@ -36,7 +36,8 @@ export function IncomingDashboard() {
     user,
   } = useLiveApp();
 
-  if (!activeProject) return null;
+  const project = activeProject ?? projects[0] ?? null;
+  if (!project) return null;
 
   // Departing member
   const departingMember = members.find((m) => m.transition_role === "departing_owner");
@@ -83,7 +84,7 @@ export function IncomingDashboard() {
           {
             label: "Received handover",
             value: "1 active",
-            hint: `${activeProject.name}`,
+            hint: `${project.name}`,
             tone: "blue",
             onClick: () => router.push("/handover"),
           },
@@ -129,11 +130,11 @@ export function IncomingDashboard() {
             </div>
 
             <h3 className="mt-4 text-[24px] font-semibold tracking-[-0.025em] text-navy">
-              {activeProject.name}
+              {project.name}
             </h3>
             <p className="mt-1 text-[13.5px] text-muted">
               Transferred from <span className="font-semibold text-navy">{departingName}</span> ·{" "}
-              {activeProject.description || "Core repository knowledge and operational handover"}
+              {project.description || "Core repository knowledge and operational handover"}
             </p>
 
             <dl className="mt-6 grid grid-cols-3 divide-x divide-line rounded-xl border border-line bg-white/80 shadow-2xs">

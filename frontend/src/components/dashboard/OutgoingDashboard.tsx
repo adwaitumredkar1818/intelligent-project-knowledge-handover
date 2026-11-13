@@ -20,19 +20,21 @@ export function OutgoingDashboard() {
   const router = useRouter();
   const {
     activeProject,
+    projects,
     overview,
     members,
     user,
     evidenceList,
   } = useLiveApp();
 
-  if (!activeProject) return null;
+  const project = activeProject ?? projects[0] ?? null;
+  if (!project) return null;
 
   // Real data resolution
   const readinessPct = overview?.readiness.overall_readiness_pct || 45;
   const attentionItems = overview?.attention_items || [];
   const recentActivities = overview?.recent_activity || [];
-  const targetDate = overview?.target_handover_date || activeProject.target_handover_date || "End of month";
+  const targetDate = overview?.target_handover_date || project.target_handover_date || "End of month";
 
   // Identify incoming successor from members list
   const successorMember = members.find((m) => m.transition_role === "incoming_assignee");
@@ -86,7 +88,7 @@ export function OutgoingDashboard() {
       <NextAction
         tone="amber"
         title={`Verify ${pendingVerificationCount} findings before handover`}
-        body={`${successorName} takes over ${activeProject.name} on ${targetDate}. Review evidence-grounded findings to complete your checklist.`}
+        body={`${successorName} takes over ${project.name} on ${targetDate}. Review evidence-grounded findings to complete your checklist.`}
         cta="Continue verification"
         to="/verification"
       />
@@ -97,7 +99,7 @@ export function OutgoingDashboard() {
           {
             label: "My active handover",
             value: "1 active",
-            hint: `${activeProject.name}`,
+            hint: `${project.name}`,
             tone: "blue",
             onClick: () => router.push("/handover"),
           },
@@ -129,11 +131,11 @@ export function OutgoingDashboard() {
       <div className="grid gap-5 lg:grid-cols-[1.75fr_1fr]">
         <Card className="p-5 sm:p-6 shadow-card">
           <HandoverProgressRing
-            code={activeProject.slug?.toUpperCase() || "HO-01"}
+            code={project.slug?.toUpperCase() || "HO-01"}
             status={readinessPct >= 80 ? "approved" : "in_progress"}
             progress={readinessPct}
             assigneeName={successorName}
-            scope={activeProject.description || "Project knowledge and responsibilities handover"}
+            scope={project.description || "Project knowledge and responsibilities handover"}
             dueDate={targetDate}
           />
           <div className="mt-6">
@@ -208,7 +210,7 @@ export function OutgoingDashboard() {
 
         <Panel
           title="Recent project updates"
-          subtitle={activeProject.name}
+          subtitle={project.name}
           actions={<ViewLink to="/audit">Audit trail</ViewLink>}
         >
           <ActivityTimeline activities={recentActivities} limit={5} />

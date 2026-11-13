@@ -1,11 +1,11 @@
-"""Enable Row Level Security (RLS) on all 56 public base tables.
+"""Enable Row Level Security (RLS) on all 61 public base tables.
 
-Revision ID: 0013_rls_hardening
-Revises: 0012_verification_center
+Revision ID: 0016_rls_hardening
+Revises: 0015_assistant_workspace
 Create Date: 2026-11-13 19:30:00.000000
 
 Approved Architecture:
-- RLS enabled across all 56 public base tables as defense-in-depth backstop.
+- RLS enabled across all 61 public base tables as defense-in-depth backstop.
 - Relies on PostgreSQL default-deny semantics for non-BYPASSRLS roles (e.g. PostgREST anon/authenticated).
 - Zero permissive policies created for anon/authenticated (ensuring 0 rows accessible via PostgREST).
 - Zero policies created for postgres or service_role (both retain native BYPASSRLS=true runtime access).
@@ -22,14 +22,19 @@ import sqlalchemy as sa
 from alembic import context, op
 
 # revision identifiers, used by Alembic.
-revision: str = "0013_rls_hardening"
-down_revision: str | None = "0012_verification_center"
+revision: str = "0016_rls_hardening"
+down_revision: str | None = "0015_assistant_workspace"
 branch_labels: Sequence[str] | None = None
 depends_on: Sequence[str] | None = None
 
-# Verified canonical list of all 56 public base tables in the Handover platform schema.
+# Verified canonical list of all 61 public base tables in the Handover platform schema.
 _ALL_PUBLIC_BASE_TABLES: tuple[str, ...] = (
     "alembic_version",
+    "assistant_citations",
+    "assistant_conversations",
+    "assistant_feedback",
+    "assistant_messages",
+    "assistant_retrieval_runs",
     "audit_logs",
     "background_jobs",
     "decision_traceability_chains",

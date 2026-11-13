@@ -31,7 +31,8 @@ export function ManagerDashboard() {
     setIsAddSourceModalOpen,
   } = useLiveApp();
 
-  if (!activeProject) return null;
+  const project = activeProject ?? projects[0] ?? null;
+  if (!project) return null;
 
   // Real data calculations
   const totalProjects = projects.length;
@@ -57,7 +58,7 @@ export function ManagerDashboard() {
       tone: isError ? "red" : isConflict ? "ai" : "amber",
       icon: isError ? Plug : isConflict ? Sparkles : ClipboardCheck,
       title: item.message,
-      sub: `${activeProject.name} · ${item.type || "Attention required"}`,
+      sub: `${project.name} · ${item.type || "Attention required"}`,
       cta: isError ? "Reconnect" : isConflict ? "Resolve" : "Review",
       to: isError ? "/sources" : isConflict ? "/conflicts" : "/verification",
     };
@@ -96,12 +97,12 @@ export function ManagerDashboard() {
 
   // Handover stages progression
   const handoverStages = [
-    { label: "Draft", count: activeProject.status === "active" && readinessPct < 30 ? 1 : 0 },
-    { label: "In progress", count: activeProject.status === "active" && readinessPct >= 30 && readinessPct < 70 ? 1 : 0 },
+    { label: "Draft", count: project.status === "active" && readinessPct < 30 ? 1 : 0 },
+    { label: "In progress", count: project.status === "active" && readinessPct >= 30 && readinessPct < 70 ? 1 : 0 },
     { label: "Pending review", count: attentionItems.length > 0 ? 1 : 0 },
     { label: "Approved", count: readinessPct >= 80 ? 1 : 0 },
-    { label: "Published", count: activeProject.status === "completed" ? 1 : 0 },
-    { label: "Completed", count: activeProject.status === "completed" ? 1 : 0 },
+    { label: "Published", count: project.status === "completed" ? 1 : 0 },
+    { label: "Completed", count: project.status === "completed" ? 1 : 0 },
   ];
   const maxStageCount = Math.max(1, ...handoverStages.map((s) => s.count));
 
@@ -112,7 +113,7 @@ export function ManagerDashboard() {
         <NextAction
           tone={nextActionItem.tone === "red" ? "amber" : "amber"}
           title={nextActionItem.title}
-          body={`Action required in ${activeProject.name}. Review candidate items and resolve blocking concerns.`}
+          body={`Action required in ${project.name}. Review candidate items and resolve blocking concerns.`}
           cta={nextActionItem.cta}
           to={nextActionItem.to}
         />
@@ -165,7 +166,7 @@ export function ManagerDashboard() {
       <div className="grid gap-5 lg:grid-cols-[1.75fr_1fr]">
         <Panel
           title="Knowledge processing activity"
-          subtitle={`${activeProject.name} · evidence ingestion & vector indexing trend`}
+          subtitle={`${project.name} · evidence ingestion & vector indexing trend`}
           actions={<ViewLink to="/evidence">Evidence center</ViewLink>}
         >
           <div className="flex flex-wrap gap-x-8 gap-y-2 px-5 sm:px-6">
@@ -213,7 +214,7 @@ export function ManagerDashboard() {
 
         <Panel
           title="Handover stage progress"
-          subtitle={`Workspace progression · ${activeProject.name}`}
+          subtitle={`Workspace progression · ${project.name}`}
           actions={<ViewLink to="/handover">Handovers</ViewLink>}
         >
           <ul className="space-y-3 px-5 pb-5 sm:px-6">
@@ -278,7 +279,7 @@ export function ManagerDashboard() {
               <span className="text-right">Sync</span>
             </div>
             {projects.slice(0, 5).map((p) => {
-              const isCurrent = p.id === activeProject.id;
+              const isCurrent = p.id === project.id;
               const pct = isCurrent ? readinessPct : 20;
               return (
                 <div
@@ -342,7 +343,7 @@ export function ManagerDashboard() {
 
         <Panel
           title="Data source status"
-          subtitle={activeProject.name}
+          subtitle={project.name}
           actions={<ViewLink to="/sources">Manage sources</ViewLink>}
         >
           <ul className="space-y-3 px-5 pb-5 sm:px-6">

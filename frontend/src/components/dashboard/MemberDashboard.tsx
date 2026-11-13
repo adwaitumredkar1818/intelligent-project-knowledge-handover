@@ -17,13 +17,15 @@ export function MemberDashboard() {
   const router = useRouter();
   const {
     activeProject,
+    projects,
     overview,
     members,
     sourceMappings,
     evidenceList,
   } = useLiveApp();
 
-  if (!activeProject) return null;
+  const project = activeProject ?? projects[0] ?? null;
+  if (!project) return null;
 
   const totalDecisions = overview?.knowledge.decisions_count || 0;
   const totalTasks = overview?.knowledge.tasks_count || 0;
@@ -38,8 +40,8 @@ export function MemberDashboard() {
         items={[
           {
             label: "Project status",
-            value: activeProject.status === "active" ? "Active" : "Archived",
-            hint: `${activeProject.name}`,
+            value: project.status === "active" ? "Active" : "Archived",
+            hint: `${project.name}`,
             tone: "blue",
             onClick: () => router.push("/projects"),
           },
@@ -76,10 +78,10 @@ export function MemberDashboard() {
           </div>
 
           <h2 className="text-[22px] font-semibold tracking-[-0.02em] text-navy">
-            {activeProject.name} Knowledge Hub
+            {project.name} Knowledge Hub
           </h2>
           <p className="mt-1 text-[13.5px] text-muted max-w-xl">
-            {activeProject.description ||
+            {project.description ||
               "Explore verified technical decisions, ownership boundaries, and architectural dependencies extracted across connected repositories and documentation."}
           </p>
 

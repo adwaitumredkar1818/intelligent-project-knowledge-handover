@@ -16,7 +16,6 @@ export function SignupPage() {
   const [password, setPassword] = useState("");
   const [confirmPassword, setConfirmPassword] = useState("");
   const [showPassword, setShowPassword] = useState(false);
-  const [agreeTerms, setAgreeTerms] = useState(false);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
@@ -63,11 +62,6 @@ export function SignupPage() {
 
     if (password !== confirmPassword) {
       setError("Passwords do not match.");
-      return;
-    }
-
-    if (!agreeTerms) {
-      setError("You must agree to the platform security terms and privacy policy to continue.");
       return;
     }
 
@@ -221,24 +215,6 @@ export function SignupPage() {
             required
             className="w-full h-10 rounded-xl border border-[#D9E1F0] bg-white px-3.5 text-sm text-[#203653] placeholder:text-slate-400 focus:border-[#315FBA] focus:outline-none focus:ring-1 focus:ring-[#315FBA] transition"
           />
-        </div>
-
-        <div className="pt-1">
-          <label className="flex items-start gap-2 cursor-pointer text-[12.5px] text-[#718096] leading-snug">
-            <input
-              type="checkbox"
-              checked={agreeTerms}
-              onChange={(e) => setAgreeTerms(e.target.checked)}
-              className="size-4 mt-0.5 rounded border-[#D9E1F0] text-[#315FBA] focus:ring-[#315FBA]"
-            />
-            <span>
-              I agree to the platform{" "}
-              <Link href="/#security" className="text-[#315FBA] underline">
-                Security &amp; Governance Terms
-              </Link>{" "}
-              and privacy standards.
-            </span>
-          </label>
         </div>
 
         <button

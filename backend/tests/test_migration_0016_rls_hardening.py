@@ -1,4 +1,4 @@
-"""Automated unit and controlled rollback-only tests for migration 0013 (RLS Hardening)."""
+"""Automated unit and controlled rollback-only tests for migration 0016 (RLS Hardening)."""
 
 from __future__ import annotations
 
@@ -22,12 +22,12 @@ _MIGRATION_PATH = (
     / "database"
     / "migrations"
     / "versions"
-    / "20261113_0013_rls_hardening.py"
+    / "20261113_0016_rls_hardening.py"
 )
 
 
 def _load_migration_module() -> ModuleType:
-    spec = importlib.util.spec_from_file_location("migration_0013", _MIGRATION_PATH)
+    spec = importlib.util.spec_from_file_location("migration_0016", _MIGRATION_PATH)
     if spec is None or spec.loader is None:
         raise ImportError(f"Could not load migration module from {_MIGRATION_PATH}")
     module = importlib.util.module_from_spec(spec)
@@ -35,14 +35,14 @@ def _load_migration_module() -> ModuleType:
     return module
 
 
-def test_migration_0013_metadata_and_revision_chain() -> None:
-    """Verify revision chain, down_revision, and 56-table coverage."""
+def test_migration_0016_metadata_and_revision_chain() -> None:
+    """Verify revision chain, down_revision, and 61-table coverage."""
     mod = _load_migration_module()
-    assert mod.revision == "0013_rls_hardening"
-    assert mod.down_revision == "0012_verification_center"
+    assert mod.revision == "0016_rls_hardening"
+    assert mod.down_revision == "0015_assistant_workspace"
     tables = mod._ALL_PUBLIC_BASE_TABLES
-    assert len(tables) == 56
-    assert len(set(tables)) == 56
+    assert len(tables) == 61
+    assert len(set(tables)) == 61
 
     # Verify key canonical tables are explicitly present
     assert "users" in tables
@@ -52,18 +52,19 @@ def test_migration_0013_metadata_and_revision_chain() -> None:
     assert "knowledge_items" in tables
     assert "verification_cases" in tables
     assert "handover_packages" in tables
+    assert "assistant_conversations" in tables
     assert "audit_logs" in tables
     assert "alembic_version" in tables
 
 
-def test_migration_0013_offline_sql_generation_contract(capsys: pytest.CaptureFixture[str]) -> None:
-    """Verify offline SQL generation generates exactly 56 ENABLE and 56 DISABLE statements."""
+def test_migration_0016_offline_sql_generation_contract(capsys: pytest.CaptureFixture[str]) -> None:
+    """Verify offline SQL generation generates exactly 61 ENABLE and 61 DISABLE statements."""
     mod = _load_migration_module()
     tables = mod._ALL_PUBLIC_BASE_TABLES
     alembic_cfg = Config(str(_ALEMBIC_INI))
 
     # Capture upgrade --sql output via capsys
-    command.upgrade(alembic_cfg, "0012_verification_center:0013_rls_hardening", sql=True)
+    command.upgrade(alembic_cfg, "0015_assistant_workspace:0016_rls_hardening", sql=True)
     captured_upgrade = capsys.readouterr()
     upgrade_sql = captured_upgrade.out
 
@@ -75,7 +76,7 @@ def test_migration_0013_offline_sql_generation_contract(capsys: pytest.CaptureFi
     assert "FORCE ROW LEVEL SECURITY" not in upgrade_sql
 
     # Capture downgrade --sql output via capsys
-    command.downgrade(alembic_cfg, "0013_rls_hardening:0012_verification_center", sql=True)
+    command.downgrade(alembic_cfg, "0016_rls_hardening:0015_assistant_workspace", sql=True)
     captured_downgrade = capsys.readouterr()
     downgrade_sql = captured_downgrade.out
 
@@ -83,7 +84,7 @@ def test_migration_0013_offline_sql_generation_contract(capsys: pytest.CaptureFi
         assert f'ALTER TABLE public."{table}" DISABLE ROW LEVEL SECURITY;' in downgrade_sql
 
 
-def test_migration_0013_isolated_rls_engine_behavior() -> None:
+def test_migration_0016_isolated_rls_engine_behavior() -> None:
     """Verify PostgreSQL RLS engine semantics on an isolated test table in live database session."""
     settings = get_settings()
     engine = create_db_engine(settings)
