@@ -40,6 +40,42 @@ export function setStoredToken(token: string | null) {
   }
 }
 
+let refreshPromise: Promise<string | null> | null = null;
+
+async function tryRefreshToken(): Promise<string | null> {
+  if (typeof window === "undefined") return null;
+  if (!refreshPromise) {
+    refreshPromise = (async () => {
+      try {
+        const res = await fetch(`${API_BASE_URL}/auth/refresh`, {
+          method: "POST",
+          credentials: "include",
+          headers: {
+            "Content-Type": "application/json",
+          },
+        });
+        if (!res.ok) {
+          setStoredToken(null);
+          return null;
+        }
+        const data = (await res.json()) as { access_token?: string };
+        if (data?.access_token) {
+          setStoredToken(data.access_token);
+          return data.access_token;
+        }
+        setStoredToken(null);
+        return null;
+      } catch {
+        setStoredToken(null);
+        return null;
+      } finally {
+        refreshPromise = null;
+      }
+    })();
+  }
+  return refreshPromise;
+}
+
 interface ApiErrorPayload {
   error?: {
     message?: string;
@@ -105,7 +141,8 @@ interface RawOverviewResponse {
 
 async function request<T>(
   path: string,
-  options: RequestInit = {}
+  options: RequestInit = {},
+  isRetry = false
 ): Promise<T> {
   const url = `${API_BASE_URL}${path}`;
   const token = getToken();
@@ -124,8 +161,37 @@ async function request<T>(
 
   const res = await fetch(url, {
     ...options,
+    credentials: options.credentials || "include",
     headers,
   });
+
+  if (
+    res.status === 401 &&
+    !isRetry &&
+    !path.startsWith("/auth/login") &&
+    !path.startsWith("/auth/refresh") &&
+    !path.startsWith("/auth/register")
+  ) {
+    const newToken = await tryRefreshToken();
+    if (newToken) {
+      return request<T>(
+        path,
+        {
+          ...options,
+          headers: {
+            ...headers,
+            Authorization: `Bearer ${newToken}`,
+          },
+        },
+        true
+      );
+    } else {
+      setStoredToken(null);
+      if (typeof window !== "undefined") {
+        window.dispatchEvent(new CustomEvent("handover:session-expired"));
+      }
+    }
+  }
 
   if (!res.ok) {
     let errorData: ApiErrorPayload | null = null;
@@ -191,6 +257,20 @@ export const api = {
         method: "POST",
         body: JSON.stringify(data),
       });
+    },
+    async refreshToken(): Promise<{ access_token: string; token_type: string; expires_in: number }> {
+      return request<{ access_token: string; token_type: string; expires_in: number }>("/auth/refresh", {
+        method: "POST",
+      });
+    },
+    async logout(): Promise<void> {
+      try {
+        await request("/auth/logout", { method: "POST" });
+      } catch {
+        // ignore network error on logout
+      } finally {
+        setStoredToken(null);
+      }
     },
     async me(): Promise<User> {
       return request<User>("/auth/me");

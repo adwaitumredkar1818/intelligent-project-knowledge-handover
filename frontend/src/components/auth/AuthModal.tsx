@@ -1,6 +1,7 @@
 "use client";
 
 import React, { useState } from "react";
+import { usePathname, useRouter } from "next/navigation";
 import {
   Lock,
   Mail,
@@ -11,12 +12,26 @@ import {
   CheckCircle2,
   Eye,
   EyeOff,
+  X,
 } from "lucide-react";
 import { useLiveApp } from "../../context/LiveAppContext";
 
 export function AuthModal() {
-  const { user, login, register, isLoadingAuth } = useLiveApp();
-  const [mode, setMode] = useState<"login" | "register">("login");
+  const {
+    user,
+    login,
+    register,
+    isLoadingAuth,
+    isAuthModalOpen,
+    closeAuthModal,
+    authModalMode,
+    setAuthModalMode,
+  } = useLiveApp();
+  const pathname = usePathname();
+  const router = useRouter();
+
+  const isPublicRoute = pathname === "/" || pathname === "/landing";
+
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [fullName, setFullName] = useState("");
@@ -24,7 +39,17 @@ export function AuthModal() {
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
 
-  if (isLoadingAuth || user) {
+  if (user) {
+    return null;
+  }
+
+  // On public marketing pages, only show when explicitly opened
+  if (isPublicRoute && !isAuthModalOpen) {
+    return null;
+  }
+
+  // On authenticated views, wait for auth check
+  if (!isPublicRoute && isLoadingAuth) {
     return null;
   }
 
@@ -40,7 +65,7 @@ export function AuthModal() {
     e.preventDefault();
     setErrorMessage(null);
 
-    if (mode === "register") {
+    if (authModalMode === "register") {
       if (fullName.trim().length < 2) {
         setErrorMessage("Please enter your full name (at least 2 characters).");
         return;
@@ -55,10 +80,14 @@ export function AuthModal() {
 
     setIsSubmitting(true);
     try {
-      if (mode === "login") {
+      if (authModalMode === "login") {
         await login(email.trim(), password);
       } else {
         await register(email.trim(), password, fullName.trim());
+      }
+      closeAuthModal();
+      if (isPublicRoute) {
+        router.push("/overview");
       }
     } catch (err: unknown) {
       setErrorMessage(err instanceof Error ? err.message : "Authentication failed");
@@ -68,8 +97,24 @@ export function AuthModal() {
   };
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center bg-[#1E2C42]/80 backdrop-blur-xs p-4">
-      <div className="w-full max-w-md bg-white rounded-xl shadow-2xl border border-[#DCE3EB] overflow-hidden">
+    <div
+      className="fixed inset-0 z-50 flex items-center justify-center bg-[#1E2C42]/80 backdrop-blur-xs p-4"
+      onClick={isPublicRoute ? closeAuthModal : undefined}
+    >
+      <div
+        className="w-full max-w-md bg-white rounded-xl shadow-2xl border border-[#DCE3EB] overflow-hidden relative"
+        onClick={(e) => e.stopPropagation()}
+      >
+        {isPublicRoute && (
+          <button
+            onClick={closeAuthModal}
+            className="absolute top-4 right-4 z-10 text-white/70 hover:text-white p-1 rounded-lg transition"
+            aria-label="Close modal"
+          >
+            <X className="size-5" />
+          </button>
+        )}
+
         {/* Header */}
         <div className="bg-[#253650] text-white p-6 text-center relative">
           <div className="w-12 h-12 rounded-xl bg-[#4774A9] border border-[#249E91]/40 flex items-center justify-center font-bold text-xl mx-auto shadow-md mb-3 text-white">
@@ -90,12 +135,12 @@ export function AuthModal() {
             <button
               type="button"
               className={`pb-2.5 px-4 transition-colors ${
-                mode === "login"
+                authModalMode === "login"
                   ? "border-b-2 border-[#4774A9] text-[#4774A9]"
                   : "text-[#69778D] hover:text-[#25334B]"
               }`}
               onClick={() => {
-                setMode("login");
+                setAuthModalMode("login");
                 setErrorMessage(null);
               }}
             >
@@ -104,12 +149,12 @@ export function AuthModal() {
             <button
               type="button"
               className={`pb-2.5 px-4 transition-colors ${
-                mode === "register"
+                authModalMode === "register"
                   ? "border-b-2 border-[#4774A9] text-[#4774A9]"
                   : "text-[#69778D] hover:text-[#25334B]"
               }`}
               onClick={() => {
-                setMode("register");
+                setAuthModalMode("register");
                 setErrorMessage(null);
               }}
             >
@@ -125,7 +170,7 @@ export function AuthModal() {
           )}
 
           <form onSubmit={handleSubmit} className="space-y-4">
-            {mode === "register" && (
+            {authModalMode === "register" && (
               <div>
                 <label className="block text-xs font-semibold text-[#25334B] mb-1">
                   Full Name
@@ -166,7 +211,7 @@ export function AuthModal() {
                 <label className="block text-xs font-semibold text-[#25334B]">
                   Password
                 </label>
-                {mode === "register" && (
+                {authModalMode === "register" && (
                   <span className="text-[10px] text-[#69778D]">
                     Min 12 chars, upper, lower, num &amp; symbol
                   </span>
@@ -179,7 +224,7 @@ export function AuthModal() {
                   required
                   value={password}
                   onChange={(e) => setPassword(e.target.value)}
-                  placeholder={mode === "register" ? "e.g. HandoverPass2026!" : "••••••••"}
+                  placeholder={authModalMode === "register" ? "e.g. HandoverPass2026!" : "••••••••"}
                   className="w-full pl-9 pr-10 py-2 rounded-lg border border-[#DCE3EB] text-xs focus:outline-none focus:ring-2 focus:ring-[#4774A9] text-[#25334B]"
                 />
                 <button
@@ -197,7 +242,7 @@ export function AuthModal() {
               </div>
 
               {/* Password strength criteria indicator in register mode */}
-              {mode === "register" && password.length > 0 && (
+              {authModalMode === "register" && password.length > 0 && (
                 <div className="mt-2.5 p-2.5 rounded-lg bg-[#F8FAFC] border border-[#E2E8F0] space-y-1.5 text-[11px]">
                   <div className="font-semibold text-[#475569] mb-1">
                     Password Requirements:
@@ -261,7 +306,7 @@ export function AuthModal() {
               disabled={isSubmitting}
               className="w-full mt-2 py-2.5 px-4 rounded-lg bg-[#4774A9] hover:bg-[#365F92] text-white text-xs font-semibold flex items-center justify-center gap-2 transition-colors disabled:opacity-50 cursor-pointer shadow-xs"
             >
-              <span>{isSubmitting ? "Authenticating..." : mode === "login" ? "Sign In to Workspace" : "Create Account & Workspace"}</span>
+              <span>{isSubmitting ? "Authenticating..." : authModalMode === "login" ? "Sign In to Workspace" : "Create Account & Workspace"}</span>
               <ArrowRight className="w-4 h-4" />
             </button>
           </form>

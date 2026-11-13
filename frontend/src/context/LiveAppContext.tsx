@@ -8,7 +8,7 @@ import React, {
   useCallback,
   type ReactNode,
 } from "react";
-import { api, setStoredToken } from "../lib/api";
+import { api, setStoredToken, ApiError } from "../lib/api";
 import type {
   User,
   Organisation,
@@ -91,6 +91,12 @@ interface LiveAppContextType {
   downloadEvidence: (evidenceId: string, filename?: string) => Promise<void>;
 
   // UI state & modals
+  isAuthModalOpen: boolean;
+  setIsAuthModalOpen: (open: boolean) => void;
+  authModalMode: "login" | "register";
+  setAuthModalMode: (mode: "login" | "register") => void;
+  openAuthModal: (mode?: "login" | "register") => void;
+  closeAuthModal: () => void;
   isCreateOrgModalOpen: boolean;
   setIsCreateOrgModalOpen: (open: boolean) => void;
   isCreateProjectModalOpen: boolean;
@@ -151,6 +157,18 @@ export function LiveAppProvider({ children }: { children: ReactNode }) {
   });
 
   // Modals & UI
+  const [isAuthModalOpen, setIsAuthModalOpen] = useState(false);
+  const [authModalMode, setAuthModalMode] = useState<"login" | "register">("login");
+  const openAuthModal = useCallback((mode: "login" | "register" = "login") => {
+    setAuthModalMode(mode);
+    if (typeof window !== "undefined") {
+      window.location.href = mode === "login" ? "/login" : "/signup";
+    }
+  }, []);
+  const closeAuthModal = useCallback(() => {
+    setIsAuthModalOpen(false);
+  }, []);
+
   const [isCreateOrgModalOpen, setIsCreateOrgModalOpen] = useState(false);
   const [isCreateProjectModalOpen, setIsCreateProjectModalOpen] = useState(false);
   const [isAddSourceModalOpen, setIsAddSourceModalOpen] = useState(false);
@@ -173,6 +191,27 @@ export function LiveAppProvider({ children }: { children: ReactNode }) {
     setToasts((prev) => prev.filter((t) => t.id !== id));
   }, []);
 
+  // Listen for global session expiration events dispatched by api.ts
+  useEffect(() => {
+    const handleSessionExpired = () => {
+      setStoredToken(null);
+      setToken(null);
+      setUser(null);
+      setActiveOrg(null);
+      setActiveProject(null);
+      setOrganisations([]);
+      setProjects([]);
+      setMembers([]);
+      setEvidenceList([]);
+      setOverview(null);
+    };
+
+    window.addEventListener("handover:session-expired", handleSessionExpired);
+    return () => {
+      window.removeEventListener("handover:session-expired", handleSessionExpired);
+    };
+  }, []);
+
   // Initialize auth from localStorage and verify with backend
   useEffect(() => {
     async function initAuth() {
@@ -185,14 +224,33 @@ export function LiveAppProvider({ children }: { children: ReactNode }) {
             const me = await api.auth.me();
             setUser(me);
           } catch {
-            // Token expired or invalid
-            setStoredToken(null);
-            setToken(null);
-            setUser(null);
+            // Token expired or invalid — try silent refresh via HttpOnly cookie
+            try {
+              const refreshed = await api.auth.refreshToken();
+              setStoredToken(refreshed.access_token);
+              setToken(refreshed.access_token);
+              const me = await api.auth.me();
+              setUser(me);
+            } catch {
+              setStoredToken(null);
+              setToken(null);
+              setUser(null);
+            }
+          }
+        } else {
+          // If no access token is stored, attempt silent refresh from HttpOnly cookie
+          try {
+            const refreshed = await api.auth.refreshToken();
+            setStoredToken(refreshed.access_token);
+            setToken(refreshed.access_token);
+            const me = await api.auth.me();
+            setUser(me);
+          } catch {
+            // No active session, user remains unauthenticated
           }
         }
-      } catch (err) {
-        console.error("Auth init error:", err);
+      } catch {
+        // Silent auth init
       } finally {
         setIsLoadingAuth(false);
       }
@@ -211,7 +269,8 @@ export function LiveAppProvider({ children }: { children: ReactNode }) {
       } else {
         setActiveOrg(null);
       }
-    } catch (err) {
+    } catch (err: unknown) {
+      if (err instanceof ApiError && err.status === 401) return;
       console.error("Error loading organisations:", err);
     }
   }, [user]);
@@ -236,7 +295,7 @@ export function LiveAppProvider({ children }: { children: ReactNode }) {
 
   // Load projects for active organization
   const refreshProjects = useCallback(async () => {
-    if (!activeOrg) {
+    if (!user || !activeOrg) {
       setProjects([]);
       setActiveProject(null);
       return;
@@ -251,6 +310,7 @@ export function LiveAppProvider({ children }: { children: ReactNode }) {
         setActiveProject(null);
       }
     } catch (err: unknown) {
+      if (err instanceof ApiError && err.status === 401) return;
       console.error("Error loading projects:", err);
       addToast({
         type: "error",
@@ -260,10 +320,10 @@ export function LiveAppProvider({ children }: { children: ReactNode }) {
     } finally {
       setIsLoadingProjects(false);
     }
-  }, [activeOrg, addToast]);
+  }, [user, activeOrg, addToast]);
 
   useEffect(() => {
-    if (!activeOrg) return;
+    if (!user || !activeOrg) return;
     let active = true;
     void Promise.resolve().then(async () => {
       if (active) {
@@ -277,7 +337,7 @@ export function LiveAppProvider({ children }: { children: ReactNode }) {
 
   // Load project overview
   const refreshOverview = useCallback(async () => {
-    if (!activeProject) {
+    if (!user || !activeProject) {
       setOverview(null);
       return;
     }
@@ -286,15 +346,16 @@ export function LiveAppProvider({ children }: { children: ReactNode }) {
       const ov = await api.projects.getOverview(activeProject.id);
       setOverview(ov);
     } catch (err: unknown) {
+      if (err instanceof ApiError && err.status === 401) return;
       console.error("Error loading project overview:", err);
     } finally {
       setIsLoadingOverview(false);
     }
-  }, [activeProject]);
+  }, [user, activeProject]);
 
   // Load project members
   const refreshMembers = useCallback(async () => {
-    if (!activeProject) {
+    if (!user || !activeProject) {
       setMembers([]);
       return;
     }
@@ -303,15 +364,16 @@ export function LiveAppProvider({ children }: { children: ReactNode }) {
       const m = await api.members.list(activeProject.id);
       setMembers(m);
     } catch (err: unknown) {
+      if (err instanceof ApiError && err.status === 401) return;
       console.error("Error loading project members:", err);
     } finally {
       setIsLoadingMembers(false);
     }
-  }, [activeProject]);
+  }, [user, activeProject]);
 
   // Load project sources & org connections
   const refreshSources = useCallback(async () => {
-    if (!activeProject || !activeOrg) {
+    if (!user || !activeProject || !activeOrg) {
       setSourceMappings([]);
       setOrgConnections([]);
       return;
@@ -325,15 +387,16 @@ export function LiveAppProvider({ children }: { children: ReactNode }) {
       setSourceMappings(mappings);
       setOrgConnections(conns);
     } catch (err: unknown) {
+      if (err instanceof ApiError && err.status === 401) return;
       console.error("Error loading sources:", err);
     } finally {
       setIsLoadingSources(false);
     }
-  }, [activeProject, activeOrg]);
+  }, [user, activeProject, activeOrg]);
 
   // Load evidence list and metrics
   const refreshEvidence = useCallback(async () => {
-    if (!activeProject) {
+    if (!user || !activeProject) {
       setEvidenceList([]);
       setEvidenceMetrics(null);
       return;
@@ -353,16 +416,17 @@ export function LiveAppProvider({ children }: { children: ReactNode }) {
         setSelectedEvidenceId(items[0].id);
       }
     } catch (err: unknown) {
+      if (err instanceof ApiError && err.status === 401) return;
       console.error("Error loading evidence:", err);
     } finally {
       setIsLoadingEvidence(false);
     }
-  }, [activeProject, evidenceFilter, selectedEvidenceId]);
+  }, [user, activeProject, evidenceFilter, selectedEvidenceId]);
 
   // Load evidence detail when selectedEvidenceId changes
   useEffect(() => {
     async function loadDetail() {
-      if (!selectedEvidenceId) {
+      if (!user || !selectedEvidenceId) {
         setSelectedEvidence(null);
         return;
       }
@@ -371,6 +435,7 @@ export function LiveAppProvider({ children }: { children: ReactNode }) {
         const detail = await api.evidence.getDetail(selectedEvidenceId);
         setSelectedEvidence(detail);
       } catch (err: unknown) {
+        if (err instanceof ApiError && err.status === 401) return;
         console.error("Error loading evidence detail:", err);
         setSelectedEvidence(null);
       } finally {
@@ -378,11 +443,11 @@ export function LiveAppProvider({ children }: { children: ReactNode }) {
       }
     }
     loadDetail();
-  }, [selectedEvidenceId]);
+  }, [user, selectedEvidenceId]);
 
   // Trigger data refreshes when active project changes
   useEffect(() => {
-    if (!activeProject) return;
+    if (!user || !activeProject) return;
     let active = true;
     void Promise.resolve().then(() => {
       if (!active) return;
@@ -394,7 +459,7 @@ export function LiveAppProvider({ children }: { children: ReactNode }) {
     return () => {
       active = false;
     };
-  }, [activeProject, refreshOverview, refreshMembers, refreshSources, refreshEvidence]);
+  }, [user, activeProject, refreshOverview, refreshMembers, refreshSources, refreshEvidence]);
 
   // Auth actions
   const login = async (email: string, password: string) => {
@@ -422,6 +487,11 @@ export function LiveAppProvider({ children }: { children: ReactNode }) {
   };
 
   const logout = async () => {
+    try {
+      await api.auth.logout();
+    } catch {
+      // ignore
+    }
     setStoredToken(null);
     setToken(null);
     setUser(null);
@@ -429,6 +499,9 @@ export function LiveAppProvider({ children }: { children: ReactNode }) {
     setActiveProject(null);
     setOrganisations([]);
     setProjects([]);
+    setMembers([]);
+    setEvidenceList([]);
+    setOverview(null);
     addToast({
       type: "info",
       title: "Signed Out",
@@ -641,6 +714,12 @@ export function LiveAppProvider({ children }: { children: ReactNode }) {
     refreshEvidence,
     uploadDocument,
     downloadEvidence,
+    isAuthModalOpen,
+    setIsAuthModalOpen,
+    authModalMode,
+    setAuthModalMode,
+    openAuthModal,
+    closeAuthModal,
     isCreateOrgModalOpen,
     setIsCreateOrgModalOpen,
     isCreateProjectModalOpen,
