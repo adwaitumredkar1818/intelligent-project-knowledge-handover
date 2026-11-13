@@ -1,0 +1,129 @@
+{
+  "module": "Project Knowledge Assistant (Module 5)",
+  "timestamp": "2026-11-13T14:12:39.643331+00:00",
+  "tests": {
+    "QueryClassification_12Types": {
+      "status": "PASSED",
+      "details": {
+        "mismatches": [],
+        "total_tested": 12
+      }
+    },
+    "EntityExtraction_Precision": {
+      "status": "PASSED",
+      "details": {
+        "jira_keys": [
+          "PROJ-1088"
+        ],
+        "pr_numbers": [
+          42
+        ],
+        "commit_hashes": [
+          "a1b2c3d4"
+        ],
+        "file_paths": [
+          "backend/app/services/auth.py"
+        ],
+        "mentions": [
+          "alice"
+        ]
+      }
+    },
+    "ConversationLifecycle_CRUD": {
+      "status": "PASSED",
+      "details": {
+        "conv_id": "01677128-a3fc-4c68-bc1d-18ef9fb18ca8",
+        "title": "Updated Architecture Discussion",
+        "messages_count": 0
+      }
+    },
+    "GroundedQA_EvidenceCitations": {
+      "status": "PASSED",
+      "details": {
+        "answer_status": "answered",
+        "citations_count": 1,
+        "claims_count": 2,
+        "citations": [
+          "S1"
+        ],
+        "duration_ms": 17616
+      }
+    },
+    "SourceACL_FailClosed_0PercentLeakage": {
+      "status": "PASSED",
+      "details": {
+        "bob_received_citations": [],
+        "restricted_evidence_id": "f8bb74c0-cfbf-47c2-a47a-9a458dcd38d1",
+        "leaked": false
+      }
+    },
+    "HallucinationPrevention_CitationIntegrity": {
+      "status": "PASSED",
+      "details": {
+        "cleaned_answer": "PostgreSQL is used [S1] and Redis caches sessions .",
+        "validated_labels": [
+          "S1"
+        ]
+      }
+    },
+    "EpistemicUncertainty_Abstention": {
+      "status": "PASSED",
+      "details": {
+        "status": "insufficient_evidence",
+        "citations_count": 0
+      }
+    },
+    "ConflictDetection_EpistemicState": {
+      "status": "PASSED",
+      "details": {
+        "status": "conflicted_evidence",
+        "conflicts": [
+          "S1 specifies PostgreSQL while S2 specifies MongoDB."
+        ]
+      }
+    },
+    "PromptInjection_UntrustedDataBoundary": {
+      "status": "PASSED",
+      "details": {
+        "classified_type": "general"
+      }
+    },
+    "MultiTurn_ConversationThreading": {
+      "status": "PASSED",
+      "details": {
+        "total_messages": 4,
+        "last_answer_status": "insufficient_evidence"
+      }
+    },
+    "FeedbackAndRetrievalDiagnostics": {
+      "status": "PASSED",
+      "details": {
+        "feedback_id": "4c89ce1f-c9f3-4a58-a255-f6a4e740e068",
+        "retrieval_run_id": "e1cb2ef7-0a47-458f-8827-39216c6a801d",
+        "candidates_authorized": 1
+      }
+    },
+    "FastAPI_HTTPEndpoints_E2E": {
+      "status": "PASSED",
+      "details": {
+        "http_create": true,
+        "http_list": true,
+        "http_msg": true,
+        "http_fb": true,
+        "http_diag": true,
+        "http_del": true
+      }
+    },
+    "ConversationDeletion_Cascade": {
+      "status": "PASSED",
+      "details": {
+        "deleted_id": "01677128-a3fc-4c68-bc1d-18ef9fb18ca8"
+      }
+    }
+  },
+  "summary": {
+    "total": 13,
+    "passed": 13,
+    "failed": 0
+  }
+}

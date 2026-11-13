@@ -65,8 +65,20 @@ from app.models.handover import (
     HandoverSignoff,
     HandoverStatusHistory,
 )
+from app.models.assistant import (
+    AssistantCitation,
+    AssistantConversation,
+    AssistantFeedback,
+    AssistantMessage,
+    AssistantRetrievalRun,
+)
 
 __all__ = [
+    "AssistantCitation",
+    "AssistantConversation",
+    "AssistantFeedback",
+    "AssistantMessage",
+    "AssistantRetrievalRun",
     "AuditLog",
     "BackgroundJob",
     "Base",

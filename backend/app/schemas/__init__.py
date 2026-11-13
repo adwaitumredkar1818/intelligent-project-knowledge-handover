@@ -1,5 +1,20 @@
 """Pydantic schemas shared across API endpoints."""
 
+from app.schemas.assistant import (
+    AssistantAnswerPayload,
+    AssistantAnswerResponse,
+    AssistantCitationResponse,
+    AssistantFeedbackRequest,
+    AssistantFeedbackResponse,
+    AssistantMessageResponse,
+    ConversationCreateRequest,
+    ConversationDetailResponse,
+    ConversationResponse,
+    ConversationUpdateRequest,
+    FactualClaim,
+    QuestionRequest,
+    RetrievalDiagnosticsResponse,
+)
 from app.schemas.auth import (
     AccessTokenResponse,
     LoginRequest,
@@ -97,6 +112,19 @@ from app.schemas.user import (
 
 __all__ = [
     "AcceptInvitationResponse",
+    "AssistantAnswerPayload",
+    "AssistantAnswerResponse",
+    "AssistantCitationResponse",
+    "AssistantFeedbackRequest",
+    "AssistantFeedbackResponse",
+    "AssistantMessageResponse",
+    "ConversationCreateRequest",
+    "ConversationDetailResponse",
+    "ConversationResponse",
+    "ConversationUpdateRequest",
+    "FactualClaim",
+    "QuestionRequest",
+    "RetrievalDiagnosticsResponse",
     "AccessTokenResponse",
     "AddProjectMemberRequest",
     "AssignRoleRequest",

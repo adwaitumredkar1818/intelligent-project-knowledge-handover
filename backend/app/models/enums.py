@@ -878,4 +878,66 @@ class HandoverLinkType(StrEnum):
     EVIDENCE_ITEM = "evidence_item"
 
 
+# ---------------------------------------------------------------------------
+# Project Knowledge Assistant Enums
+# ---------------------------------------------------------------------------
+
+
+class AssistantSenderType(StrEnum):
+    """Originator of a message turn in an assistant conversation."""
+
+    USER = "user"
+    ASSISTANT = "assistant"
+    SYSTEM = "system"
+
+
+class AssistantAnswerStatus(StrEnum):
+    """Epistemic quality and completion state of an assistant answer."""
+
+    ANSWERED = "answered"
+    PARTIALLY_ANSWERED = "partially_answered"
+    INSUFFICIENT_EVIDENCE = "insufficient_evidence"
+    CONFLICTED_EVIDENCE = "conflicted_evidence"
+    OUTDATED_EVIDENCE = "outdated_evidence"
+    ACCESS_RESTRICTED = "access_restricted"
+    UNSUPPORTED_QUERY = "unsupported_query"
+    PROCESSING_ERROR = "processing_error"
+
+
+class AssistantConversationStatus(StrEnum):
+    """Lifecycle state of an assistant conversation."""
+
+    ACTIVE = "active"
+    ARCHIVED = "archived"
+
+
+class AssistantQueryType(StrEnum):
+    """Classification of user questions determining retrieval routing."""
+
+    PROJECT_OVERVIEW = "project_overview"
+    DECISION_RATIONALE = "decision_rationale"
+    TECHNICAL_ARCHITECTURE = "technical_architecture"
+    WORK_PROGRESS = "work_progress"
+    RESPONSIBILITY_OWNERSHIP = "responsibility_ownership"
+    DEPENDENCY_RELATIONSHIP = "dependency_relationship"
+    RISK_PROBLEM = "risk_problem"
+    OPERATIONAL_HISTORICAL = "operational_historical"
+    TIMELINE_EVOLUTION = "timeline_evolution"
+    COMPARATIVE = "comparative"
+    MULTI_HOP = "multi_hop"
+    KNOWLEDGE_GAP = "knowledge_gap"
+    GENERAL = "general"
+
+
+class AssistantFeedbackType(StrEnum):
+    """User feedback classification on an assistant message."""
+
+    HELPFUL = "helpful"
+    UNHELPFUL = "unhelpful"
+    INCORRECT_CITATION = "incorrect_citation"
+    INACCURATE = "inaccurate"
+    INCOMPLETE = "incomplete"
+
+
+
 

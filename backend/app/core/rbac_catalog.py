@@ -284,6 +284,37 @@ SYSTEM_PERMISSIONS: tuple[PermissionSpec, ...] = (
         description="Full administrative control over handover lifecycle and rollbacks.",
         scope_type=RoleScopeType.PROJECT,
     ),
+    # Project Knowledge Assistant permissions
+    PermissionSpec(
+        code="assistant.read",
+        name="Read Assistant Conversations",
+        description="View conversations, message turns, citations, and answers.",
+        scope_type=RoleScopeType.PROJECT,
+    ),
+    PermissionSpec(
+        code="assistant.chat",
+        name="Ask Assistant Questions",
+        description="Create conversations and ask project questions with hybrid RAG.",
+        scope_type=RoleScopeType.PROJECT,
+    ),
+    PermissionSpec(
+        code="assistant.manage",
+        name="Manage Assistant Conversations",
+        description="Rename, archive, or delete user's own project conversations.",
+        scope_type=RoleScopeType.PROJECT,
+    ),
+    PermissionSpec(
+        code="assistant.feedback",
+        name="Submit Assistant Feedback",
+        description="Rate answers and report incorrect citations or information.",
+        scope_type=RoleScopeType.PROJECT,
+    ),
+    PermissionSpec(
+        code="assistant.admin",
+        name="Administrate Assistant",
+        description="View all retrieval diagnostics and manage assistant configuration.",
+        scope_type=RoleScopeType.PROJECT,
+    ),
 )
 
 KNOWN_PERMISSION_CODES: frozenset[str] = frozenset(spec.code for spec in SYSTEM_PERMISSIONS)
@@ -369,6 +400,11 @@ SYSTEM_ROLES: tuple[RoleSpec, ...] = (
             "handover.acknowledge",
             "handover.transfer",
             "handover.admin",
+            "assistant.read",
+            "assistant.chat",
+            "assistant.manage",
+            "assistant.feedback",
+            "assistant.admin",
         ),
     ),
     RoleSpec(
@@ -406,6 +442,11 @@ SYSTEM_ROLES: tuple[RoleSpec, ...] = (
             "handover.acknowledge",
             "handover.transfer",
             "handover.admin",
+            "assistant.read",
+            "assistant.chat",
+            "assistant.manage",
+            "assistant.feedback",
+            "assistant.admin",
         ),
     ),
     RoleSpec(
@@ -443,6 +484,11 @@ SYSTEM_ROLES: tuple[RoleSpec, ...] = (
             "handover.deliver",
             "handover.transfer",
             "handover.admin",
+            "assistant.read",
+            "assistant.chat",
+            "assistant.manage",
+            "assistant.feedback",
+            "assistant.admin",
         ),
     ),
     RoleSpec(
@@ -459,6 +505,10 @@ SYSTEM_ROLES: tuple[RoleSpec, ...] = (
             "handover.read",
             "handover.edit",
             "handover.acknowledge",
+            "assistant.read",
+            "assistant.chat",
+            "assistant.manage",
+            "assistant.feedback",
         ),
     ),
     RoleSpec(
@@ -475,6 +525,10 @@ SYSTEM_ROLES: tuple[RoleSpec, ...] = (
             "handover.review",
             "handover.approve",
             "handover.readiness.assess",
+            "assistant.read",
+            "assistant.chat",
+            "assistant.manage",
+            "assistant.feedback",
         ),
     ),
 )
