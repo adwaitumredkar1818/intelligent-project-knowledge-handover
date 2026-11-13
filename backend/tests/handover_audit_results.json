@@ -1,0 +1,153 @@
+{
+  "timestamp": "2026-11-13T12:56:09.712820+00:00",
+  "total_tests": 24,
+  "passed_tests": 24,
+  "failed_tests": 0,
+  "pass_rate_percent": 100.0,
+  "results": [
+    {
+      "test_id": "DB-01",
+      "name": "All 14 Handover Tables Exist in PostgreSQL",
+      "passed": true,
+      "details": "Found 14/14 tables."
+    },
+    {
+      "test_id": "TEST-A",
+      "name": "Create HandoverCase in DRAFT Status",
+      "passed": true,
+      "details": "Case 7858303d-07f2-42a6-b3ad-ef86725e4a50 created in status 'draft' with version 1."
+    },
+    {
+      "test_id": "TEST-B",
+      "name": "Optimistic Concurrency Control (Version Mismatch Conflict)",
+      "passed": true,
+      "details": "Rejected status transition when expected_version does not match current case version."
+    },
+    {
+      "test_id": "TEST-C",
+      "name": "Deterministic 8-Domain Package Assembly",
+      "passed": true,
+      "details": "Compiled version 1 with 8 domain sections and hash 01ecf2405ad0..."
+    },
+    {
+      "test_id": "TEST-D",
+      "name": "Downstream Eligibility Gating & Content Links",
+      "passed": true,
+      "details": "Linked 3 verified findings directly into package sections with provenance."
+    },
+    {
+      "test_id": "TEST-E",
+      "name": "9-Category Readiness Scoring & Evaluation",
+      "passed": true,
+      "details": "Assessed 9 categories: Overall Score=87/100, Level=ready_with_warnings, Blockers=0."
+    },
+    {
+      "test_id": "TEST-F",
+      "name": "Dynamic Checklists Generation & Item Completion",
+      "passed": true,
+      "details": "Generated 3 checklists; updated item 'Verify all critical architectu...' to completed."
+    },
+    {
+      "test_id": "TEST-G",
+      "name": "Responsibility Transfer Mapping",
+      "passed": true,
+      "details": "Mapped 2 responsibilities from departing member to successor."
+    },
+    {
+      "test_id": "TEST-H.1",
+      "name": "Phase 1: Departing Member Sign-Off",
+      "passed": true,
+      "details": "Phase 1 signed by departing member with hash 77fc11aa8012..."
+    },
+    {
+      "test_id": "TEST-I",
+      "name": "Separation of Duties (Departing Member Cannot Approve Own Package)",
+      "passed": true,
+      "details": "Successfully blocked departing member from submitting Phase 2 Reviewer Approval."
+    },
+    {
+      "test_id": "TEST-H.2",
+      "name": "Phase 2: Independent Reviewer Approval & Status Transition to APPROVED",
+      "passed": true,
+      "details": "Phase 2 approved; Case status transitioned to 'approved'."
+    },
+    {
+      "test_id": "TEST-J",
+      "name": "Package Delivery & Case Transition to DELIVERED",
+      "passed": true,
+      "details": "Delivered version to successor bc23a779-5a59-4d9d-bdaf-8ce6bb16647d; Case status is 'delivered'."
+    },
+    {
+      "test_id": "TEST-K",
+      "name": "Successor Receipt Acknowledgement & Case Transition to ACKNOWLEDGED",
+      "passed": true,
+      "details": "Successor acknowledged delivery with cryptographic hash e615c20b7366...; Case status is 'acknowledged'."
+    },
+    {
+      "test_id": "TEST-L",
+      "name": "Explicit Ownership Transfer (Separate Operation) & Status Transition to TRANSFERRED",
+      "passed": true,
+      "details": "Transferred project ownership to bc23a779-5a59-4d9d-bdaf-8ce6bb16647d; Case status is 'transferred'."
+    },
+    {
+      "test_id": "TEST-M",
+      "name": "Ownership Transfer Rollback with Audit Justification",
+      "passed": true,
+      "details": "Rollback succeeded with logged reason: 'Successor transition delayed by 2 weeks due to project reschedule.'."
+    },
+    {
+      "test_id": "TEST-N",
+      "name": "AI Narrative Drafting & Section Content Editing",
+      "passed": true,
+      "details": "Drafted and edited section 'Key Architecture & Technical Decisions' successfully."
+    },
+    {
+      "test_id": "API-01",
+      "name": "GET /projects/{project_id}/handover/cases",
+      "passed": true,
+      "details": "Status 200, total cases=1"
+    },
+    {
+      "test_id": "API-02",
+      "name": "GET /projects/{project_id}/handover/cases/{case_id}",
+      "passed": true,
+      "details": "Status 200, returned case title='Lead Engineer Offboarding Case'"
+    },
+    {
+      "test_id": "API-03",
+      "name": "GET /projects/{project_id}/handover/cases/{case_id}/versions",
+      "passed": true,
+      "details": "Status 200, versions count=1"
+    },
+    {
+      "test_id": "API-04",
+      "name": "GET /projects/{project_id}/handover/cases/{case_id}/readiness/{version_id}",
+      "passed": true,
+      "details": "Status 200, score=87/100"
+    },
+    {
+      "test_id": "API-05",
+      "name": "GET /projects/{project_id}/handover/cases/{case_id}/checklists",
+      "passed": true,
+      "details": "Status 200, checklists count=3"
+    },
+    {
+      "test_id": "API-06",
+      "name": "GET /projects/{project_id}/handover/cases/{case_id}/responsibilities",
+      "passed": true,
+      "details": "Status 200, responsibilities count=2"
+    },
+    {
+      "test_id": "API-07",
+      "name": "GET /projects/{project_id}/handover/cases/{case_id}/signoffs",
+      "passed": true,
+      "details": "Status 200, signoffs count=2"
+    },
+    {
+      "test_id": "API-08",
+      "name": "GET /projects/{project_id}/handover/eligibility/knowledge_item/{id}",
+      "passed": true,
+      "details": "Status 200, is_eligible=True"
+    }
+  ]
+}

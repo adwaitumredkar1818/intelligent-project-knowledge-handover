@@ -178,6 +178,10 @@ class BackgroundJobType(StrEnum):
     EVIDENCE_INDEX_CLEANUP = "evidence_index_cleanup"
     KNOWLEDGE_RECONSTRUCTION = "knowledge_reconstruction"
     RELATIONSHIP_RECONSTRUCTION = "relationship_reconstruction"
+    HANDOVER_ASSEMBLY = "handover_assembly"
+    HANDOVER_READINESS = "handover_readiness"
+    HANDOVER_PDF_GENERATION = "handover_pdf_generation"
+    HANDOVER_NARRATIVE_DRAFT = "handover_narrative_draft"
 
 
 class EvidenceIndexingStatus(StrEnum):
@@ -744,5 +748,134 @@ class ContextRequestStatus(StrEnum):
     RESPONDED = "responded"
     CANCELLED = "cancelled"
     EXPIRED = "expired"
+
+
+# =============================================================================
+# Handover Workspace Enums (Module 4 / Knowledge Transfer Area)
+# =============================================================================
+
+
+class HandoverCaseStatus(StrEnum):
+    """Lifecycle state machine for a handover case (14 states)."""
+
+    DRAFT = "draft"
+    ASSEMBLING = "assembling"
+    ASSEMBLED = "assembled"
+    READINESS_PENDING = "readiness_pending"
+    READINESS_ASSESSED = "readiness_assessed"
+    REVIEW_PENDING = "review_pending"
+    UNDER_REVIEW = "under_review"
+    APPROVED = "approved"
+    REJECTED = "rejected"
+    DELIVERED = "delivered"
+    ACKNOWLEDGED = "acknowledged"
+    TRANSFERRED = "transferred"
+    ARCHIVED = "archived"
+    SUPERSEDED = "superseded"
+
+
+class HandoverPackageSectionType(StrEnum):
+    """Canonical 8-domain sections compiling verified handover knowledge."""
+
+    DECISIONS_RATIONALE = "decisions_rationale"
+    TECHNICAL_ARCHITECTURE = "technical_architecture"
+    WORK_PROGRESS = "work_progress"
+    RESPONSIBILITIES_OWNERSHIP = "responsibilities_ownership"
+    DEPENDENCIES_RELATIONSHIPS = "dependencies_relationships"
+    BUGS_BLOCKERS_RISKS = "bugs_blockers_risks"
+    OPERATIONAL_HISTORICAL = "operational_historical"
+    PROJECT_OVERVIEW_CONTEXT = "project_overview_context"
+
+
+class HandoverReadinessCategory(StrEnum):
+    """Nine evaluation categories determining handover package readiness."""
+
+    EVIDENCE_COVERAGE = "evidence_coverage"
+    VERIFICATION_COMPLETENESS = "verification_completeness"
+    CONFLICT_RESOLUTION = "conflict_resolution"
+    KNOWLEDGE_FRESHNESS = "knowledge_freshness"
+    RELATIONSHIP_VALIDATION = "relationship_validation"
+    RESPONSIBILITY_COVERAGE = "responsibility_coverage"
+    RISK_ASSESSMENT = "risk_assessment"
+    DEPENDENCY_MAPPING = "dependency_mapping"
+    OVERALL_QUALITY = "overall_quality"
+
+
+class ReadinessLevel(StrEnum):
+    """Readiness scoring levels for handover package assessment."""
+
+    NOT_READY = "not_ready"
+    PARTIALLY_READY = "partially_ready"
+    READY = "ready"
+    READY_WITH_WARNINGS = "ready_with_warnings"
+
+
+class ChecklistItemStatus(StrEnum):
+    """Completion state of an individual handover checklist item."""
+
+    PENDING = "pending"
+    IN_PROGRESS = "in_progress"
+    COMPLETED = "completed"
+    SKIPPED = "skipped"
+    BLOCKED = "blocked"
+
+
+class HandoverChecklistType(StrEnum):
+    """Category classification of handover checklists."""
+
+    PRE_HANDOVER = "pre_handover"
+    POST_HANDOVER = "post_handover"
+    KNOWLEDGE_TRANSFER = "knowledge_transfer"
+    ACCESS_REVOCATION = "access_revocation"
+
+
+class SignoffType(StrEnum):
+    """Three mandatory human sign-off phases."""
+
+    DEPARTING_SIGNOFF = "departing_signoff"
+    REVIEWER_APPROVAL = "reviewer_approval"
+    SUCCESSOR_ACKNOWLEDGEMENT = "successor_acknowledgement"
+
+
+class SignoffDecision(StrEnum):
+    """Decision outcomes for a sign-off or approval action."""
+
+    APPROVED = "approved"
+    REJECTED = "rejected"
+    RETURNED_FOR_REVISION = "returned_for_revision"
+
+
+class TransferStatus(StrEnum):
+    """State tracking for a responsibility or ownership transfer."""
+
+    PENDING = "pending"
+    IN_PROGRESS = "in_progress"
+    COMPLETED = "completed"
+    ROLLED_BACK = "rolled_back"
+    FAILED = "failed"
+
+
+class HandoverDeliveryMethod(StrEnum):
+    """Delivery mechanism for the compiled handover package."""
+
+    INTERNAL_DOWNLOAD = "internal_download"
+    SECURE_LINK = "secure_link"
+
+
+class OwnershipTransferType(StrEnum):
+    """Category of ownership being transferred."""
+
+    PROJECT_OWNERSHIP = "project_ownership"
+    COMPONENT_OWNERSHIP = "component_ownership"
+    RESPONSIBILITY_TRANSFER = "responsibility_transfer"
+
+
+class HandoverLinkType(StrEnum):
+    """Entity type linked to a handover package section."""
+
+    KNOWLEDGE_ITEM = "knowledge_item"
+    RELATIONSHIP = "relationship"
+    EVIDENCE_ITEM = "evidence_item"
+
 
 
