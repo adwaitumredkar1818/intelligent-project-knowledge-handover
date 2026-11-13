@@ -1,299 +1,386 @@
 "use client";
 
-import React, { useState, useRef, useEffect } from "react";
-import { usePathname } from "next/navigation";
+import React from "react";
+import Link from "next/link";
+import { useRouter } from "next/navigation";
 import {
+  Menu,
+  ChevronsLeft,
+  ChevronsRight,
   Search,
   Bell,
-  Menu,
+  CircleHelp,
   ChevronDown,
-  Plus,
-  Check,
-  Building2,
-  FolderGit2,
+  User,
+  Settings,
   ShieldCheck,
+  LogOut,
+  Users,
+  Workflow,
+  ArrowRight,
+  Keyboard,
+  LifeBuoy,
+  BookOpen,
+  CheckCircle2,
+  AlertTriangle,
 } from "lucide-react";
+import { Logo } from "../brand";
+import {
+  Avatar,
+  Dropdown,
+  IconButton,
+  MenuItem,
+  Tooltip,
+  cn,
+} from "../ui";
+import { Breadcrumbs } from "./Breadcrumbs";
 import { useLiveApp } from "../../context/LiveAppContext";
 
-export function TopNav() {
-  const pathname = usePathname();
-  const {
-    organisations,
-    activeOrg,
-    setActiveOrg,
-    projects,
-    activeProject,
-    setActiveProject,
-    setIsCreateProjectModalOpen,
-    setIsCreateOrgModalOpen,
-    setIsMobileSidebarOpen,
-    user,
-  } = useLiveApp();
-
-  const [isOrgDropdownOpen, setIsOrgDropdownOpen] = useState(false);
-  const [isProjectDropdownOpen, setIsProjectDropdownOpen] = useState(false);
-  const orgDropdownRef = useRef<HTMLDivElement>(null);
-  const projectDropdownRef = useRef<HTMLDivElement>(null);
-
-  // Close dropdowns on outside click
-  useEffect(() => {
-    function handleClickOutside(event: MouseEvent) {
-      if (
-        orgDropdownRef.current &&
-        !orgDropdownRef.current.contains(event.target as Node)
-      ) {
-        setIsOrgDropdownOpen(false);
-      }
-      if (
-        projectDropdownRef.current &&
-        !projectDropdownRef.current.contains(event.target as Node)
-      ) {
-        setIsProjectDropdownOpen(false);
-      }
-    }
-    document.addEventListener("mousedown", handleClickOutside);
-    return () => document.removeEventListener("mousedown", handleClickOutside);
+function ContextChip() {
+  const [mounted, setMounted] = React.useState(false);
+  React.useEffect(() => {
+    setMounted(true);
   }, []);
 
-  // Compute breadcrumbs
-  const getBreadcrumbs = () => {
-    const parts = [
-      { label: activeProject ? activeProject.name : "Select Project", href: "/overview" },
-    ];
-    if (pathname.includes("/overview")) {
-      parts.push({ label: "Workspace", href: "/overview" });
-      parts.push({ label: "Overview", href: "/overview" });
-    } else if (pathname.includes("/projects")) {
-      parts.push({ label: "Workspace", href: "/projects" });
-      parts.push({ label: "Projects Directory", href: "/projects" });
-    } else if (pathname.includes("/team")) {
-      parts.push({ label: "Workspace", href: "/team" });
-      parts.push({ label: "Team Members", href: "/team" });
-    } else if (pathname.includes("/evidence")) {
-      parts.push({ label: "Project Intelligence", href: "/evidence" });
-      parts.push({ label: "Evidence Center", href: "/evidence" });
-    } else if (pathname.includes("/sources")) {
-      parts.push({ label: "Administration", href: "/sources" });
-      parts.push({ label: "Connected Sources", href: "/sources" });
-    } else if (pathname.includes("/knowledge")) {
-      parts.push({ label: "Project Intelligence", href: "/knowledge" });
-      parts.push({ label: "Knowledge Intelligence", href: "/knowledge" });
-    } else if (pathname.includes("/relationships")) {
-      parts.push({ label: "Project Intelligence", href: "/relationships" });
-      parts.push({ label: "Relationship Explorer", href: "/relationships" });
-    } else if (pathname.includes("/verification")) {
-      parts.push({ label: "Validation", href: "/verification" });
-      parts.push({ label: "Verification Center", href: "/verification" });
-    } else if (pathname.includes("/conflicts")) {
-      parts.push({ label: "Validation", href: "/conflicts" });
-      parts.push({ label: "Conflicts", href: "/conflicts" });
-    } else if (pathname.includes("/handover")) {
-      parts.push({ label: "Knowledge Transfer", href: "/handover" });
-      parts.push({ label: "Handover Workspace", href: "/handover" });
-    } else if (pathname.includes("/generated-handovers")) {
-      parts.push({ label: "Knowledge Transfer", href: "/generated-handovers" });
-      parts.push({ label: "Generated Handovers", href: "/generated-handovers" });
-    } else if (pathname.includes("/assistant")) {
-      parts.push({ label: "AI Assistant", href: "/assistant" });
-      parts.push({ label: "Project Knowledge Assistant", href: "/assistant" });
-    } else if (pathname.includes("/audit")) {
-      parts.push({ label: "Administration", href: "/audit" });
-      parts.push({ label: "Audit Logs", href: "/audit" });
-    } else if (pathname.includes("/settings")) {
-      parts.push({ label: "Administration", href: "/settings" });
-      parts.push({ label: "Settings", href: "/settings" });
-    }
-    return parts;
-  };
+  const { activeProject, user, members } = useLiveApp();
+  if (!mounted || !activeProject) return null;
 
-  const breadcrumbs = getBreadcrumbs();
+  const currentMember = members.find(
+    (m) => m.user_id === user?.id || m.user_email === user?.email
+  );
+  const currentRole =
+    currentMember?.transition_role === "departing_owner"
+      ? "Outgoing"
+      : currentMember?.transition_role === "incoming_assignee"
+      ? "Incoming"
+      : currentMember?.role_name || "Member";
+
+  const projectCode =
+    activeProject.name
+      ?.replace(/[^A-Za-z]/g, "")
+      .slice(0, 3)
+      .toUpperCase() || "PRJ";
+
+  const isOutgoing = currentRole.toLowerCase().includes("outgoing");
+  const isIncoming = currentRole.toLowerCase().includes("incoming");
+
+  const roleTextTone = isOutgoing
+    ? "text-amber-700"
+    : isIncoming
+    ? "text-teal-700"
+    : "text-brand";
+
+  const roleBgTone = isOutgoing
+    ? "bg-warn"
+    : isIncoming
+    ? "bg-ok"
+    : "bg-brand";
 
   return (
-    <header className="h-14 bg-white border-b border-[#DCE3EB] px-4 flex items-center justify-between shrink-0 select-none z-30 sticky top-0 shadow-2xs">
-      {/* Left: Mobile hamburger + Project Selector + Breadcrumbs */}
-      <div className="flex items-center gap-3 min-w-0">
-        <button
-          type="button"
-          onClick={() => setIsMobileSidebarOpen(true)}
-          className="lg:hidden p-1.5 text-[#69778D] hover:text-[#25334B] hover:bg-[#F4F6F9] rounded"
-          aria-label="Open sidebar navigation"
+    <Tooltip
+      content={`Your active role in ${activeProject.name}: ${currentRole}. Sets your perspective and verification authority.`}
+      side="bottom"
+    >
+      <span className="hidden items-center gap-2 rounded-full border border-line bg-white py-1 pl-1 pr-2.5 text-[12px] font-medium text-navy 2xl:flex shadow-2xs">
+        <span
+          className="flex size-5 items-center justify-center rounded-full text-[8.5px] font-bold text-white shadow-2xs"
+          style={{ background: "#315FBA" }}
         >
-          <Menu className="w-5 h-5" />
-        </button>
+          {projectCode.slice(0, 2)}
+        </span>
+        <span className="truncate max-w-[120px] font-semibold text-navy">
+          {activeProject.name.split(" ")[0]}
+        </span>
+        <span className="text-slate-300">·</span>
+        <span className={cn("flex items-center gap-1 font-semibold", roleTextTone)}>
+          <span className={cn("size-1.5 rounded-full shrink-0", roleBgTone)} />
+          {currentRole}
+        </span>
+      </span>
+    </Tooltip>
+  );
+}
 
-        {/* Real Organisation Selector Dropdown */}
-        <div className="relative" ref={orgDropdownRef}>
-          <button
-            type="button"
-            onClick={() => setIsOrgDropdownOpen(!isOrgDropdownOpen)}
-            className="flex items-center gap-2 px-3 py-1.5 rounded-lg border border-[#DCE3EB] bg-[#F4F6F9] hover:bg-[#E8EEF5] text-xs font-semibold text-[#25334B] transition-colors max-w-[200px]"
-          >
-            <Building2 className="w-4 h-4 text-[#249E91] shrink-0" />
-            <span className="truncate">
-              {activeOrg ? activeOrg.name : "Select Org"}
-            </span>
-            <ChevronDown className="w-3.5 h-3.5 text-[#69778D] shrink-0 ml-0.5" />
-          </button>
+function NotificationsMenu() {
+  const router = useRouter();
+  const { overview } = useLiveApp();
+  const attentionItems = overview?.attention_items || [];
 
-          {isOrgDropdownOpen && (
-            <div className="absolute top-full left-0 mt-1.5 w-60 bg-white rounded-xl shadow-lg border border-[#DCE3EB] py-1.5 z-50 text-xs">
-              <div className="px-3 py-1 text-[10px] uppercase font-bold text-[#69778D] tracking-wider">
-                Organisation Workspaces
-              </div>
-              <div className="max-h-56 overflow-y-auto py-1">
-                {organisations.length === 0 ? (
-                  <div className="px-3 py-2 text-[#69778D] text-center text-xs">
-                    No organisations yet
-                  </div>
-                ) : (
-                  organisations.map((org) => {
-                    const isSelected = activeOrg?.id === org.id;
-                    return (
-                      <button
-                        key={org.id}
-                        type="button"
-                        onClick={() => {
-                          setActiveOrg(org);
-                          setIsOrgDropdownOpen(false);
-                        }}
-                        className={`w-full px-3 py-2 text-left flex items-center justify-between hover:bg-[#F4F6F9] transition-colors ${
-                          isSelected ? "bg-[#F0FAF8] text-[#249E91] font-semibold" : "text-[#25334B]"
-                        }`}
-                      >
-                        <span className="truncate">{org.name}</span>
-                        {isSelected && <Check className="w-3.5 h-3.5 text-[#249E91] shrink-0" />}
-                      </button>
-                    );
-                  })
-                )}
-              </div>
-              <div className="border-t border-[#DCE3EB] pt-1 px-1">
-                <button
-                  type="button"
-                  onClick={() => {
-                    setIsOrgDropdownOpen(false);
-                    setIsCreateOrgModalOpen(true);
-                  }}
-                  className="w-full px-2.5 py-1.5 rounded-lg text-left text-[#249E91] hover:bg-[#F0FAF8] font-semibold flex items-center gap-1.5 transition-colors cursor-pointer"
-                >
-                  <Plus className="w-3.5 h-3.5" />
-                  <span>Create Organisation</span>
-                </button>
-              </div>
-            </div>
-          )}
-        </div>
+  const isQueryOpen =
+    typeof window !== "undefined" && window.location.search.includes("openNotifications=true");
 
-        {/* Real Project Selector Dropdown */}
-        <div className="relative" ref={projectDropdownRef}>
-          <button
-            type="button"
-            onClick={() => setIsProjectDropdownOpen(!isProjectDropdownOpen)}
-            className="flex items-center gap-2 px-3 py-1.5 rounded-lg border border-[#DCE3EB] bg-[#F4F6F9] hover:bg-[#E8EEF5] text-xs font-semibold text-[#25334B] transition-colors max-w-[220px]"
-          >
-            <FolderGit2 className="w-4 h-4 text-[#4774A9] shrink-0" />
-            <span className="truncate">
-              {activeProject ? activeProject.name : "Select Project"}
-            </span>
-            <ChevronDown className="w-3.5 h-3.5 text-[#69778D] shrink-0 ml-0.5" />
-          </button>
-
-          {isProjectDropdownOpen && (
-            <div className="absolute top-full left-0 mt-1.5 w-64 bg-white rounded-xl shadow-lg border border-[#DCE3EB] py-1.5 z-50 text-xs">
-              <div className="px-3 py-1 text-[10px] uppercase font-bold text-[#69778D] tracking-wider">
-                Organisation Projects ({activeOrg?.name || "Active Org"})
-              </div>
-              <div className="max-h-56 overflow-y-auto py-1">
-                {projects.length === 0 ? (
-                  <div className="px-3 py-2 text-[#69778D] text-center text-xs">
-                    No projects found
-                  </div>
-                ) : (
-                  projects.map((proj) => {
-                    const isSelected = activeProject?.id === proj.id;
-                    return (
-                      <button
-                        key={proj.id}
-                        type="button"
-                        onClick={() => {
-                          setActiveProject(proj);
-                          setIsProjectDropdownOpen(false);
-                        }}
-                        className={`w-full px-3 py-2 text-left flex items-center justify-between hover:bg-[#F4F6F9] transition-colors ${
-                          isSelected ? "bg-[#F0FAF8] text-[#249E91] font-semibold" : "text-[#25334B]"
-                        }`}
-                      >
-                        <span className="truncate">{proj.name}</span>
-                        {isSelected && <Check className="w-3.5 h-3.5 text-[#249E91] shrink-0" />}
-                      </button>
-                    );
-                  })
-                )}
-              </div>
-              <div className="border-t border-[#DCE3EB] pt-1 px-1">
-                <button
-                  type="button"
-                  onClick={() => {
-                    setIsProjectDropdownOpen(false);
-                    setIsCreateProjectModalOpen(true);
-                  }}
-                  className="w-full px-2.5 py-1.5 rounded-lg text-left text-[#4774A9] hover:bg-[#E8EEF5] font-semibold flex items-center gap-1.5 transition-colors"
-                >
-                  <Plus className="w-3.5 h-3.5" />
-                  <span>Create New Project</span>
-                </button>
-              </div>
-            </div>
-          )}
-        </div>
-
-        {/* Breadcrumb Navigation */}
-        <div className="hidden md:flex items-center gap-1.5 text-xs text-[#69778D]">
-          {breadcrumbs.map((crumb, idx) => (
-            <React.Fragment key={`${crumb.label}-${idx}`}>
-              {idx > 0 && <span className="text-[#DCE3EB]">/</span>}
-              <span
-                className={
-                  idx === breadcrumbs.length - 1
-                    ? "font-semibold text-[#25334B]"
-                    : "hover:text-[#25334B]"
-                }
-              >
-                {crumb.label}
+  return (
+    <Dropdown
+      width="w-[340px] max-w-[calc(100vw-24px)]"
+      defaultOpen={isQueryOpen}
+      trigger={() => (
+        <IconButton
+          icon={Bell}
+          label="Notifications"
+          badge={attentionItems.length > 0 ? attentionItems.length : undefined}
+        />
+      )}
+    >
+      {(close) => (
+        <div>
+          <div className="flex items-center justify-between px-3.5 py-2.5 border-b border-line">
+            <p className="text-sm font-semibold text-navy">Notifications & Attention</p>
+            {attentionItems.length > 0 && (
+              <span className="text-[11px] font-medium text-brand">
+                {attentionItems.length} active
               </span>
-            </React.Fragment>
-          ))}
+            )}
+          </div>
+          <div className="max-h-72 overflow-y-auto divide-y divide-line/60 scrollbar-thin">
+            {attentionItems.length === 0 ? (
+              <div className="p-4 text-center text-xs text-muted">
+                <CheckCircle2 className="size-6 text-ok mx-auto mb-1.5" />
+                <p className="font-semibold text-navy">All clear</p>
+                <p className="mt-0.5 text-[11px]">
+                  All source connections and evidence repositories are operational.
+                </p>
+              </div>
+            ) : (
+              attentionItems.map((item) => (
+                <button
+                  key={item.id}
+                  onClick={() => {
+                    close();
+                    router.push("/overview");
+                  }}
+                  className="flex w-full gap-2.5 px-3 py-2 text-left hover:bg-tint transition-colors cursor-pointer"
+                >
+                  <AlertTriangle className="size-4 text-amber-500 shrink-0 mt-0.5" />
+                  <div className="min-w-0 flex-1">
+                    <p className="text-[13px] font-medium text-navy leading-snug">
+                      {item.message}
+                    </p>
+                    <p className="text-[10.5px] text-muted mt-0.5">
+                      Type: {item.type}
+                    </p>
+                  </div>
+                </button>
+              ))
+            )}
+          </div>
+          <button
+            onClick={() => {
+              close();
+              router.push("/overview");
+            }}
+            className="flex w-full items-center justify-center gap-1 border-t border-line py-2 text-[12px] font-medium text-brand hover:underline cursor-pointer bg-slate-50/50"
+          >
+            View project overview <ArrowRight className="size-3.5" />
+          </button>
         </div>
-      </div>
+      )}
+    </Dropdown>
+  );
+}
 
-      {/* Right Controls: Global Search + Notifications + User Avatar */}
-      <div className="flex items-center gap-3">
-        {/* Global Search Bar */}
-        <div className="relative hidden sm:block w-48 md:w-64">
-          <Search className="w-3.5 h-3.5 text-[#69778D] absolute left-3 top-2.5" />
-          <input
-            type="text"
-            placeholder="Global search (FTS / nomic)..."
-            className="w-full pl-8 pr-3 py-1.5 rounded-lg border border-[#DCE3EB] bg-[#F4F6F9] text-xs text-[#25334B] focus:outline-none focus:ring-1 focus:ring-[#4774A9] placeholder:text-[#69778D]"
-          />
-        </div>
+export function TopNav({
+  collapsed,
+  onToggleCollapse,
+  onOpenSearch,
+}: {
+  collapsed: boolean;
+  onToggleCollapse: () => void;
+  onOpenSearch: () => void;
+}) {
+  const router = useRouter();
+  const { user, logout, addToast, setIsMobileSidebarOpen } = useLiveApp();
 
-        {/* Notifications */}
+  const [mounted, setMounted] = React.useState(false);
+  React.useEffect(() => {
+    setMounted(true);
+  }, []);
+
+  const userName = (mounted && (user?.full_name || user?.email?.split("@")[0])) || "User";
+  const userEmail = (mounted && user?.email) || "";
+
+  return (
+    <header className="no-print flex h-[60px] shrink-0 items-center gap-2 border-b border-line/80 bg-white/85 px-3 backdrop-blur-xl sm:px-5 font-sans select-none z-30">
+      {/* Mobile Menu Trigger */}
+      <IconButton
+        icon={Menu}
+        label="Open menu"
+        className="lg:hidden"
+        onClick={() => setIsMobileSidebarOpen(true)}
+      />
+
+      {/* Desktop Sidebar Collapse Toggle */}
+      <IconButton
+        icon={collapsed ? ChevronsRight : ChevronsLeft}
+        label={collapsed ? "Expand sidebar" : "Collapse sidebar"}
+        className="hidden lg:inline-flex"
+        onClick={onToggleCollapse}
+      />
+
+      {/* Mobile Logo */}
+      <Link href="/overview" className="lg:hidden md:hidden">
+        <Logo size={24} />
+      </Link>
+
+      {/* Dynamic Breadcrumbs */}
+      <Breadcrumbs />
+
+      {/* Right Controls */}
+      <div className="ml-auto flex items-center gap-1">
+        {/* Global Search Button (⌘K) */}
         <button
           type="button"
-          title="Notifications"
-          className="p-2 text-[#69778D] hover:text-[#25334B] hover:bg-[#F4F6F9] rounded-lg transition-colors relative"
+          onClick={onOpenSearch}
+          className="mr-1 hidden h-9 w-60 items-center gap-2 rounded-[9px] border border-line bg-slate-50/80 px-3 text-[13px] text-slate-400 hover:border-slate-300 xl:flex cursor-pointer transition"
+          title="Search (⌘K)"
         >
-          <Bell className="w-4 h-4" />
-          <span className="w-2 h-2 rounded-full bg-[#249E91] absolute top-1.5 right-1.5" />
+          <Search className="size-4 shrink-0 text-slate-400" />
+          <span>Search everything</span>
+          <kbd className="ml-auto rounded border border-line bg-white px-1.5 text-[10px] font-mono text-slate-500 shadow-2xs">
+            ⌘K
+          </kbd>
         </button>
 
-        {/* User Avatar */}
-        <div className="flex items-center gap-2 pl-2 border-l border-[#DCE3EB]">
-          <div className="w-8 h-8 rounded-full bg-[#253650] text-white font-bold text-xs flex items-center justify-center shadow-xs border border-[#249E91]/40">
-            {user?.full_name ? user.full_name.charAt(0).toUpperCase() : "U"}
-          </div>
-        </div>
+        {/* Small Screen Search Icon */}
+        <IconButton
+          icon={Search}
+          label="Search"
+          className="xl:hidden"
+          onClick={onOpenSearch}
+        />
+
+        {/* Project Role Context Chip */}
+        <ContextChip />
+
+        {/* Notifications Menu */}
+        <NotificationsMenu />
+
+        {/* Help & Support Menu */}
+        <Dropdown
+          trigger={() => (
+            <IconButton icon={CircleHelp} label="Help & guides" className="hidden sm:inline-flex" />
+          )}
+        >
+          {(close) => (
+            <div>
+              <MenuItem
+                icon={BookOpen}
+                onClick={() => {
+                  close();
+                  router.push("/handover");
+                }}
+              >
+                Handover workflows
+              </MenuItem>
+              <MenuItem
+                icon={Workflow}
+                onClick={() => {
+                  close();
+                  router.push("/knowledge");
+                }}
+              >
+                Knowledge architecture
+              </MenuItem>
+              <MenuItem
+                icon={Keyboard}
+                onClick={() => {
+                  close();
+                  onOpenSearch();
+                }}
+                hint={<kbd className="text-[11px] font-mono text-slate-400">⌘K</kbd>}
+              >
+                Keyboard shortcuts
+              </MenuItem>
+              <div className="my-1 border-t border-line" />
+              <MenuItem
+                icon={LifeBuoy}
+                onClick={() => {
+                  close();
+                  addToast({
+                    type: "info",
+                    title: "Support request logged",
+                    message: "Engineering support has received your diagnostic request.",
+                  });
+                }}
+              >
+                Contact support
+              </MenuItem>
+            </div>
+          )}
+        </Dropdown>
+
+        {/* User Account Dropdown */}
+        <Dropdown
+          width="w-60"
+          trigger={() => (
+            <button
+              className="ml-1 flex items-center gap-1.5 rounded-full p-0.5 pr-1.5 hover:bg-tint transition cursor-pointer"
+              aria-label="Account menu"
+            >
+              <Avatar name={userName} size={30} />
+              <ChevronDown className="hidden size-3.5 text-slate-400 sm:block" />
+            </button>
+          )}
+        >
+          {(close) => (
+            <div>
+              <div className="flex items-center gap-2.5 px-3 py-2.5">
+                <Avatar name={userName} size={34} />
+                <div className="min-w-0">
+                  <p className="truncate text-sm font-semibold text-navy" suppressHydrationWarning>{userName}</p>
+                  <p className="truncate text-xs text-muted" suppressHydrationWarning>{userEmail}</p>
+                </div>
+              </div>
+              <div className="my-1 border-t border-line" />
+              <MenuItem
+                icon={User}
+                onClick={() => {
+                  close();
+                  router.push("/settings");
+                }}
+              >
+                Profile & account
+              </MenuItem>
+              <MenuItem
+                icon={Users}
+                onClick={() => {
+                  close();
+                  router.push("/team");
+                }}
+              >
+                Team management
+              </MenuItem>
+              <MenuItem
+                icon={ShieldCheck}
+                onClick={() => {
+                  close();
+                  router.push("/audit");
+                }}
+              >
+                Audit logs
+              </MenuItem>
+              <MenuItem
+                icon={Settings}
+                onClick={() => {
+                  close();
+                  router.push("/settings");
+                }}
+              >
+                Workspace settings
+              </MenuItem>
+              <div className="my-1 border-t border-line" />
+              <MenuItem
+                icon={LogOut}
+                danger
+                onClick={() => {
+                  close();
+                  logout();
+                }}
+              >
+                Sign out
+              </MenuItem>
+            </div>
+          )}
+        </Dropdown>
       </div>
     </header>
   );
