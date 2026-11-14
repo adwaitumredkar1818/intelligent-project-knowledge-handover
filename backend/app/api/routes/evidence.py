@@ -108,7 +108,7 @@ def list_project_evidence(
     processing_status: str | None = Query(default=None),
     source_type: str | None = Query(default=None),
     category: str | None = Query(default=None),
-    limit: int = Query(default=20, ge=1, le=100),
+    limit: int = Query(default=20, ge=1, le=500),
     offset: int = Query(default=0, ge=0),
 ) -> EvidenceListResponse:
     """List non-deleted evidence summaries for the authorised project workspace."""

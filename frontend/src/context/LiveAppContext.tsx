@@ -543,7 +543,7 @@ export function LiveAppProvider({ children }: { children: ReactNode }) {
     try {
       const [items, metrics] = await Promise.all([
         api.evidence.list(currentProjectId, {
-          limit: 200,
+          limit: 100,
         }),
         api.evidence.getMetrics(currentProjectId),
       ]);

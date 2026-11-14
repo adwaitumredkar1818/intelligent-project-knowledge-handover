@@ -563,7 +563,10 @@ export const api = {
       const query = new URLSearchParams();
       if (params.q) query.append("q", params.q);
       if (params.provider && params.provider !== "all") query.append("provider", params.provider);
-      if (params.limit) query.append("limit", params.limit.toString());
+      if (params.limit) {
+        const safeLimit = Math.min(params.limit, 100);
+        query.append("limit", safeLimit.toString());
+      }
       if (params.offset) query.append("offset", params.offset.toString());
       const qs = query.toString() ? `?${query.toString()}` : "";
       const res = await request<unknown>(`/projects/${projectId}/evidence${qs}`);
