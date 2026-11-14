@@ -1,5 +1,5 @@
 {
-  "audit_timestamp": "2026-11-13T04:03:26.407708+00:00",
+  "audit_timestamp": "2026-11-13T21:36:22.980290+00:00",
   "model_name": "qwen3:8b",
   "embedding_model": "nomic-embed-text",
   "domains": {
@@ -142,9 +142,10 @@
     "ollama_connectivity": {
       "status": "PASS",
       "models": [
-        "nomic-embed-text:latest",
+        "qwen3:8b",
         "glm-ocr:latest",
-        "qwen3:8b"
+        "nomic-embed-text:latest",
+        "qwen3:latest"
       ],
       "qwen_present": true,
       "nomic_present": true
@@ -178,14 +179,12 @@
     "status": "PASS",
     "dimension": 768,
     "expected_dimension": 768,
-    "duration_seconds": 2.405,
+    "duration_seconds": 0.999,
     "is_dimension_exact": true
   },
   "chromadb_test": {
-    "status": "BLOCKED",
-    "message": "ChromaDB server offline or unreachable: timed out",
-    "fallback_available": true,
-    "fallback_note": "HybridRetrievalService gracefully falls back to PostgreSQL Full-Text Search."
+    "status": "PASS",
+    "message": "ChromaDB reachable on port 8001"
   },
   "api_tests": {
     "domains_coverage": {

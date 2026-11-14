@@ -4,11 +4,13 @@ from __future__ import annotations
 
 import uuid
 from datetime import datetime
-from typing import Annotated, Literal
+from typing import Annotated, Any, Literal
 
 from fastapi import APIRouter, Body, Depends, Query, status
+from sqlalchemy.orm import Session
 
 from app.api.deps import (
+    get_db_session,
     get_knowledge_intelligence_service,
     require_project_permission,
     resolve_project_context,
@@ -26,6 +28,7 @@ from app.schemas.knowledge_intelligence import (
     KnowledgeIntelligenceSummaryResponse,
 )
 from app.services.knowledge_intelligence import KnowledgeIntelligenceService
+from app.services.knowledge_quality import KnowledgeQualityEngine
 from app.services.rbac import ProjectContext
 from app.services.timeline import ProjectTimelineResponse
 
@@ -268,4 +271,24 @@ def get_knowledge_intelligence_run(
     return service.get_run(
         project_ctx=project_ctx,
         run_id=run_id,
+    )
+
+
+@router.get(
+    "/projects/{project_id}/knowledge-intelligence/quality",
+    status_code=status.HTTP_200_OK,
+    summary="Comprehensive 9-dimension project knowledge quality, gap, and completeness analysis",
+)
+def get_knowledge_quality_assessment(
+    project_ctx: Annotated[
+        ProjectContext,
+        Depends(require_project_permission("project.read")),
+    ],
+    session: Annotated[Session, Depends(get_db_session)],
+) -> dict[str, Any]:
+    """Calculate transparent 9-dimension knowledge completeness and surface actionable gaps."""
+    engine = KnowledgeQualityEngine(session)
+    return engine.assess_project_quality(
+        project_id=project_ctx.project.id,
+        user_id=project_ctx.user_id,
     )

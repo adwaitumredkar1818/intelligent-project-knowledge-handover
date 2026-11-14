@@ -1,6 +1,6 @@
 {
   "module": "Project Knowledge Assistant (Module 5)",
-  "timestamp": "2026-11-13T15:10:01.966488+00:00",
+  "timestamp": "2026-11-13T21:35:43.243329+00:00",
   "tests": {
     "QueryClassification_12Types": {
       "status": "PASSED",
@@ -32,7 +32,7 @@
     "ConversationLifecycle_CRUD": {
       "status": "PASSED",
       "details": {
-        "conv_id": "4819d9b1-8396-474d-a3eb-be953b51c7b1",
+        "conv_id": "01b2e379-f243-4309-9dba-1fac75c605e7",
         "title": "Updated Architecture Discussion",
         "messages_count": 0
       }
@@ -46,14 +46,14 @@
         "citations": [
           "S1"
         ],
-        "duration_ms": 163
+        "duration_ms": 105
       }
     },
     "SourceACL_FailClosed_0PercentLeakage": {
       "status": "PASSED",
       "details": {
         "bob_received_citations": [],
-        "restricted_evidence_id": "0f9a2fcd-647e-49d7-99a2-34a5e4ed3d9a",
+        "restricted_evidence_id": "8d0860a7-5ec6-46db-b4a0-80b10b24cf7b",
         "leaked": false
       }
     },
@@ -98,8 +98,8 @@
     "FeedbackAndRetrievalDiagnostics": {
       "status": "PASSED",
       "details": {
-        "feedback_id": "80dff6ba-4046-4ae5-bd58-5e0c07f48f3e",
-        "retrieval_run_id": "5741cd9d-8031-4424-bfcd-da9aa7a33561",
+        "feedback_id": "7fca3bc0-01a5-4a6a-bdb5-bf16584c28e2",
+        "retrieval_run_id": "98d75c6a-0d55-4650-bf2d-4e21b6e97a1b",
         "candidates_authorized": 1
       }
     },
@@ -117,7 +117,7 @@
     "ConversationDeletion_Cascade": {
       "status": "PASSED",
       "details": {
-        "deleted_id": "4819d9b1-8396-474d-a3eb-be953b51c7b1"
+        "deleted_id": "01b2e379-f243-4309-9dba-1fac75c605e7"
       }
     }
   },

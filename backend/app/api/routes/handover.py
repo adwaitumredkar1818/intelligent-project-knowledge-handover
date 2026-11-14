@@ -18,7 +18,8 @@ from __future__ import annotations
 import uuid
 from typing import Annotated, Any
 
-from fastapi import APIRouter, Depends, HTTPException, Query, status
+from fastapi import APIRouter, Depends, HTTPException, Query, Response, status
+from fastapi.responses import PlainTextResponse
 from sqlalchemy.orm import Session
 
 from app.api.deps import (
@@ -73,6 +74,7 @@ from app.services.handover_assembly import PackageAssemblyService
 from app.services.handover_case import HandoverCaseService
 from app.services.handover_checklist import ChecklistService
 from app.services.handover_eligibility import HandoverEligibilityService
+from app.services.handover_export import HandoverExportService
 from app.services.handover_narrative import HandoverNarrativeService
 from app.services.handover_ownership import OwnershipTransferService
 from app.services.handover_signoff import HandoverSignoffService
@@ -157,6 +159,7 @@ def create_handover_case(
         user_id=project_ctx.user_id,
         request=request,
     )
+    session.commit()
     return HandoverCaseResponse.model_validate(case)
 
 
@@ -242,6 +245,7 @@ def assemble_handover_package(
         request=request,
         has_project_manage=has_manage,
     )
+    session.commit()
     return HandoverPackageVersionResponse.model_validate(version)
 
 
@@ -835,3 +839,69 @@ def check_handover_eligibility(
         blockers=res.blockers,
         warnings=res.warnings,
     )
+
+
+# ---------------------------------------------------------------------------
+# 10. Handover Package Export (Markdown, JSON, PDF)
+# ---------------------------------------------------------------------------
+
+
+@router.get(
+    "/cases/{case_id}/export",
+    summary="Export handover package in Markdown, JSON, or PDF format",
+)
+def export_handover_package(
+    project_id: uuid.UUID,
+    case_id: uuid.UUID,
+    project_ctx: Annotated[ProjectContext, Depends(require_project_permission("handover.read"))],
+    session: Annotated[Session, Depends(get_db_session)],
+    format: str = Query("markdown", description="Export format: 'markdown', 'json', or 'pdf'"),
+) -> Any:
+    """Export a structured handover package with strict provenance and source ACL filtering."""
+    service = HandoverExportService(session)
+    fmt = format.lower().strip()
+
+    try:
+        if fmt == "markdown":
+            md_content = service.export_markdown(
+                project_id=project_id,
+                case_id=case_id,
+                user_id=project_ctx.user_id,
+            )
+            return PlainTextResponse(
+                content=md_content,
+                media_type="text/markdown",
+                headers={
+                    "Content-Disposition": f"attachment; filename=handover_case_{case_id}.md"
+                },
+            )
+        elif fmt == "json":
+            json_data = service.export_json(
+                project_id=project_id,
+                case_id=case_id,
+                user_id=project_ctx.user_id,
+            )
+            return json_data
+        elif fmt == "pdf":
+            pdf_bytes = service.export_pdf(
+                project_id=project_id,
+                case_id=case_id,
+                user_id=project_ctx.user_id,
+            )
+            return Response(
+                content=pdf_bytes,
+                media_type="application/pdf",
+                headers={
+                    "Content-Disposition": f"attachment; filename=handover_case_{case_id}.pdf"
+                },
+            )
+        else:
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail=f"Unsupported export format '{format}'. Supported formats are: 'markdown', 'json', 'pdf'.",
+            )
+    except ValueError as val_err:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail=str(val_err),
+        ) from val_err

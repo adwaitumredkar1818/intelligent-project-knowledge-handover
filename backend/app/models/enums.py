@@ -402,25 +402,36 @@ class ConfidenceLevel(StrEnum):
 class EntityType(StrEnum):
     """Canonical project-scoped entity types for the knowledge graph."""
 
+    # 19 Canonical Entities
+    PROJECT = "project"
     PERSON = "person"
+    ORGANISATION = "organisation"
+    DECISION = "decision"
+    REQUIREMENT = "requirement"
+    TASK = "task"
+    FEATURE = "feature"
+    TECHNICAL_COMPONENT = "technical_component"
+    ARCHITECTURE_COMPONENT = "architecture_component"
+    REPOSITORY = "repository"
+    PULL_REQUEST = "pull_request"
+    COMMIT = "commit"
+    ISSUE = "issue"
+    DOCUMENT = "document"
+    RISK = "risk"
+    BLOCKER = "blocker"
+    DEPENDENCY = "dependency"
+    MILESTONE = "milestone"
+    OPERATIONAL_PROCEDURE = "operational_procedure"
+
+    # Backward-compatible aliases
     TEAM = "team"
     DISCUSSION = "discussion"
     DISCUSSION_THREAD = "discussion_thread"
-    DECISION = "decision"
     WORK_ITEM = "work_item"
-    PULL_REQUEST = "pull_request"
-    COMMIT = "commit"
-    DOCUMENT = "document"
     MEETING_NOTE = "meeting_note"
     COMPONENT = "component"
-    TECHNICAL_COMPONENT = "technical_component"
-    DEPENDENCY = "dependency"
-    RISK = "risk"
     BUG = "bug"
-    BLOCKER = "blocker"
     PROCEDURE = "procedure"
-    REPOSITORY = "repository"
-    ORGANISATION = "organisation"
 
 
 class RelationshipType(StrEnum):
@@ -513,6 +524,26 @@ class RelationshipType(StrEnum):
     KNOWLEDGE_CORROBORATED_BY = "KNOWLEDGE_CORROBORATED_BY"
     DOCUMENT_REFERENCES_EVIDENCE = "DOCUMENT_REFERENCES_EVIDENCE"
     DISCUSSION_REFERENCES_WORK_ITEM = "DISCUSSION_REFERENCES_WORK_ITEM"
+
+    # Module C Canonical Lowercase Verbs & Aliases
+    PROPOSED_BY = "proposed_by"
+    APPROVED_BY = "approved_by"
+    MOTIVATED_BY = "motivated_by"
+    CONTRADICTS = "contradicts"
+    REVISES = "revises"
+    REQUIRES = "requires"
+    USES = "uses"
+    INTEGRATES_WITH = "integrates_with"
+    EXTENDS = "extends"
+    REPLACES = "replaces"
+    DEPLOYED_AS = "deployed_as"
+    CONFIGURED_BY = "configured_by"
+    SUPPORTED_BY = "supported_by"
+    MENTIONED_IN = "mentioned_in"
+    CORROBORATED_BY = "corroborated_by"
+    CONFLICTS_WITH = "conflicts_with"
+    BELONGS_TO = "belongs_to"
+    COMPLETED_IN = "completed_in"
 
 
 class RelationshipBasis(StrEnum):

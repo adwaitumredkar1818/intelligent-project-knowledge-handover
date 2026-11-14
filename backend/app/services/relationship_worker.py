@@ -46,11 +46,12 @@ class RelationshipWorkerService:
             job_repo = BackgroundJobRepository(session)
             job = job_repo.claim_next_job(
                 worker_id=self.worker_id,
-                lease_seconds=60,
+                lease_seconds=300,
                 now=now,
                 job_types=[BackgroundJobType.RELATIONSHIP_RECONSTRUCTION.value],
             )
             if job is None:
+                session.commit()
                 return False
 
             logger.info(

@@ -1,5 +1,5 @@
 {
-  "audit_timestamp": "2026-11-13T11:20:08.794512+00:00",
+  "audit_timestamp": "2026-11-13T21:33:47.683682+00:00",
   "database": {
     "status": "PASS",
     "tables_found": {
@@ -81,37 +81,37 @@
   "live_qwen3_tests": {
     "conflict_explanation": {
       "status": "PASS",
-      "latency_ms": 15620.57,
+      "latency_ms": 34234.92,
       "parsed_output": {
         "likely_cause": "The divergence is likely due to a timing mismatch between the Jira ticket status and the RFC document's assessment.",
-        "nuance_explanation": "Claim A indicates the OAuth implementation was completed and merged, while Claim B, written later, states the integration is pending security review. This suggests the Jira ticket may have been updated prematurely or the RFC document reflects a later stage of review.",
-        "reconciliation_recommendation": "The reviewer should verify the current status of the OAuth integration by checking the latest security review status and confirming the Jira ticket's final resolution.",
+        "nuance_explanation": "Claim A indicates the OAuth implementation was completed and merged, while Claim B, written later, states the integration is pending security review, suggesting a possible delay or additional review phase after the merge.",
+        "reconciliation_recommendation": "The reviewer should verify the current status of the OAuth integration by checking the latest security review records and confirming the Jira ticket's status against the RFC document.",
         "clarification_questions": [
-          "Was the OAuth implementation actually merged before the security review was initiated?",
-          "Has the security review for OAuth integration been completed, or is it still pending?"
+          "Was the OAuth implementation merged into the main branch before the security review was initiated?",
+          "Is there a documented process for transitioning from 'merged' to 'pending security review' in the project workflow?"
         ]
       }
     },
     "clarification_suggestions": {
       "status": "PASS",
-      "latency_ms": 16169.37,
+      "latency_ms": 16646.6,
       "questions_count": 2,
       "sample_question": {
         "question": "What was the rationale behind selecting a pool size of 5 connections, and how was this number determined based on expected peak concurrency and system requirements?",
-        "purpose": "The incoming successor needs to understand the decision-making process and assumptions behind the database connection pool configuration to ensure proper system sizing and performance tuning."
+        "purpose": "The incoming successor needs to understand the decision-making process and assumptions behind the database connection pool configuration to ensure proper maintenance and scalability."
       }
     }
   },
   "frontend_status": {
     "status": "NOT IMPLEMENTED",
     "note": "Per root AGENTS.md, backend verification engine is built and verified first. Frontend UI deferred to subsequent phase.",
-    "files_checked": 28
+    "files_checked": 33
   },
   "performance_metrics": {
-    "queue_latency_ms": 13441.96,
-    "summary_latency_ms": 14198.44,
-    "qwen3_conflict_latency_ms": 15620.57,
-    "qwen3_clarification_latency_ms": 16169.37
+    "queue_latency_ms": 247.39,
+    "summary_latency_ms": 126.86,
+    "qwen3_conflict_latency_ms": 34234.92,
+    "qwen3_clarification_latency_ms": 16646.6
   },
   "test_matrix": [
     {
@@ -139,7 +139,7 @@
       "expected": "Clean finding with valid evidence initializes to CANDIDATE or PENDING_REVIEW",
       "actual": "Machine status: passed, Case status: candidate",
       "status": "PASS",
-      "evidence": "case_id=1aac6164-256e-4d99-812a-1d2af25e3ca6, status=candidate"
+      "evidence": "case_id=a9e3342e-84af-4636-8b7c-6b7d36bc455b, status=candidate"
     },
     {
       "test_id": "LIFE-02",
@@ -148,7 +148,7 @@
       "expected": "Case status becomes VERIFIED and KnowledgeItem epistemic_status becomes HUMAN_VERIFIED",
       "actual": "Case: verified, KI epistemic: human_verified, KI review: approved",
       "status": "PASS",
-      "evidence": "case_id=1aac6164-256e-4d99-812a-1d2af25e3ca6, epistemic=human_verified"
+      "evidence": "case_id=a9e3342e-84af-4636-8b7c-6b7d36bc455b, epistemic=human_verified"
     },
     {
       "test_id": "LIFE-03",
@@ -157,7 +157,7 @@
       "expected": "Case status becomes REJECTED and KnowledgeItem review_status becomes REJECTED",
       "actual": "Case: rejected, KI review: rejected",
       "status": "PASS",
-      "evidence": "case_id=051569b9-48bc-4814-9dee-8e8a4bb3db0d, review_status=rejected"
+      "evidence": "case_id=ddc22ea8-fd02-4f4d-8e11-8e55a74f8d06, review_status=rejected"
     },
     {
       "test_id": "LIFE-04",
@@ -166,7 +166,7 @@
       "expected": "Case status becomes UNRESOLVED and remains blocked from handover",
       "actual": "Case: unresolved",
       "status": "PASS",
-      "evidence": "case_id=150636b9-0c77-458d-a7d1-18b909c14b91"
+      "evidence": "case_id=b23edcc7-5101-4481-9553-792eee244209"
     },
     {
       "test_id": "LIFE-05",
@@ -193,7 +193,7 @@
       "expected": "Detects UNSUPPORTED_CLAIM when cited excerpt does not appear in chunk text",
       "actual": "Issues found: ['unsupported_claim', 'missing_source_context']",
       "status": "PASS",
-      "evidence": "issues=[{'issue_type': <VerificationIssueType.UNSUPPORTED_CLAIM: 'unsupported_claim'>, 'severity': <VerificationSeverity.HIGH: 'high'>, 'description': 'Supporting excerpt could not be matched in source chunk.', 'details_json': {'excerpt_preview': 'Policy requires biometric authentication on all mobile devices', 'chunk_id': 'f9be652b-5f1d-4c16-8b33-472d3dbb2022'}, 'conflicting_evidence_id': UUID('970c5353-bd57-467a-8086-d4ce8422ae45'), 'conflicting_chunk_id': UUID('f9be652b-5f1d-4c16-8b33-472d3dbb2022')}, {'issue_type': <VerificationIssueType.MISSING_SOURCE_CONTEXT: 'missing_source_context'>, 'severity': <VerificationSeverity.LOW: 'low'>, 'description': 'Architectural decision is missing documented rationale.', 'details_json': {'missing_field': 'rationale'}, 'conflicting_evidence_id': None, 'conflicting_chunk_id': None}]"
+      "evidence": "issues=[{'issue_type': <VerificationIssueType.UNSUPPORTED_CLAIM: 'unsupported_claim'>, 'severity': <VerificationSeverity.HIGH: 'high'>, 'description': 'Supporting excerpt could not be matched in source chunk.', 'details_json': {'excerpt_preview': 'Policy requires biometric authentication on all mobile devices', 'chunk_id': '6faaa6ef-a9d7-4c94-98f1-b095cff5bd1e'}, 'conflicting_evidence_id': UUID('0bdf66fe-0b1b-4991-9ef0-530032ec98b4'), 'conflicting_chunk_id': UUID('6faaa6ef-a9d7-4c94-98f1-b095cff5bd1e')}, {'issue_type': <VerificationIssueType.MISSING_SOURCE_CONTEXT: 'missing_source_context'>, 'severity': <VerificationSeverity.LOW: 'low'>, 'description': 'Architectural decision is missing documented rationale.', 'details_json': {'missing_field': 'rationale'}, 'conflicting_evidence_id': None, 'conflicting_chunk_id': None}]"
     },
     {
       "test_id": "EVID-03",
@@ -202,7 +202,7 @@
       "expected": "Flags INVALID_SOURCE_REFERENCE when cited evidence belongs to another project",
       "actual": "Issues found: ['invalid_source_reference', 'missing_evidence', 'missing_source_context']",
       "status": "PASS",
-      "evidence": "issues=[{'issue_type': <VerificationIssueType.INVALID_SOURCE_REFERENCE: 'invalid_source_reference'>, 'severity': <VerificationSeverity.HIGH: 'high'>, 'description': 'Cited evidence item is invalid or not in workspace.', 'details_json': {'cited_evidence_id': '7a51ac7f-7f32-4990-988b-b0d3b4dd9c2d'}, 'conflicting_evidence_id': UUID('7a51ac7f-7f32-4990-988b-b0d3b4dd9c2d'), 'conflicting_chunk_id': UUID('678aa4cc-f7ff-43de-b5f5-445d4c86c87c')}, {'issue_type': <VerificationIssueType.MISSING_EVIDENCE: 'missing_evidence'>, 'severity': <VerificationSeverity.CRITICAL: 'critical'>, 'description': 'No valid accessible evidence links exist for this finding.', 'details_json': {'reason': 'all_links_invalid'}, 'conflicting_evidence_id': None, 'conflicting_chunk_id': None}, {'issue_type': <VerificationIssueType.MISSING_SOURCE_CONTEXT: 'missing_source_context'>, 'severity': <VerificationSeverity.LOW: 'low'>, 'description': 'Architectural decision is missing documented rationale.', 'details_json': {'missing_field': 'rationale'}, 'conflicting_evidence_id': None, 'conflicting_chunk_id': None}]"
+      "evidence": "issues=[{'issue_type': <VerificationIssueType.INVALID_SOURCE_REFERENCE: 'invalid_source_reference'>, 'severity': <VerificationSeverity.HIGH: 'high'>, 'description': 'Cited evidence item is invalid or not in workspace.', 'details_json': {'cited_evidence_id': '8082eb2c-4b38-407c-b990-5810542cbeba'}, 'conflicting_evidence_id': UUID('8082eb2c-4b38-407c-b990-5810542cbeba'), 'conflicting_chunk_id': UUID('b6c75517-8874-4923-9867-74af728d66fd')}, {'issue_type': <VerificationIssueType.MISSING_EVIDENCE: 'missing_evidence'>, 'severity': <VerificationSeverity.CRITICAL: 'critical'>, 'description': 'No valid accessible evidence links exist for this finding.', 'details_json': {'reason': 'all_links_invalid'}, 'conflicting_evidence_id': None, 'conflicting_chunk_id': None}, {'issue_type': <VerificationIssueType.MISSING_SOURCE_CONTEXT: 'missing_source_context'>, 'severity': <VerificationSeverity.LOW: 'low'>, 'description': 'Architectural decision is missing documented rationale.', 'details_json': {'missing_field': 'rationale'}, 'conflicting_evidence_id': None, 'conflicting_chunk_id': None}]"
     },
     {
       "test_id": "EVID-04",
@@ -344,7 +344,7 @@
       "test_name": "Work Status Conflict Detection",
       "component": "Conflict Detection",
       "expected": "Detects status conflict, sets case to CONFLICTED, identifies B_SUPERSEDES_A temporally",
-      "actual": "Conflict ID: 8f85fc07-dc75-4ce6-9470-26a0f6d3ec59, Case status: conflicted, Temporal: b_supersedes_a",
+      "actual": "Conflict ID: 575f6a8e-8199-4a84-801b-a942cc4175a6, Case status: conflicted, Temporal: b_supersedes_a",
       "status": "PASS",
       "evidence": "conflict_type=status_conflict, temporal=b_supersedes_a"
     },
@@ -355,7 +355,7 @@
       "expected": "Preserves both ownership assertions without destructive overwrite",
       "actual": "Claim A: Alex, Claim B: Sarah, Type: ownership_conflict",
       "status": "PASS",
-      "evidence": "conf_id=ad6ce460-82bc-4610-b107-37803aa697b7"
+      "evidence": "conf_id=9933d14a-da4c-47b3-a079-68fda4dcaf67"
     },
     {
       "test_id": "CONF-03",
@@ -382,7 +382,7 @@
       "expected": "Detects TECHNICAL_CONFLICT between Git merge and Jira backlog state",
       "actual": "Type: technical_conflict",
       "status": "PASS",
-      "evidence": "conf_id=7d86910b-309c-47bb-83bb-9f999e2293df"
+      "evidence": "conf_id=9487641b-8be8-4c3c-94ab-22db10092ece"
     },
     {
       "test_id": "STALE-01",
@@ -391,7 +391,7 @@
       "expected": "Detects STALE_KNOWLEDGE when cited evidence has failed processing or is stale",
       "actual": "Issues: ['stale_knowledge', 'missing_source_context']",
       "status": "PASS",
-      "evidence": "issues=[{'issue_type': <VerificationIssueType.STALE_KNOWLEDGE: 'stale_knowledge'>, 'severity': <VerificationSeverity.HIGH: 'high'>, 'description': 'Cited evidence item is marked stale or failed processing.', 'details_json': {'evidence_id': '9bd747af-f51d-40fd-a6cc-03d1e8a25668'}, 'conflicting_evidence_id': UUID('9bd747af-f51d-40fd-a6cc-03d1e8a25668'), 'conflicting_chunk_id': None}, {'issue_type': <VerificationIssueType.MISSING_SOURCE_CONTEXT: 'missing_source_context'>, 'severity': <VerificationSeverity.LOW: 'low'>, 'description': 'Architectural decision is missing documented rationale.', 'details_json': {'missing_field': 'rationale'}, 'conflicting_evidence_id': None, 'conflicting_chunk_id': None}]"
+      "evidence": "issues=[{'issue_type': <VerificationIssueType.STALE_KNOWLEDGE: 'stale_knowledge'>, 'severity': <VerificationSeverity.HIGH: 'high'>, 'description': 'Cited evidence item is marked stale or failed processing.', 'details_json': {'evidence_id': 'd6eea47a-ffef-4c32-86ae-e375de5c4a96'}, 'conflicting_evidence_id': UUID('d6eea47a-ffef-4c32-86ae-e375de5c4a96'), 'conflicting_chunk_id': None}, {'issue_type': <VerificationIssueType.MISSING_SOURCE_CONTEXT: 'missing_source_context'>, 'severity': <VerificationSeverity.LOW: 'low'>, 'description': 'Architectural decision is missing documented rationale.', 'details_json': {'missing_field': 'rationale'}, 'conflicting_evidence_id': None, 'conflicting_chunk_id': None}]"
     },
     {
       "test_id": "DEDUP-01",
@@ -400,23 +400,23 @@
       "expected": "Detects DUPLICATE_RECORD without destructive auto-merge",
       "actual": "Issues: ['missing_evidence', 'duplicate_record', 'missing_source_context']",
       "status": "PASS",
-      "evidence": "details=[{'issue_type': <VerificationIssueType.MISSING_EVIDENCE: 'missing_evidence'>, 'severity': <VerificationSeverity.CRITICAL: 'critical'>, 'description': 'Finding has no supporting evidence links.', 'details_json': {'reason': 'zero_links_found'}, 'conflicting_evidence_id': None, 'conflicting_chunk_id': None}, {'issue_type': <VerificationIssueType.DUPLICATE_RECORD: 'duplicate_record'>, 'severity': <VerificationSeverity.MEDIUM: 'medium'>, 'description': 'Found 1 other finding(s) with identical title.', 'details_json': {'duplicate_item_ids': ['3eff171d-f95e-46fd-a500-79ad5b9f9b42']}, 'conflicting_evidence_id': None, 'conflicting_chunk_id': None}, {'issue_type': <VerificationIssueType.MISSING_SOURCE_CONTEXT: 'missing_source_context'>, 'severity': <VerificationSeverity.LOW: 'low'>, 'description': 'Architectural decision is missing documented rationale.', 'details_json': {'missing_field': 'rationale'}, 'conflicting_evidence_id': None, 'conflicting_chunk_id': None}]"
+      "evidence": "details=[{'issue_type': <VerificationIssueType.MISSING_EVIDENCE: 'missing_evidence'>, 'severity': <VerificationSeverity.CRITICAL: 'critical'>, 'description': 'Finding has no supporting evidence links.', 'details_json': {'reason': 'zero_links_found'}, 'conflicting_evidence_id': None, 'conflicting_chunk_id': None}, {'issue_type': <VerificationIssueType.DUPLICATE_RECORD: 'duplicate_record'>, 'severity': <VerificationSeverity.MEDIUM: 'medium'>, 'description': 'Found 1 other finding(s) with identical title.', 'details_json': {'duplicate_item_ids': ['f241c7d6-1524-4626-a796-ee0431adc18f']}, 'conflicting_evidence_id': None, 'conflicting_chunk_id': None}, {'issue_type': <VerificationIssueType.MISSING_SOURCE_CONTEXT: 'missing_source_context'>, 'severity': <VerificationSeverity.LOW: 'low'>, 'description': 'Architectural decision is missing documented rationale.', 'details_json': {'missing_field': 'rationale'}, 'conflicting_evidence_id': None, 'conflicting_chunk_id': None}]"
     },
     {
       "test_id": "QWEN-00",
       "test_name": "AIAssistedVerificationService Default Settings Binding",
       "component": "AI Assistance",
       "expected": "Default constructor resolves settings.ollama_llm_model without attribute error",
-      "actual": "AttributeError: 'Settings' object has no attribute 'ollama_model_reconstruction'. Expected 'settings.ollama_llm_model', code referenced 'settings.ollama_model_reconstruction'.",
-      "status": "FAIL",
-      "evidence": "error='Settings' object has no attribute 'ollama_model_reconstruction'"
+      "actual": "Constructor succeeded without explicit client",
+      "status": "PASS",
+      "evidence": "Default constructor resolved model name correctly."
     },
     {
       "test_id": "QWEN-01",
       "test_name": "Live Qwen3 8B Conflict Explanation",
       "component": "AI Assistance",
       "expected": "Local Qwen3 8B returns valid JSON explaining divergence with clarification questions",
-      "actual": "Latency: 15620.57ms, Likely cause: 'The divergence is likely due to a timing mismatch between the Jira ticket status...'",
+      "actual": "Latency: 34234.92ms, Likely cause: 'The divergence is likely due to a timing mismatch between the Jira ticket status...'",
       "status": "PASS",
       "evidence": "output={\"likely_cause\": \"The divergence is likely due to a timing mismatch between the Jira ticket status and the RFC document's assessment.\", \"nuance_explanation\": \"Claim A indicates the OAuth implementatio"
     },
@@ -425,9 +425,9 @@
       "test_name": "Live Qwen3 8B Clarification Suggestions",
       "component": "AI Assistance",
       "expected": "Local Qwen3 8B generates 2-3 specific clarification questions for incomplete findings",
-      "actual": "Latency: 16169.37ms, Questions generated: 2",
+      "actual": "Latency: 16646.6ms, Questions generated: 2",
       "status": "PASS",
-      "evidence": "sample={'question': 'What was the rationale behind selecting a pool size of 5 connections, and how was this number determined based on expected peak concurrency and system requirements?', 'purpose': 'The incoming successor needs to understand the decision-making process and assumptions behind the database connection pool configuration to ensure proper system sizing and performance tuning.'}"
+      "evidence": "sample={'question': 'What was the rationale behind selecting a pool size of 5 connections, and how was this number determined based on expected peak concurrency and system requirements?', 'purpose': 'The incoming successor needs to understand the decision-making process and assumptions behind the database connection pool configuration to ensure proper maintenance and scalability.'}"
     },
     {
       "test_id": "QWEN-03",
@@ -461,18 +461,18 @@
       "test_name": "Context Request Dispatch",
       "component": "Human Review",
       "expected": "Creates VerificationContextRequest with PENDING status and bumps version",
-      "actual": "Request ID: d8db790a-83bc-48a9-b2b4-351e9ba9b2d7, Status: pending, Case version: 3",
+      "actual": "Request ID: b8320562-986c-44b1-9182-6fffb89a3d42, Status: pending, Case version: 3",
       "status": "PASS",
-      "evidence": "req_id=d8db790a-83bc-48a9-b2b4-351e9ba9b2d7"
+      "evidence": "req_id=b8320562-986c-44b1-9182-6fffb89a3d42"
     },
     {
       "test_id": "REV-04",
       "test_name": "Reviewer Assignment & Provenance",
       "component": "Human Review",
       "expected": "Assigns reviewer Bob, increments version, appends ASSIGN review event",
-      "actual": "Assigned reviewer: 587a46fa-4a33-4b12-b52a-6617e32afb5c, Version: 4",
+      "actual": "Assigned reviewer: 1e67b784-0104-48f6-a8fe-61ab33fe3a83, Version: 4",
       "status": "PASS",
-      "evidence": "assigned_id=587a46fa-4a33-4b12-b52a-6617e32afb5c"
+      "evidence": "assigned_id=1e67b784-0104-48f6-a8fe-61ab33fe3a83"
     },
     {
       "test_id": "REV-05",
@@ -524,16 +524,16 @@
       "test_name": "GET Verification Review Queue",
       "component": "API Endpoint",
       "expected": "Returns HTTP 200 with paginated queue items",
-      "actual": "HTTP 200, Items: 1, Latency: 13441.96ms",
+      "actual": "HTTP 200, Items: 1, Latency: 247.39ms",
       "status": "PASS",
-      "evidence": "response={\"items\":[{\"id\":\"25b173fe-e72c-4411-acea-c85ac197a241\",\"organisation_id\":\"de51834b-db23-4b5d-8bb7-72fe5ada1cf8\",\"project_id\":\"9caf2764-9ef8-4ac1-897e-"
+      "evidence": "response={\"items\":[{\"id\":\"3bf2db00-d293-46a8-a1a8-adb527eea47c\",\"organisation_id\":\"e8669261-e3b9-474a-8521-195b5308c314\",\"project_id\":\"0fa06a31-3cc8-4f90-ba6c-"
     },
     {
       "test_id": "API-02",
       "test_name": "GET Verification Summary Telemetry",
       "component": "API Endpoint",
       "expected": "Returns HTTP 200 with total_cases, pending_review, and readiness",
-      "actual": "HTTP 200, Total cases: 1, Latency: 14198.44ms",
+      "actual": "HTTP 200, Total cases: 1, Latency: 126.86ms",
       "status": "PASS",
       "evidence": "response={\"total_cases\":1,\"by_status\":{\"pending_review\":1},\"by_priority\":{\"medium\":1},\"open_issues_count\":0,\"open_conflicts_count\":0,\"pending_context_requests_"
     },
@@ -544,7 +544,7 @@
       "expected": "Returns HTTP 200 with case metadata, open issues, and conflicts",
       "actual": "HTTP 200, Target title: ''",
       "status": "PASS",
-      "evidence": "response={\"id\":\"25b173fe-e72c-4411-acea-c85ac197a241\",\"organisation_id\":\"de51834b-db23-4b5d-8bb7-72fe5ada1cf8\",\"project_id\":\"9caf2764-9ef8-4ac1-897e-579c9a2718"
+      "evidence": "response={\"id\":\"3bf2db00-d293-46a8-a1a8-adb527eea47c\",\"organisation_id\":\"e8669261-e3b9-474a-8521-195b5308c314\",\"project_id\":\"0fa06a31-3cc8-4f90-ba6c-e43c028bbc"
     },
     {
       "test_id": "API-04",
@@ -553,7 +553,7 @@
       "expected": "Returns HTTP 200 with side-by-side evidence chunks",
       "actual": "HTTP 200, Evidence items: 0",
       "status": "PASS",
-      "evidence": "response={\"case_id\":\"25b173fe-e72c-4411-acea-c85ac197a241\",\"target_type\":\"knowledge_item\",\"target_id\":\"f13b330f-2e9e-4947-8824-3ab40e9cf5bb\",\"supporting_eviden"
+      "evidence": "response={\"case_id\":\"3bf2db00-d293-46a8-a1a8-adb527eea47c\",\"target_type\":\"knowledge_item\",\"target_id\":\"da7804a5-8cf2-4cc5-9b44-6e8a82cdccb1\",\"supporting_eviden"
     },
     {
       "test_id": "API-05",
@@ -562,7 +562,7 @@
       "expected": "Returns HTTP 200 and assigns reviewer to case",
       "actual": "HTTP 200, New version: 2",
       "status": "PASS",
-      "evidence": "response={\"id\":\"25b173fe-e72c-4411-acea-c85ac197a241\",\"organisation_id\":\"de51834b-db23-4b5d-8bb7-72fe5ada1cf8\",\"project_id\":\"9caf2764-9ef8-4ac1-897e-579c9a2718"
+      "evidence": "response={\"id\":\"3bf2db00-d293-46a8-a1a8-adb527eea47c\",\"organisation_id\":\"e8669261-e3b9-474a-8521-195b5308c314\",\"project_id\":\"0fa06a31-3cc8-4f90-ba6c-e43c028bbc"
     },
     {
       "test_id": "API-06",
@@ -571,16 +571,16 @@
       "expected": "Returns HTTP 200 with updated title and bumped version 3",
       "actual": "HTTP 200, New version: 3",
       "status": "PASS",
-      "evidence": "response={\"id\":\"25b173fe-e72c-4411-acea-c85ac197a241\",\"organisation_id\":\"de51834b-db23-4b5d-8bb7-72fe5ada1cf8\",\"project_id\":\"9caf2764-9ef8-4ac1-897e-579c9a2718"
+      "evidence": "response={\"id\":\"3bf2db00-d293-46a8-a1a8-adb527eea47c\",\"organisation_id\":\"e8669261-e3b9-474a-8521-195b5308c314\",\"project_id\":\"0fa06a31-3cc8-4f90-ba6c-e43c028bbc"
     },
     {
       "test_id": "API-07",
       "test_name": "POST Request Additional Context",
       "component": "API Endpoint",
-      "expected": "Returns HTTP 200 and dispatches context request",
-      "actual": "HTTP 201, Req ID: None",
-      "status": "FAIL",
-      "evidence": "response={\"id\":\"fb023212-f14a-4443-a7ef-921143c061cf\",\"case_id\":\"25b173fe-e72c-4411-acea-c85ac197a241\",\"requested_by_user_id\":\"28fcf043-841f-4abf-be78-cc0199d1"
+      "expected": "Returns HTTP 200 or 201 and dispatches context request",
+      "actual": "HTTP 201, Req ID: 5ae1bfed-e692-417d-9327-a607b3d97dc7",
+      "status": "PASS",
+      "evidence": "response={\"id\":\"5ae1bfed-e692-417d-9327-a607b3d97dc7\",\"case_id\":\"3bf2db00-d293-46a8-a1a8-adb527eea47c\",\"requested_by_user_id\":\"d898ec6e-a0f3-43dc-86c0-1ca3df27"
     },
     {
       "test_id": "API-08",
@@ -589,16 +589,16 @@
       "expected": "Returns HTTP 200 with pending clarification requests",
       "actual": "HTTP 200, Total requests: 1",
       "status": "PASS",
-      "evidence": "response=[{\"id\":\"fb023212-f14a-4443-a7ef-921143c061cf\",\"case_id\":\"25b173fe-e72c-4411-acea-c85ac197a241\",\"requested_by_user_id\":\"28fcf043-841f-4abf-be78-cc0199d"
+      "evidence": "response=[{\"id\":\"5ae1bfed-e692-417d-9327-a607b3d97dc7\",\"case_id\":\"3bf2db00-d293-46a8-a1a8-adb527eea47c\",\"requested_by_user_id\":\"d898ec6e-a0f3-43dc-86c0-1ca3df2"
     },
     {
       "test_id": "API-09",
       "test_name": "POST Respond to Context Request",
       "component": "API Endpoint",
-      "expected": "Answer request",
-      "actual": "Skipped",
-      "status": "BLOCKED",
-      "evidence": "no ctx_req_id"
+      "expected": "Returns HTTP 200 and marks context request RESPONDED",
+      "actual": "HTTP 200, Status: responded",
+      "status": "PASS",
+      "evidence": "response={\"id\":\"5ae1bfed-e692-417d-9327-a607b3d97dc7\",\"case_id\":\"3bf2db00-d293-46a8-a1a8-adb527eea47c\",\"requested_by_user_id\":\"d898ec6e-a0f3-43dc-86c0-1ca3df27"
     },
     {
       "test_id": "API-10",
@@ -607,7 +607,7 @@
       "expected": "Returns HTTP 200 and sets status UNRESOLVED",
       "actual": "HTTP 200, Status: unresolved",
       "status": "PASS",
-      "evidence": "response={\"id\":\"25b173fe-e72c-4411-acea-c85ac197a241\",\"organisation_id\":\"de51834b-db23-4b5d-8bb7-72fe5ada1cf8\",\"project_id\":\"9caf2764-9ef8-4ac1-897e-579c9a2718"
+      "evidence": "response={\"id\":\"3bf2db00-d293-46a8-a1a8-adb527eea47c\",\"organisation_id\":\"e8669261-e3b9-474a-8521-195b5308c314\",\"project_id\":\"0fa06a31-3cc8-4f90-ba6c-e43c028bbc"
     },
     {
       "test_id": "API-11",
@@ -616,7 +616,7 @@
       "expected": "Returns HTTP 200 and promotes case to VERIFIED",
       "actual": "HTTP 200, Status: verified",
       "status": "PASS",
-      "evidence": "response={\"id\":\"25b173fe-e72c-4411-acea-c85ac197a241\",\"organisation_id\":\"de51834b-db23-4b5d-8bb7-72fe5ada1cf8\",\"project_id\":\"9caf2764-9ef8-4ac1-897e-579c9a2718"
+      "evidence": "response={\"id\":\"3bf2db00-d293-46a8-a1a8-adb527eea47c\",\"organisation_id\":\"e8669261-e3b9-474a-8521-195b5308c314\",\"project_id\":\"0fa06a31-3cc8-4f90-ba6c-e43c028bbc"
     },
     {
       "test_id": "API-12",
@@ -625,7 +625,7 @@
       "expected": "Returns HTTP 200 with is_eligible flag and blockers list",
       "actual": "HTTP 200, Eligible: False",
       "status": "PASS",
-      "evidence": "response={\"is_eligible\":false,\"target_type\":\"knowledge_item\",\"target_id\":\"f13b330f-2e9e-4947-8824-3ab40e9cf5bb\",\"case_status\":\"verified\",\"epistemic_status\":\"hu"
+      "evidence": "response={\"is_eligible\":false,\"target_type\":\"knowledge_item\",\"target_id\":\"da7804a5-8cf2-4cc5-9b44-6e8a82cdccb1\",\"case_status\":\"verified\",\"epistemic_status\":\"hu"
     },
     {
       "test_id": "API-13",
@@ -634,7 +634,7 @@
       "expected": "Returns HTTP 200 and updates deterministic assessment telemetry",
       "actual": "HTTP 200, Machine status: insufficient_evidence",
       "status": "PASS",
-      "evidence": "response={\"id\":\"25b173fe-e72c-4411-acea-c85ac197a241\",\"organisation_id\":\"de51834b-db23-4b5d-8bb7-72fe5ada1cf8\",\"project_id\":\"9caf2764-9ef8-4ac1-897e-579c9a2718"
+      "evidence": "response={\"id\":\"3bf2db00-d293-46a8-a1a8-adb527eea47c\",\"organisation_id\":\"e8669261-e3b9-474a-8521-195b5308c314\",\"project_id\":\"0fa06a31-3cc8-4f90-ba6c-e43c028bbc"
     },
     {
       "test_id": "API-14",
@@ -643,7 +643,7 @@
       "expected": "Returns HTTP 200 and transitions status to REJECTED",
       "actual": "HTTP 200, Status: rejected",
       "status": "PASS",
-      "evidence": "response={\"id\":\"abc14718-3ce8-4099-95e2-460db60fbe31\",\"organisation_id\":\"de51834b-db23-4b5d-8bb7-72fe5ada1cf8\",\"project_id\":\"9caf2764-9ef8-4ac1-897e-579c9a2718"
+      "evidence": "response={\"id\":\"228f66b6-2b14-41ae-a229-fc2507145b45\",\"organisation_id\":\"e8669261-e3b9-474a-8521-195b5308c314\",\"project_id\":\"0fa06a31-3cc8-4f90-ba6c-e43c028bbc"
     },
     {
       "test_id": "SEC-01",
@@ -652,7 +652,7 @@
       "expected": "Returns HTTP 401 Unauthorized when Authorization header is absent",
       "actual": "HTTP 401",
       "status": "PASS",
-      "evidence": "response={\"error\":{\"code\":\"AUTHENTICATION_REQUIRED\",\"message\":\"Authentication credentials were not provided.\",\"request_id\":\"b409d5d4-0aec-4f51-b55c-79aaf5ff2850\",\"details\":null}}"
+      "evidence": "response={\"error\":{\"code\":\"AUTHENTICATION_REQUIRED\",\"message\":\"Authentication credentials were not provided.\",\"request_id\":\"d17725b6-9579-46f7-aba3-8af4ee8979c9\",\"details\":null}}"
     },
     {
       "test_id": "UI-01",

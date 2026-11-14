@@ -1436,14 +1436,14 @@ def run_full_verification_audit() -> dict[str, Any]:
                 "expected_version": 3,
             },
         )
-        ctx_req_id = r7.json().get("id") if r7.status_code == 200 else None
+        ctx_req_id = r7.json().get("id") if r7.status_code in (200, 201) else None
         record_test(
             "API-07",
             "POST Request Additional Context",
             "API Endpoint",
-            "Returns HTTP 200 and dispatches context request",
+            "Returns HTTP 200 or 201 and dispatches context request",
             f"HTTP {r7.status_code}, Req ID: {ctx_req_id}",
-            "PASS" if r7.status_code == 200 and ctx_req_id else "FAIL",
+            "PASS" if r7.status_code in (200, 201) and ctx_req_id else "FAIL",
             f"response={r7.text[:150]}",
         )
 

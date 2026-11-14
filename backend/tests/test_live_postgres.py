@@ -12,6 +12,7 @@ from sqlalchemy.exc import SQLAlchemyError
 from app.core.config import clear_settings_cache, get_settings
 from app.db.session import create_db_engine, verify_database_connection
 from app.main import create_app
+from tests.migration_guard import verify_migration_target_isolation
 
 _ROOT_ENV = Path(__file__).resolve().parents[2] / ".env"
 
@@ -21,6 +22,9 @@ def test_live_postgresql_connectivity_and_readiness_readonly() -> None:
     clear_settings_cache()
     settings = get_settings()
 
+    # CRITICAL TEST SAFETY: Enforce fail-closed guard against production Supabase or unapproved external hosts
+    effective_url = settings.database_url.get_secret_value()
+    verify_migration_target_isolation(effective_url)
     engine = create_db_engine(settings)
     try:
         try:

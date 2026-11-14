@@ -68,9 +68,12 @@ class AIAssistedVerificationService:
     def __init__(self, llm_client: StructuredLLMClient | None = None) -> None:
         if llm_client is None:
             settings = get_settings()
+            model = getattr(settings, "ollama_llm_model", None) or getattr(
+                settings, "ollama_model_reconstruction", "qwen3:8b"
+            )
             self._client: StructuredLLMClient = OllamaLLMClient(
                 base_url=settings.ollama_base_url,
-                model=settings.ollama_model_reconstruction,
+                model=model,
             )
         else:
             self._client = llm_client

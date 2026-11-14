@@ -1,5 +1,5 @@
 {
-  "timestamp": "2026-11-13T15:09:28.724558+00:00",
+  "timestamp": "2026-11-13T21:35:28.163859+00:00",
   "total_tests": 24,
   "passed_tests": 24,
   "failed_tests": 0,
@@ -15,7 +15,7 @@
       "test_id": "TEST-A",
       "name": "Create HandoverCase in DRAFT Status",
       "passed": true,
-      "details": "Case 7836bfc2-e251-4b6a-bfdf-7ce0e0b2bedb created in status 'draft' with version 1."
+      "details": "Case 051c1fda-f7fa-4705-a2c6-da21939d8d1e created in status 'draft' with version 1."
     },
     {
       "test_id": "TEST-B",
@@ -57,7 +57,7 @@
       "test_id": "TEST-H.1",
       "name": "Phase 1: Departing Member Sign-Off",
       "passed": true,
-      "details": "Phase 1 signed by departing member with hash c8010ce4d107..."
+      "details": "Phase 1 signed by departing member with hash 5b7020434d1e..."
     },
     {
       "test_id": "TEST-I",
@@ -75,19 +75,19 @@
       "test_id": "TEST-J",
       "name": "Package Delivery & Case Transition to DELIVERED",
       "passed": true,
-      "details": "Delivered version to successor 288da11a-a2e5-46f5-aecd-15ab47a1696f; Case status is 'delivered'."
+      "details": "Delivered version to successor e938ecc9-a1a7-470b-8bac-02a53a375436; Case status is 'delivered'."
     },
     {
       "test_id": "TEST-K",
       "name": "Successor Receipt Acknowledgement & Case Transition to ACKNOWLEDGED",
       "passed": true,
-      "details": "Successor acknowledged delivery with cryptographic hash a5f149908239...; Case status is 'acknowledged'."
+      "details": "Successor acknowledged delivery with cryptographic hash 4ce475f044de...; Case status is 'acknowledged'."
     },
     {
       "test_id": "TEST-L",
       "name": "Explicit Ownership Transfer (Separate Operation) & Status Transition to TRANSFERRED",
       "passed": true,
-      "details": "Transferred project ownership to 288da11a-a2e5-46f5-aecd-15ab47a1696f; Case status is 'transferred'."
+      "details": "Transferred project ownership to e938ecc9-a1a7-470b-8bac-02a53a375436; Case status is 'transferred'."
     },
     {
       "test_id": "TEST-M",

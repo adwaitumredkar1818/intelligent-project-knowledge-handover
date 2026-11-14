@@ -1,6 +1,6 @@
 """Multi-signal Identity Resolution service for Relationship Explorer.
 
-Evaluates candidate entity duplicates across sources (e.g. GitHub username vs Jira email vs Slack handle)
+Evaluates candidate entity duplicates across sources (e.g. GitHub vs Jira vs Slack)
 using 5 weighted signals:
 1. Exact canonical string match (weight 0.40)
 2. Normalized email/handle match (weight 0.25)
@@ -157,8 +157,27 @@ class IdentityResolutionService:
         *,
         semantic_similarity: float = 0.0,
     ) -> IdentityResolutionCandidate | None:
-        """Evaluate two entities and record candidate if score >= 0.70."""
-        if left.id == right.id or left.entity_type != right.entity_type:
+        """Evaluate two entities and record candidate if score >= 0.70.
+
+        Strict Safety Boundaries:
+        1. Never merge across organisations.
+        2. Never merge across projects without explicit boundary scope.
+        3. Never self-reference.
+        4. Never merge mismatched entity types.
+        """
+        if left.id == right.id:
+            return None
+        if left.organisation_id != right.organisation_id:
+            logger.warning(
+                "Rejected candidate: cross-organisation entities %s and %s", left.id, right.id
+            )
+            return None
+        if left.project_id != right.project_id:
+            logger.warning(
+                "Rejected candidate: cross-project entities %s and %s", left.id, right.id
+            )
+            return None
+        if left.entity_type != right.entity_type:
             return None
 
         signal = self.compute_match_signal(left, right, semantic_similarity=semantic_similarity)
