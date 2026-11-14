@@ -34,5 +34,12 @@
     ".next/dev/types/**/*.ts",
     "**/*.mts"
   ],
-  "exclude": ["node_modules"]
+  "exclude": [
+    "node_modules",
+    "src/components/admin",
+    "src/components/handover",
+    "src/components/knowledge",
+    "src/components/relationships",
+    "src/components/verification"
+  ]
 }

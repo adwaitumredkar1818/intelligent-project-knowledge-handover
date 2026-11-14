@@ -230,3 +230,143 @@ export interface EvidenceMetrics {
   by_type: Record<string, number>;
   by_indexing_status: Record<string, number>;
 }
+
+
+// ─── Downstream Platform Types ────────────────────────────────────────────────
+
+export interface KnowledgeFinding {
+  id: UUID;
+  project_id: UUID;
+  knowledge_domain: string;
+  category: string;
+  title: string;
+  summary: string;
+  confidence_score: number;
+  epistemic_status: "extracted" | "interpreted" | "human_verified";
+  review_status: "unreviewed" | "approved" | "rejected" | "disputed";
+  evidence_citations_count: number;
+  extracted_at: string;
+  item_payload?: Record<string, unknown>;
+  citations?: Array<{
+    chunk_id: string;
+    evidence_id: string;
+    excerpt_text: string;
+    similarity_score?: number;
+  }>;
+}
+
+export interface KnowledgeDomainMetric {
+  domain: string;
+  total_findings: number;
+  confidence_distribution: Record<string, number>;
+  verified_percentage: number;
+}
+
+export interface KnowledgeSummaryTelemetry {
+  total_findings: number;
+  by_category: Record<string, number>;
+  by_domain: Record<string, number>;
+  verified_count: number;
+  candidate_count: number;
+  readiness_percentage?: number;
+}
+
+export interface TimelineStreamEvent {
+  id: UUID;
+  project_id: UUID;
+  title: string;
+  event_type: "decision" | "milestone" | "incident" | "commit" | "task" | string;
+  event_timestamp: string;
+  confidence: number;
+  source_evidence_ids: string[];
+  summary?: string;
+}
+
+export interface GraphNodeData {
+  id: string;
+  label: string;
+  type: string;
+  canonical_name: string;
+  confidence: number;
+  resolution_status: string;
+  domain?: string;
+  properties?: Record<string, unknown>;
+}
+
+export interface GraphEdgeData {
+  id: string;
+  source: string;
+  target: string;
+  type: string;
+  verification_status: string;
+  confidence: number;
+}
+
+export interface KnowledgeGraphData {
+  nodes: GraphNodeData[];
+  edges: GraphEdgeData[];
+}
+
+export interface VerificationCaseQueueItem {
+  id: UUID;
+  target_type: string;
+  target_id: UUID;
+  status: "pending_review" | "approved" | "rejected" | "unresolved";
+  priority: "critical" | "high" | "medium" | "low";
+  confidence_score: number;
+  created_at: string;
+  issue_count: number;
+  assigned_to_user_id?: string;
+  finding?: {
+    title: string;
+    summary: string;
+    domain: string;
+    epistemic_status: string;
+  };
+}
+
+export interface VerificationSummaryData {
+  total_cases: number;
+  pending_review: number;
+  approved: number;
+  rejected: number;
+  unresolved: number;
+  conflicts_count: number;
+  stale_count: number;
+  handover_eligible_count: number;
+}
+
+export interface HandoverCaseItem {
+  id: UUID;
+  project_id: UUID;
+  title: string;
+  description?: string;
+  status: string;
+  version: number;
+  created_at: string;
+  updated_at: string;
+  outgoing_owner_user_id?: string;
+  incoming_owner_user_id?: string;
+  readiness_score?: number;
+}
+
+export interface HandoverReadinessData {
+  readiness_score: number;
+  dimension_scores: Record<string, number>;
+  unmet_requirements: string[];
+  recommendations: string[];
+}
+
+export interface AuditEventItem {
+  id: UUID;
+  organisation_id: UUID;
+  project_id?: UUID | null;
+  user_id?: UUID | null;
+  action: string;
+  entity_type: string;
+  entity_id?: string | null;
+  outcome: string;
+  created_at: string;
+  actor_name?: string | null;
+  details?: Record<string, unknown> | null;
+}

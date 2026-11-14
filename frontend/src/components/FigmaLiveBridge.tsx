@@ -1,0 +1,294 @@
+'use client'
+
+import { useEffect } from 'react'
+import { useLiveApp } from '../context/LiveAppContext'
+import { useFigmaStore } from '../lib/figmaStore'
+import {
+  evidence as storeEvidence,
+  decisions as storeDecisions,
+  tasks as storeTasks,
+  risks as storeRisks,
+  dependencies as storeDependencies,
+  timeline as storeTimeline,
+  people as storePeople,
+  type Evidence,
+  type Decision,
+  type Task,
+  type Risk,
+  type Dependency,
+  type TimelineEvent,
+  type Person,
+  type Project,
+  type Source,
+  type Handover,
+  type Verification,
+  type SourceType,
+} from '../lib/figmaStore'
+
+export function FigmaLiveBridge() {
+  const {
+    user,
+    projects,
+    activeProject,
+    sourceMappings,
+    evidenceList,
+    findings,
+    handoverCases,
+    members,
+  } = useLiveApp()
+
+  const store = useFigmaStore()
+
+  // 1. Sync User Profile to storePeople
+  useEffect(() => {
+    if (user) {
+      const existing = storePeople.find((p) => p.id === user.id || p.email === user.email)
+      const fullName = user.full_name || user.email.split('@')[0] || 'User'
+      if (existing) {
+        existing.name = fullName
+        existing.email = user.email
+      } else {
+        const newPerson: Person = {
+          id: user.id,
+          name: fullName,
+          title: 'Team Member',
+          email: user.email,
+          color: '#315FBA',
+          wsRole: 'Owner',
+          status: 'Active',
+        }
+        storePeople.unshift(newPerson)
+      }
+    }
+  }, [user])
+
+  // 2. Sync Members into storePeople
+  useEffect(() => {
+    if (members && members.length > 0) {
+      members.forEach((m) => {
+        const name = m.user_email?.split('@')[0] || 'Member'
+        if (!storePeople.some((p) => p.id === m.user_id)) {
+          storePeople.push({
+            id: m.user_id,
+            name,
+            title: m.role_name || 'Contributor',
+            email: m.user_email || `${m.user_id}@handover.local`,
+            color: '#299B80',
+            wsRole: 'Member',
+            status: 'Active',
+          })
+        }
+      })
+    }
+  }, [members])
+
+  // 3. Sync Projects into store.setProjects
+  useEffect(() => {
+    if (projects && projects.length > 0) {
+      const mapped: Project[] = projects.map((p) => {
+        const pRecord = p as unknown as Record<string, unknown>
+        const category = typeof pRecord.category === 'string' ? pRecord.category : 'General'
+        const role: Project['role'] = (typeof pRecord.user_role === 'string' && (pRecord.user_role === 'manager' || pRecord.user_role === 'outgoing' || pRecord.user_role === 'incoming')) ? pRecord.user_role : 'manager'
+        const startDate = typeof pRecord.created_at === 'string' ? pRecord.created_at.split('T')[0]! : '2026-01-01'
+
+        return {
+          id: p.id,
+          workspaceId: p.organisation_id || 'sandbox',
+          name: p.name,
+          code: p.name.slice(0, 4).toUpperCase(),
+          description: p.description || 'Project managed in The Handover',
+          category,
+          status: p.status === 'archived' ? 'completed' : 'active',
+          health: 92,
+          ownerId: user?.id || 'maya',
+          role,
+          lastActivity: 'Just now',
+          coverage: 85,
+          startDate,
+          endDate: '2026-12-31',
+          color: '#315FBA',
+        }
+      })
+
+      store.setProjects(mapped)
+
+      if (activeProject && store.currentProject?.id !== activeProject.id) {
+        store.switchProject(activeProject.id, true)
+      }
+    }
+  }, [projects, activeProject, user, store])
+
+  // 4. Sync Sources into store.setSources
+  useEffect(() => {
+    if (sourceMappings && activeProject) {
+      const mapped: Source[] = sourceMappings.map((sm) => {
+        const type = (sm.provider || 'docs') as SourceType
+        return {
+          id: sm.id,
+          projectId: activeProject.id,
+          type,
+          name: sm.external_resource_name || sm.provider,
+          account: sm.external_resource_key || 'authorized',
+          status: sm.status === 'failed' ? 'error' : sm.status === 'syncing' ? 'syncing' : 'connected',
+          lastSync: sm.last_synced_at ? new Date(sm.last_synced_at).toLocaleTimeString() : 'Never',
+          records: 0,
+          scope: [sm.resource_type || 'repository'],
+          frequency: 'Real-time / Webhook',
+          volume: 'Normal',
+        }
+      })
+      store.setSources(mapped)
+    }
+  }, [sourceMappings, activeProject, store])
+
+  // 5. Sync Evidence into global `evidence` array in figmaStore
+  useEffect(() => {
+    if (evidenceList && activeProject) {
+      const mapped: Evidence[] = evidenceList.map((e) => {
+        let type: Evidence['type'] = 'pdf'
+        if (e.provider === 'github') type = 'commit'
+        else if (e.provider === 'jira') type = 'issue'
+        else if (e.provider === 'slack') type = 'message'
+        else if (e.source_type?.toLowerCase().includes('doc')) type = 'docx'
+
+        let verification: Verification = 'needs_review'
+        if (e.indexing_status === 'indexed') verification = 'verified'
+        else if (e.indexing_status === 'failed') verification = 'rejected'
+
+        return {
+          id: e.id,
+          projectId: e.project_id || activeProject.id,
+          type,
+          title: e.title || 'Evidence Record',
+          sourceId: e.provider || 'docs',
+          authorId: e.author_name || user?.id || 'system',
+          date: e.source_created_at ? e.source_created_at.split('T')[0]! : 'Today',
+          memberId: user?.id || 'maya',
+          processing: e.indexing_status === 'indexed' ? 'processed' : e.indexing_status === 'failed' ? 'failed' : 'processing',
+          verification,
+          ref: e.id.slice(0, 8),
+          content: 'Decrypted source content available in Evidence Workspace.',
+          extracted: [],
+        }
+      })
+
+      // Update storeEvidence in-place
+      storeEvidence.length = 0
+      mapped.forEach((m) => storeEvidence.push(m))
+    }
+  }, [evidenceList, activeProject, user])
+
+  // 6. Sync Findings into decisions, tasks, risks, dependencies in figmaStore
+  useEffect(() => {
+    if (findings && activeProject) {
+      storeDecisions.length = 0
+      storeTasks.length = 0
+      storeRisks.length = 0
+      storeDependencies.length = 0
+      storeTimeline.length = 0
+
+      findings.forEach((f) => {
+        let verification: Verification = 'needs_review'
+        if (f.review_status === 'approved') verification = 'verified'
+        else if (f.review_status === 'rejected') verification = 'rejected'
+        else if (f.review_status === 'disputed') verification = 'conflicting'
+
+        const citations = f.citations ? f.citations.map((c: { evidence_id: string }) => c.evidence_id) : []
+
+        const base = {
+          id: f.id,
+          projectId: f.project_id || activeProject.id,
+          title: f.title,
+          summary: f.summary,
+          ownerId: user?.id || 'maya',
+          date: f.extracted_at ? f.extracted_at.split('T')[0]! : '2026-03-01',
+          confidence: Math.round((f.confidence_score || 0.85) * 100),
+          verification,
+          evidenceIds: citations,
+        }
+
+        const domain = (f.knowledge_domain || '').toUpperCase()
+
+        if (domain.includes('DECISION')) {
+          storeDecisions.push({
+            ...base,
+            reasoning: f.summary,
+            discussions: [],
+          })
+          storeTimeline.push({
+            id: `tl-${f.id}`,
+            projectId: base.projectId,
+            date: base.date,
+            type: 'decision',
+            title: f.title,
+            detail: f.summary,
+            personId: base.ownerId,
+          })
+        } else if (domain.includes('WORK_STATUS') || domain.includes('OWNERSHIP')) {
+          storeTasks.push({
+            ...base,
+            priority: 'High',
+            status: 'In progress',
+            due: '2026-04-15',
+            history: [],
+          })
+          storeTimeline.push({
+            id: `tl-${f.id}`,
+            projectId: base.projectId,
+            date: base.date,
+            type: 'task',
+            title: f.title,
+            detail: f.summary,
+            personId: base.ownerId,
+          })
+        } else if (domain.includes('RISK') || domain.includes('BLOCKER')) {
+          storeRisks.push({
+            ...base,
+            severity: 'High',
+            impact: f.summary,
+            component: 'Architecture',
+            mitigation: ['Address during handover verification'],
+            resolution: 'Open',
+          })
+        } else if (domain.includes('DEPENDENCY')) {
+          storeDependencies.push({
+            ...base,
+            depType: 'Technical',
+            from: f.title.split('->')[0]?.trim() || f.title,
+            to: f.title.split('->')[1]?.trim() || 'Core Services',
+            blocking: true,
+          })
+        } else {
+          storeDecisions.push({
+            ...base,
+            reasoning: f.summary,
+            discussions: [],
+          })
+        }
+      })
+    }
+  }, [findings, activeProject, user])
+
+  // 7. Sync Handovers into store.setHandovers
+  useEffect(() => {
+    if (handoverCases && activeProject) {
+      const mapped: Handover[] = handoverCases.map((hc) => ({
+        id: hc.id,
+        code: `HO-${hc.id.slice(0, 4).toUpperCase()}`,
+        projectId: hc.project_id || activeProject.id,
+        outgoingId: hc.outgoing_owner_user_id || user?.id || 'maya',
+        incomingId: hc.incoming_owner_user_id || 'james',
+        created: hc.created_at ? hc.created_at.split('T')[0]! : '2026-03-01',
+        updated: hc.updated_at ? hc.updated_at.split('T')[0]! : '2026-03-01',
+        status: (hc.status === 'draft' || hc.status === 'in_progress' || hc.status === 'pending_review' || hc.status === 'approved' || hc.status === 'published' || hc.status === 'completed') ? hc.status : 'draft',
+        progress: hc.status === 'approved' ? 100 : hc.status === 'in_progress' ? 65 : 20,
+        due: '2026-04-30',
+        scope: hc.title || 'Project Handover Package',
+        access: 'Active',
+      }))
+      store.setHandovers(mapped)
+    }
+  }, [handoverCases, activeProject, user, store])
+
+  return null
+}

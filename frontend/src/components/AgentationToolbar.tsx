@@ -1,19 +1,18 @@
 "use client";
 
 import { Agentation } from "agentation";
-import { useEffect, useState } from "react";
+import { useSyncExternalStore } from "react";
+
+const emptySubscribe = () => () => {};
 
 export function AgentationToolbar() {
-  const [mounted, setMounted] = useState(false);
+  const isClient = useSyncExternalStore(
+    emptySubscribe,
+    () => true,
+    () => false
+  );
 
-  useEffect(() => {
-    // Only mount if explicitly enabled via environment variable
-    if (process.env.NEXT_PUBLIC_ENABLE_AGENTATION === "true") {
-      setMounted(true);
-    }
-  }, []);
-
-  if (!mounted) {
+  if (!isClient || process.env.NEXT_PUBLIC_ENABLE_AGENTATION !== "true") {
     return null;
   }
 

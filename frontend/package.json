@@ -13,6 +13,8 @@
     "format:check": "node ./node_modules/prettier/bin/prettier.cjs --check ."
   },
   "dependencies": {
+    "@tanstack/react-query": "^5.107.1",
+    "@xyflow/react": "^12.12.1",
     "agentation": "^3.1.2",
     "clsx": "^2.1.1",
     "lucide-react": "^1.72.0",

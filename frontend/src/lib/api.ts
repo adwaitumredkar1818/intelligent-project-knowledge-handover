@@ -593,4 +593,396 @@ export const api = {
       return res.blob();
     },
   },
+  relationships: {
+    async getGraph(projectId: string, limit: number = 100): Promise<{
+      nodes: Array<{
+        id: string;
+        label: string;
+        type: string;
+        canonical_name: string;
+        confidence: number;
+        resolution_status: string;
+      }>;
+      edges: Array<{
+        id: string;
+        source: string;
+        target: string;
+        type: string;
+        verification_status: string;
+        confidence: number;
+      }>;
+    }> {
+      return request(`/projects/${projectId}/relationships/graph?limit=${limit}`);
+    },
+    async listEntities(projectId: string, type?: string, page: number = 1, pageSize: number = 50): Promise<{
+      items: Array<{
+        id: string;
+        canonical_name: string;
+        entity_type: string;
+        confidence_score: number;
+        resolution_status: string;
+        description?: string;
+        created_at: string;
+      }>;
+      total: number;
+    }> {
+      const qs = new URLSearchParams({ page: String(page), page_size: String(pageSize) });
+      if (type) qs.append("type", type);
+      return request(`/projects/${projectId}/relationships/entities?${qs.toString()}`);
+    },
+    async getEntityDetails(projectId: string, entityId: string): Promise<Record<string, unknown>> {
+      return request(`/projects/${projectId}/relationships/entities/${entityId}`);
+    },
+    async getTraceability(projectId: string): Promise<{
+      chains: Array<{
+        id: string;
+        decision_entity_id: string;
+        decision_name: string;
+        completeness_status: string;
+        work_item_count: number;
+        pr_count: number;
+        commit_count: number;
+        component_count: number;
+        missing_links: string[];
+      }>;
+    }> {
+      return request(`/projects/${projectId}/relationships/traceability`);
+    },
+    async getDependencies(projectId: string, rootId?: string): Promise<{
+      nodes: Array<{ id: string; label: string; entity_type: string; is_root_blocker: boolean; in_degree: number; out_degree: number }>;
+      edges: Array<{ source: string; target: string; relationship_type: string }>;
+      cycles: string[][];
+      root_blockers: string[];
+    }> {
+      const qs = rootId ? `?root_entity_id=${rootId}` : "";
+      return request(`/projects/${projectId}/relationships/dependencies${qs}`);
+    },
+    async getTimeline(projectId: string): Promise<{
+      items: Array<{
+        id: string;
+        event_type: string;
+        title: string;
+        summary?: string;
+        occurred_at: string;
+        timestamp_precision: string;
+        timestamp_origin: string;
+      }>;
+      total_events: number;
+    }> {
+      return request(`/projects/${projectId}/relationships/timeline`);
+    },
+    async listIdentityCandidates(projectId: string): Promise<Record<string, unknown>[]> {
+      return request(`/projects/${projectId}/relationships/identity-candidates`);
+    },
+    async reviewCandidate(projectId: string, candidateId: string, decision: "accept" | "reject", rationale?: string): Promise<Record<string, unknown>> {
+      return request(`/projects/${projectId}/relationships/identity-candidates/${candidateId}/review`, {
+        method: "POST",
+        body: JSON.stringify({ decision, rationale }),
+      });
+    },
+  },
+  knowledgeIntelligence: {
+    async getSummary(projectId: string): Promise<{
+      total_findings: number;
+      by_category: Record<string, number>;
+      by_domain: Record<string, number>;
+      verified_count: number;
+      candidate_count: number;
+    }> {
+      return request(`/projects/${projectId}/knowledge-intelligence/summary`);
+    },
+    async listFindings(projectId: string, domain?: string, page: number = 1): Promise<{
+      items: Record<string, unknown>[];
+      total: number;
+    }> {
+      const qs = new URLSearchParams({ page: String(page) });
+      if (domain) qs.append("domain", domain);
+      return request(`/projects/${projectId}/knowledge-intelligence/findings?${qs.toString()}`);
+    },
+  },
+  verification: {
+    async getSummary(projectId: string): Promise<{
+      total_cases: number;
+      pending_review: number;
+      approved: number;
+      rejected: number;
+      unresolved: number;
+      conflicts_count: number;
+      stale_count: number;
+      handover_eligible_count: number;
+    }> {
+      return request(`/projects/${projectId}/verification/summary`);
+    },
+    async getQueue(projectId: string, status?: string, page: number = 1): Promise<{
+      items: Array<{
+        id: string;
+        target_type: string;
+        target_id: string;
+        status: string;
+        risk_level: string;
+        confidence_score: number;
+        created_at: string;
+        issue_count: number;
+        assigned_to_user_id?: string;
+        finding?: {
+          title: string;
+          summary: string;
+          domain: string;
+          category?: string;
+        };
+      }>;
+      total: number;
+    }> {
+      const qs = new URLSearchParams({ page: String(page) });
+      if (status) qs.append("status", status);
+      return request(`/projects/${projectId}/verification/queue?${qs.toString()}`);
+    },
+    async getCaseDetail(projectId: string, caseId: string): Promise<{
+      id: string;
+      project_id: string;
+      target_type: string;
+      target_id: string;
+      status: string;
+      risk_level: string;
+      confidence_score: number;
+      issues: Array<{
+        id: string;
+        issue_type: string;
+        severity: string;
+        description: string;
+      }>;
+      events: Array<{
+        id: string;
+        event_type: string;
+        actor_user_id: string;
+        created_at: string;
+        payload: Record<string, unknown>;
+      }>;
+    }> {
+      return request(`/projects/${projectId}/verification/cases/${caseId}`);
+    },
+    async getCaseEvidence(projectId: string, caseId: string): Promise<{
+      case_id: string;
+      evidence: Array<{
+        id: string;
+        source_name: string;
+        source_type: string;
+        content_snippet: string;
+        created_at: string;
+      }>;
+    }> {
+      return request(`/projects/${projectId}/verification/cases/${caseId}/evidence`);
+    },
+    async approveCase(projectId: string, caseId: string, notes?: string): Promise<Record<string, unknown>> {
+      return request(`/projects/${projectId}/verification/cases/${caseId}/approve`, {
+        method: "POST",
+        body: JSON.stringify({ notes }),
+      });
+    },
+    async rejectCase(projectId: string, caseId: string, reason?: string): Promise<Record<string, unknown>> {
+      return request(`/projects/${projectId}/verification/cases/${caseId}/reject`, {
+        method: "POST",
+        body: JSON.stringify({ reason: reason || "Rejected by reviewer" }),
+      });
+    },
+    async markUnresolved(projectId: string, caseId: string, reason: string): Promise<Record<string, unknown>> {
+      return request(`/projects/${projectId}/verification/cases/${caseId}/mark-unresolved`, {
+        method: "POST",
+        body: JSON.stringify({ reason }),
+      });
+    },
+    async editFinding(projectId: string, caseId: string, payload: { title?: string; summary?: string; expected_version: number }): Promise<Record<string, unknown>> {
+      return request(`/projects/${projectId}/verification/cases/${caseId}/finding`, {
+        method: "PATCH",
+        body: JSON.stringify(payload),
+      });
+    },
+    async assignReviewer(projectId: string, caseId: string, userId: string): Promise<Record<string, unknown>> {
+      return request(`/projects/${projectId}/verification/cases/${caseId}/assign`, {
+        method: "POST",
+        body: JSON.stringify({ user_id: userId }),
+      });
+    },
+    async getHandoverEligibility(projectId: string, caseId: string): Promise<{ is_eligible: boolean; reason?: string }> {
+      return request(`/projects/${projectId}/verification/cases/${caseId}/eligibility`);
+    },
+  },
+  handover: {
+    async listCases(projectId: string): Promise<{
+      items: Array<{
+        id: string;
+        project_id: string;
+        title: string;
+        status: string;
+        version: number;
+        created_at: string;
+        updated_at: string;
+        outgoing_owner_user_id?: string;
+        incoming_owner_user_id?: string;
+      }>;
+      total: number;
+    }> {
+      return request(`/projects/${projectId}/handover/cases`);
+    },
+    async createCase(projectId: string, data: { title: string; description?: string; outgoing_owner_user_id?: string; incoming_owner_user_id?: string }): Promise<{
+      id: string;
+      title: string;
+      status: string;
+      version: number;
+    }> {
+      return request(`/projects/${projectId}/handover/cases`, {
+        method: "POST",
+        body: JSON.stringify(data),
+      });
+    },
+    async getCase(projectId: string, caseId: string): Promise<{
+      id: string;
+      project_id: string;
+      title: string;
+      description?: string;
+      status: string;
+      version: number;
+      created_at: string;
+      updated_at: string;
+    }> {
+      return request(`/projects/${projectId}/handover/cases/${caseId}`);
+    },
+    async getVersions(projectId: string, caseId: string): Promise<Array<{
+      id: string;
+      version_number: number;
+      package_hash: string;
+      assembled_at: string;
+      readiness_score?: number;
+    }>> {
+      return request(`/projects/${projectId}/handover/cases/${caseId}/versions`);
+    },
+    async assemblePackage(projectId: string, caseId: string, expectedVersion: number): Promise<Record<string, unknown>> {
+      return request(`/projects/${projectId}/handover/cases/${caseId}/assemble`, {
+        method: "POST",
+        body: JSON.stringify({ expected_version: expectedVersion }),
+      });
+    },
+    async getReadiness(projectId: string, caseId: string, versionId: string): Promise<{
+      readiness_score: number;
+      dimension_scores: Record<string, number>;
+      unmet_requirements: string[];
+      recommendations: string[];
+    }> {
+      return request(`/projects/${projectId}/handover/cases/${caseId}/readiness/${versionId}`);
+    },
+    async getChecklists(projectId: string, caseId: string): Promise<Array<{
+      id: string;
+      title: string;
+      is_mandatory: boolean;
+      status: string;
+    }>> {
+      return request(`/projects/${projectId}/handover/cases/${caseId}/checklists`);
+    },
+    async getResponsibilities(projectId: string, caseId: string): Promise<Array<{
+      id: string;
+      component_id: string;
+      transfer_status: string;
+      from_user_id: string;
+      to_user_id: string;
+    }>> {
+      return request(`/projects/${projectId}/handover/cases/${caseId}/responsibilities`);
+    },
+    async getSignoffs(projectId: string, caseId: string): Promise<Array<{
+      id: string;
+      role: string;
+      user_id: string;
+      signed_at?: string;
+      status: string;
+    }>> {
+      return request(`/projects/${projectId}/handover/cases/${caseId}/signoffs`);
+    },
+    async recordSignoff(projectId: string, caseId: string, data: { signoff_id: string; role: string; notes?: string }): Promise<Record<string, unknown>> {
+      return request(`/projects/${projectId}/handover/cases/${caseId}/signoff`, {
+        method: "POST",
+        body: JSON.stringify(data),
+      });
+    },
+    async exportMarkdown(projectId: string, caseId: string): Promise<string> {
+      return request(`/projects/${projectId}/handover/cases/${caseId}/export?format=markdown`);
+    },
+    async exportJson(projectId: string, caseId: string): Promise<Record<string, unknown>> {
+      return request(`/projects/${projectId}/handover/cases/${caseId}/export?format=json`);
+    },
+  },
+  assistant: {
+    async listConversations(projectId: string): Promise<Array<{
+      id: string;
+      title: string;
+      created_at: string;
+      updated_at: string;
+    }>> {
+      return request(`/projects/${projectId}/assistant/conversations`);
+    },
+    async createConversation(projectId: string, title?: string): Promise<{
+      id: string;
+      title: string;
+      created_at: string;
+    }> {
+      return request(`/projects/${projectId}/assistant/conversations`, {
+        method: "POST",
+        body: JSON.stringify({ title: title || "New Investigation" }),
+      });
+    },
+    async sendMessage(projectId: string, conversationId: string, content: string): Promise<{
+      id: string;
+      role: string;
+      content: string;
+      citations: Array<{
+        source_id: string;
+        source_title: string;
+        snippet: string;
+        confidence: number;
+      }>;
+      created_at: string;
+    }> {
+      return request(`/projects/${projectId}/assistant/conversations/${conversationId}/messages`, {
+        method: "POST",
+        body: JSON.stringify({ content }),
+      });
+    },
+    async getMessages(projectId: string, conversationId: string): Promise<Array<{
+      id: string;
+      role: string;
+      content: string;
+      citations?: Array<{
+        source_id: string;
+        source_title: string;
+        snippet: string;
+        confidence: number;
+      }>;
+      created_at: string;
+    }>> {
+      return request(`/projects/${projectId}/assistant/conversations/${conversationId}/messages`);
+    },
+    async deleteConversation(projectId: string, conversationId: string): Promise<void> {
+      return request(`/projects/${projectId}/assistant/conversations/${conversationId}`, {
+        method: "DELETE",
+      });
+    },
+  },
+  audit: {
+    async listOrganisationEvents(orgId: string, limit: number = 50, offset: number = 0): Promise<{
+      items: Array<{
+        id: string;
+        organisation_id: string;
+        project_id?: string | null;
+        user_id?: string | null;
+        action: string;
+        entity_type: string;
+        entity_id?: string | null;
+        outcome: string;
+        created_at: string;
+        actor_name?: string | null;
+        details?: Record<string, unknown> | null;
+      }>;
+      total: number;
+    }> {
+      return request(`/organisations/${orgId}/audit-events?limit=${limit}&offset=${offset}`);
+    },
+  },
 };

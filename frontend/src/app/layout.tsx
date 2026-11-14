@@ -4,8 +4,11 @@ import { Suspense } from "react";
 import { Manrope, JetBrains_Mono } from "next/font/google";
 import "./globals.css";
 import { LiveAppProvider } from "../context/LiveAppContext";
+import { QueryProvider } from "../providers/QueryProvider";
+import { FigmaStoreProvider } from "../lib/figmaStore";
 import { AppLayout } from "../components/layout/AppLayout";
 import { AgentationToolbar } from "../components/AgentationToolbar";
+import { FigmaLiveBridge } from "../components/FigmaLiveBridge";
 
 const manrope = Manrope({
   subsets: ["latin"],
@@ -40,12 +43,17 @@ export default function RootLayout({
   return (
     <html lang="en" className={`${manrope.variable} ${jetbrainsMono.variable}`} suppressHydrationWarning>
       <body className="antialiased font-sans" suppressHydrationWarning>
-        <LiveAppProvider>
-          <Suspense fallback={<div className="min-h-screen bg-[#F6F8FC]" />}>
-            <AppLayout>{children}</AppLayout>
-          </Suspense>
-          <AgentationToolbar />
-        </LiveAppProvider>
+        <QueryProvider>
+          <FigmaStoreProvider>
+            <LiveAppProvider>
+              <FigmaLiveBridge />
+              <Suspense fallback={<div className="min-h-screen bg-[#F6F8FC]" />}>
+                <AppLayout>{children}</AppLayout>
+              </Suspense>
+              <AgentationToolbar />
+            </LiveAppProvider>
+          </FigmaStoreProvider>
+        </QueryProvider>
       </body>
     </html>
   );

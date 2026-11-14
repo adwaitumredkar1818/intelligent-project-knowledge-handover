@@ -20,6 +20,11 @@ import type {
   EvidenceSummary,
   EvidenceDetail,
   EvidenceMetrics,
+  KnowledgeFinding,
+  KnowledgeSummaryTelemetry,
+  VerificationSummaryData,
+  VerificationCaseQueueItem,
+  HandoverCaseItem,
 } from "../lib/types";
 
 export interface ToastMessage {
@@ -90,6 +95,27 @@ interface LiveAppContextType {
   uploadDocument: (file: File, title?: string) => Promise<{ document_id: string; title: string }>;
   downloadEvidence: (evidenceId: string, filename?: string) => Promise<void>;
 
+  // Downstream intelligence
+  knowledgeSummary: KnowledgeSummaryTelemetry | null;
+  findings: KnowledgeFinding[];
+  isLoadingFindings: boolean;
+  refreshFindings: () => Promise<void>;
+  triggerReconstruction: () => Promise<void>;
+
+  // Verification
+  verificationSummary: VerificationSummaryData | null;
+  verificationQueue: VerificationCaseQueueItem[];
+  isLoadingVerification: boolean;
+  refreshVerification: () => Promise<void>;
+  approveVerificationCase: (caseId: string, notes?: string) => Promise<void>;
+  rejectVerificationCase: (caseId: string, reason?: string) => Promise<void>;
+
+  // Handover
+  handoverCases: HandoverCaseItem[];
+  isLoadingHandovers: boolean;
+  refreshHandovers: () => Promise<void>;
+  createHandoverCase: (data: { title: string; description?: string }) => Promise<Record<string, unknown>>;
+
   // UI state & modals
   isAuthModalOpen: boolean;
   setIsAuthModalOpen: (open: boolean) => void;
@@ -126,7 +152,7 @@ export function LiveAppProvider({ children }: { children: ReactNode }) {
 
   // Org & Project state
   const [organisations, setOrganisations] = useState<Organisation[]>([]);
-  const [activeOrg, setActiveOrg] = useState<Organisation | null>(null);
+  const [activeOrg, setActiveOrgInternal] = useState<Organisation | null>(null);
   const [projects, setProjects] = useState<Project[]>([]);
   const [activeProject, setActiveProjectInternal] = useState<Project | null>(null);
   const [isLoadingProjects, setIsLoadingProjects] = useState(false);
@@ -144,11 +170,58 @@ export function LiveAppProvider({ children }: { children: ReactNode }) {
   const [orgConnections, setOrgConnections] = useState<SourceConnection[]>([]);
   const [isLoadingSources, setIsLoadingSources] = useState(false);
 
+  // Evidence state
+  const [evidenceList, setEvidenceList] = useState<EvidenceSummary[]>([]);
+  const [evidenceMetrics, setEvidenceMetrics] = useState<EvidenceMetrics | null>(null);
+  const [selectedEvidenceId, setSelectedEvidenceId] = useState<string | null>(null);
+  const [selectedEvidence, setSelectedEvidence] = useState<EvidenceDetail | null>(null);
+
+  // Downstream intelligence states
+  const [knowledgeSummary, setKnowledgeSummary] = useState<KnowledgeSummaryTelemetry | null>(null);
+  const [findings, setFindings] = useState<KnowledgeFinding[]>([]);
+  const [isLoadingFindings, setIsLoadingFindings] = useState(false);
+
+  // Verification states
+  const [verificationSummary, setVerificationSummary] = useState<VerificationSummaryData | null>(null);
+  const [verificationQueue, setVerificationQueue] = useState<VerificationCaseQueueItem[]>([]);
+  const [isLoadingVerification, setIsLoadingVerification] = useState(false);
+
+  // Handover states
+  const [handoverCases, setHandoverCases] = useState<HandoverCaseItem[]>([]);
+  const [isLoadingHandovers, setIsLoadingHandovers] = useState(false);
+  const [isLoadingEvidence, setIsLoadingEvidence] = useState(false);
+  const [isLoadingEvidenceDetail, setIsLoadingEvidenceDetail] = useState(false);
+  const [evidenceFilter, setEvidenceFilter] = useState<{ q: string; provider: string }>({
+    q: "",
+    provider: "all",
+  });
+
+  // Organisation selector wrapper that persists user workspace preference
+  const setActiveOrg = useCallback(
+    (action: Organisation | null | ((prev: Organisation | null) => Organisation | null)) => {
+      setActiveOrgInternal((prev) => {
+        const next = typeof action === "function" ? action(prev) : action;
+        if (next && typeof window !== "undefined") {
+          localStorage.setItem("handover_active_org_id", next.id);
+        } else if (!next && typeof window !== "undefined") {
+          localStorage.removeItem("handover_active_org_id");
+        }
+        return next;
+      });
+    },
+    []
+  );
+
   // Project selector wrapper that resets stale project-specific caches
   const setActiveProject = useCallback(
     (action: Project | null | ((prev: Project | null) => Project | null)) => {
       setActiveProjectInternal((prev) => {
         const next = typeof action === "function" ? action(prev) : action;
+        if (next && typeof window !== "undefined") {
+          localStorage.setItem("handover_active_project_id", next.id);
+        } else if (!next && typeof window !== "undefined") {
+          localStorage.removeItem("handover_active_project_id");
+        }
         if (prev?.id === next?.id) return prev;
         setOverview(null);
         setMembers([]);
@@ -159,18 +232,6 @@ export function LiveAppProvider({ children }: { children: ReactNode }) {
     },
     []
   );
-
-  // Evidence state
-  const [evidenceList, setEvidenceList] = useState<EvidenceSummary[]>([]);
-  const [evidenceMetrics, setEvidenceMetrics] = useState<EvidenceMetrics | null>(null);
-  const [selectedEvidenceId, setSelectedEvidenceId] = useState<string | null>(null);
-  const [selectedEvidence, setSelectedEvidence] = useState<EvidenceDetail | null>(null);
-  const [isLoadingEvidence, setIsLoadingEvidence] = useState(false);
-  const [isLoadingEvidenceDetail, setIsLoadingEvidenceDetail] = useState(false);
-  const [evidenceFilter, setEvidenceFilter] = useState<{ q: string; provider: string }>({
-    q: "",
-    provider: "all",
-  });
 
   // Modals & UI
   const [isAuthModalOpen, setIsAuthModalOpen] = useState(false);
@@ -281,7 +342,13 @@ export function LiveAppProvider({ children }: { children: ReactNode }) {
       const orgs = await api.organisations.list();
       setOrganisations(orgs);
       if (orgs.length > 0) {
-        setActiveOrg((current) => (current ? (orgs.find((o) => o.id === current.id) ?? orgs[0] ?? null) : (orgs[0] ?? null)));
+        const storedOrgId = typeof window !== "undefined" ? localStorage.getItem("handover_active_org_id") : null;
+        const preferredOrg =
+          (storedOrgId ? orgs.find((o) => o.id === storedOrgId) : null) ??
+          orgs.find((o) => o.name.toLowerCase().includes("handover")) ??
+          orgs[0] ??
+          null;
+        setActiveOrg((current) => (current ? (orgs.find((o) => o.id === current.id) ?? preferredOrg) : preferredOrg));
       } else {
         setActiveOrg(null);
       }
@@ -289,7 +356,7 @@ export function LiveAppProvider({ children }: { children: ReactNode }) {
       if (err instanceof ApiError && err.status === 401) return;
       console.error("Error loading organisations:", err);
     }
-  }, [user]);
+  }, [user, setActiveOrg]);
 
   useEffect(() => {
     let active = true;
@@ -307,7 +374,7 @@ export function LiveAppProvider({ children }: { children: ReactNode }) {
     return () => {
       active = false;
     };
-  }, [user, refreshOrganisations]);
+  }, [user, refreshOrganisations, setActiveOrg, setActiveProject]);
 
   // Load projects for active organization
   const refreshProjects = useCallback(async () => {
@@ -321,7 +388,10 @@ export function LiveAppProvider({ children }: { children: ReactNode }) {
       const projs = await api.projects.list(activeOrg.id);
       setProjects(projs);
       if (projs.length > 0) {
-        setActiveProject((current) => (current ? (projs.find((p) => p.id === current.id) ?? projs[0] ?? null) : (projs[0] ?? null)));
+        const storedProjId = typeof window !== "undefined" ? localStorage.getItem("handover_active_project_id") : null;
+        const preferredProj =
+          (storedProjId ? projs.find((p) => p.id === storedProjId) : null) ?? projs[0] ?? null;
+        setActiveProject((current) => (current ? (projs.find((p) => p.id === current.id) ?? preferredProj) : preferredProj));
       } else {
         setActiveProject(null);
       }
@@ -336,7 +406,7 @@ export function LiveAppProvider({ children }: { children: ReactNode }) {
     } finally {
       setIsLoadingProjects(false);
     }
-  }, [user, activeOrg, addToast]);
+  }, [user, activeOrg, addToast, setActiveProject]);
 
   useEffect(() => {
     if (!user || !activeOrg) return;
@@ -500,6 +570,137 @@ export function LiveAppProvider({ children }: { children: ReactNode }) {
     loadDetail();
   }, [user, selectedEvidenceId]);
 
+  // Downstream Intelligence Handlers
+  const refreshFindings = useCallback(async () => {
+    if (!user || !activeProject) {
+      setFindings([]);
+      setKnowledgeSummary(null);
+      return;
+    }
+    setIsLoadingFindings(true);
+    try {
+      const [sum, list] = await Promise.allSettled([
+        api.knowledgeIntelligence.getSummary(activeProject.id),
+        api.knowledgeIntelligence.listFindings(activeProject.id),
+      ]);
+      if (sum.status === "fulfilled") setKnowledgeSummary(sum.value as unknown as KnowledgeSummaryTelemetry);
+      if (list.status === "fulfilled") setFindings((list.value.items || []) as unknown as KnowledgeFinding[]);
+    } catch (err) {
+      console.error("Error loading findings:", err);
+    } finally {
+      setIsLoadingFindings(false);
+    }
+  }, [user, activeProject]);
+
+  const triggerReconstruction = useCallback(async () => {
+    if (!activeProject) return;
+    try {
+      await api.knowledgeIntelligence.listFindings(activeProject.id);
+      addToast({
+        type: "info",
+        title: "Reconstruction Triggered",
+        message: "Ollama Qwen3 8B knowledge extraction job queued.",
+      });
+      await refreshFindings();
+      await refreshOverview();
+    } catch (err: unknown) {
+      addToast({
+        type: "error",
+        title: "Reconstruction Failed",
+        message: err instanceof Error ? err.message : "Failed to trigger knowledge extraction",
+      });
+    }
+  }, [activeProject, refreshFindings, refreshOverview, addToast]);
+
+  const refreshVerification = useCallback(async () => {
+    if (!user || !activeProject) {
+      setVerificationQueue([]);
+      setVerificationSummary(null);
+      return;
+    }
+    setIsLoadingVerification(true);
+    try {
+      const [sum, q] = await Promise.allSettled([
+        api.verification.getSummary(activeProject.id),
+        api.verification.getQueue(activeProject.id),
+      ]);
+      if (sum.status === "fulfilled") setVerificationSummary(sum.value as unknown as VerificationSummaryData);
+      if (q.status === "fulfilled") setVerificationQueue((q.value.items || []) as unknown as VerificationCaseQueueItem[]);
+    } catch (err) {
+      console.error("Error loading verification data:", err);
+    } finally {
+      setIsLoadingVerification(false);
+    }
+  }, [user, activeProject]);
+
+  const approveVerificationCase = useCallback(async (caseId: string, notes?: string) => {
+    if (!activeProject) return;
+    try {
+      await api.verification.approveCase(activeProject.id, caseId, notes);
+      addToast({
+        type: "success",
+        title: "Finding Verified",
+        message: "Statement verified and promoted to verified knowledge.",
+      });
+      await refreshVerification();
+      await refreshFindings();
+    } catch (err: unknown) {
+      addToast({
+        type: "error",
+        title: "Approval Failed",
+        message: err instanceof Error ? err.message : "Failed to approve verification case",
+      });
+    }
+  }, [activeProject, refreshVerification, refreshFindings, addToast]);
+
+  const rejectVerificationCase = useCallback(async (caseId: string, reason?: string) => {
+    if (!activeProject) return;
+    try {
+      await api.verification.rejectCase(activeProject.id, caseId, reason);
+      addToast({
+        type: "info",
+        title: "Finding Rejected",
+        message: "Candidate finding was marked as rejected.",
+      });
+      await refreshVerification();
+    } catch (err: unknown) {
+      addToast({
+        type: "error",
+        title: "Rejection Failed",
+        message: err instanceof Error ? err.message : "Failed to reject verification case",
+      });
+    }
+  }, [activeProject, refreshVerification, addToast]);
+
+  const refreshHandovers = useCallback(async () => {
+    if (!user || !activeProject) {
+      setHandoverCases([]);
+      return;
+    }
+    setIsLoadingHandovers(true);
+    try {
+      const res = await api.handover.listCases(activeProject.id);
+      setHandoverCases((res.items || []) as unknown as HandoverCaseItem[]);
+    } catch (err) {
+      console.error("Error loading handover cases:", err);
+    } finally {
+      setIsLoadingHandovers(false);
+    }
+  }, [user, activeProject]);
+
+  const createHandoverCase = useCallback(async (data: { title: string; description?: string }) => {
+    if (!activeProject) throw new Error("No active project");
+    const res = await api.handover.createCase(activeProject.id, data);
+    addToast({
+      type: "success",
+      title: "Handover Case Created",
+      message: `Handover ${res.title} created successfully.`,
+    });
+    await refreshHandovers();
+    return res;
+  }, [activeProject, refreshHandovers, addToast]);
+
+
   // Trigger data refreshes when active project changes
   useEffect(() => {
     if (!user || !activeProject) return;
@@ -510,11 +711,14 @@ export function LiveAppProvider({ children }: { children: ReactNode }) {
       void refreshMembers();
       void refreshSources();
       void refreshEvidence();
+      void refreshFindings();
+      void refreshVerification();
+      void refreshHandovers();
     });
     return () => {
       active = false;
     };
-  }, [user, activeProject, refreshOverview, refreshMembers, refreshSources, refreshEvidence]);
+  }, [user, activeProject, refreshOverview, refreshMembers, refreshSources, refreshEvidence, refreshFindings, refreshVerification, refreshHandovers]);
 
   // Auth actions
   const login = async (email: string, password: string) => {
@@ -769,6 +973,21 @@ export function LiveAppProvider({ children }: { children: ReactNode }) {
     refreshEvidence,
     uploadDocument,
     downloadEvidence,
+    knowledgeSummary,
+    findings,
+    isLoadingFindings,
+    refreshFindings,
+    triggerReconstruction,
+    verificationSummary,
+    verificationQueue,
+    isLoadingVerification,
+    refreshVerification,
+    approveVerificationCase,
+    rejectVerificationCase,
+    handoverCases,
+    isLoadingHandovers,
+    refreshHandovers,
+    createHandoverCase,
     isAuthModalOpen,
     setIsAuthModalOpen,
     authModalMode,
