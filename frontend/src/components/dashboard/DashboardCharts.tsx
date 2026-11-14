@@ -26,7 +26,9 @@ export function LineChart({
   const x = (i: number) => pad.l + (i * (w - pad.l - pad.r)) / Math.max(1, labels.length - 1);
   const y = (v: number) => pad.t + (1 - v / max) * (height - pad.t - pad.b);
   const [hi, setHi] = useState<number | null>(null);
-  const ticks = [0, 0.25, 0.5, 0.75, 1].map((t) => Math.round(max * t));
+  const uniqueTicks = Array.from(
+    new Set([0, 0.25, 0.5, 0.75, 1].map((t) => Math.round(max * t)))
+  );
 
   return (
     <div className="relative select-none">
@@ -39,8 +41,8 @@ export function LineChart({
         aria-label="Knowledge processing activity trend"
       >
         {/* Horizontal grid lines & ticks */}
-        {ticks.map((t) => (
-          <g key={t}>
+        {uniqueTicks.map((t, idx) => (
+          <g key={`tick-${idx}-${t}`}>
             <line
               x1={pad.l}
               x2={w - pad.r}
@@ -66,7 +68,7 @@ export function LineChart({
           (l, i) =>
             (i % Math.ceil(labels.length / 6) === 0 || i === labels.length - 1) && (
               <text
-                key={l + i}
+                key={`label-${i}-${l}`}
                 x={x(i)}
                 y={height - 6}
                 textAnchor="middle"
@@ -137,7 +139,7 @@ export function LineChart({
         {/* Hover trigger columns */}
         {labels.map((l, i) => (
           <rect
-            key={l + i}
+            key={`hitbox-${i}-${l}`}
             x={x(i) - w / labels.length / 2}
             y={0}
             width={w / labels.length}
@@ -234,9 +236,9 @@ export function BarChart({
 
   return (
     <div className="flex items-end gap-2" style={{ height }}>
-      {data.map((d) => (
+      {data.map((d, idx) => (
         <div
-          key={d.label}
+          key={`${d.label}-${idx}`}
           className="group flex h-full flex-1 flex-col items-center justify-end gap-1.5"
         >
           <span className="text-[11px] font-mono font-medium text-navy opacity-0 transition group-hover:opacity-100">
@@ -274,10 +276,10 @@ export function StackedBar({
       )}
     >
       {segments.map(
-        (s) =>
+        (s, idx) =>
           s.value > 0 && (
             <div
-              key={s.label}
+              key={`${s.label}-${idx}`}
               title={`${s.label}: ${s.value}`}
               style={{
                 width: `${(s.value / total) * 100}%`,
@@ -299,8 +301,8 @@ export function Legend({
 }) {
   return (
     <ul className={cn("space-y-2", className)}>
-      {items.map((i) => (
-        <li key={i.label} className="flex items-center gap-2 text-[13px]">
+      {items.map((i, idx) => (
+        <li key={`${i.label}-${idx}`} className="flex items-center gap-2 text-[13px]">
           <span
             className="size-2.5 rounded-xs shrink-0"
             style={{ background: i.color }}
