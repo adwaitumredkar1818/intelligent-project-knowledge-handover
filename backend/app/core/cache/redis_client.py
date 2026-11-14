@@ -5,7 +5,10 @@ from __future__ import annotations
 import logging
 from typing import TYPE_CHECKING, Any
 
-import redis
+try:
+    import redis
+except ImportError:
+    redis = None  # type: ignore[assignment]
 
 if TYPE_CHECKING:
     from app.core.config import Settings
@@ -25,8 +28,8 @@ class RedisConnectionManager:
 
     def initialize(self) -> None:
         """Initialize the shared bounded connection pool."""
-        if not self._cfg.enabled:
-            logger.info("Redis cache layer is disabled via REDIS_ENABLED=false.")
+        if not self._cfg.enabled or redis is None:
+            logger.info("Redis cache layer is disabled via REDIS_ENABLED=false or redis library unavailable.")
             return
 
         try:
