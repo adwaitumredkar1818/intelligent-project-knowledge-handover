@@ -7,7 +7,10 @@ export function AgentationToolbar() {
   const [mounted, setMounted] = useState(false);
 
   useEffect(() => {
-    setMounted(true);
+    // Only mount if explicitly enabled via environment variable
+    if (process.env.NEXT_PUBLIC_ENABLE_AGENTATION === "true") {
+      setMounted(true);
+    }
   }, []);
 
   if (!mounted) {

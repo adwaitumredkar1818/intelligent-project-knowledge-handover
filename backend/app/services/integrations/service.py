@@ -278,7 +278,11 @@ class SourceIntegrationService:
                 "Source connection has been disconnected.",
                 code="CONNECTION_DISCONNECTED",
             )
-        self._oauth.ensure_provider_enabled(connection.provider)
+        if connection.provider.strip().lower() == "slack":
+            raise ConflictError(
+                "Slack integration is disabled pending governance approval.",
+                code="SLACK_INTEGRATION_DISABLED",
+            )
 
         active_auth = self._repo.get_active_authorisation(
             source_connection_id=connection.id,

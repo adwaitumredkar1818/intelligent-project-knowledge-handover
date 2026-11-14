@@ -260,6 +260,48 @@ class GitHubIntegrationService:
                             )
                         )
 
+                # 4. Fetch README & Architecture Documentation
+                readme_resp = client.get(
+                    f"{self._base_url}/repos/{full_name}/readme",
+                    headers=self._headers,
+                )
+                if readme_resp.status_code == 200:
+                    import base64
+
+                    readme_json = readme_resp.json()
+                    content_raw = readme_json.get("content", "")
+                    try:
+                        readme_bytes = base64.b64decode(content_raw)
+                        readme_text = readme_bytes.decode("utf-8", errors="replace")
+                    except Exception:
+                        readme_text = content_raw
+
+                    if readme_text.strip():
+                        h_readme = hashlib.sha256(readme_text.encode("utf-8")).hexdigest()
+                        records.append(
+                            DiscoveredEvidenceRecord(
+                                source_platform="github",
+                                source_provider="github",
+                                source_original_id="doc:readme",
+                                source_url=readme_json.get("html_url")
+                                or f"https://github.com/{full_name}#readme",
+                                title=f"README: {full_name}",
+                                author_name=full_name.split("/")[0]
+                                if "/" in full_name
+                                else "repository",
+                                captured_at=datetime.now(UTC),
+                                content_hash=h_readme,
+                                item_type="documentation",
+                                raw_content=readme_text,
+                                markdown_content=f"# Documentation: README for {full_name}\n\n{readme_text}",
+                                attributes={
+                                    "path": readme_json.get("path", "README.md"),
+                                    "size": readme_json.get("size", len(readme_text)),
+                                    "is_readme": True,
+                                },
+                            )
+                        )
+
         except httpx.RequestError as exc:
             logger.warning("Network failure during GitHub sync: %s", exc)
             raise BadRequestError(

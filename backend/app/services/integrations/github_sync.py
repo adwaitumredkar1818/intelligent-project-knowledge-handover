@@ -120,7 +120,8 @@ class GitHubSyncOrchestrator:
                 status_code=400,
                 retryable=False,
             )
-        owner, repo_name = owner_repo.split("/", 1)
+        raw_owner, raw_repo = owner_repo.split("/", 1)
+        owner, repo_name = raw_owner.strip(), raw_repo.strip()
         cursor_before = dict(mapping.sync_cursor_json or {})
         new_cursor = dict(cursor_before)
         config = dict(mapping.sync_config_json or {})

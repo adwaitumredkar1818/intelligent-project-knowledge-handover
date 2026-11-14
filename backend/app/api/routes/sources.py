@@ -8,12 +8,13 @@ from datetime import datetime
 from typing import Annotated
 
 from fastapi import APIRouter, Depends, status
-from pydantic import Field
+from pydantic import AliasChoices, Field
 from sqlalchemy.orm import Session
 
 from app.api.deps import (
     get_current_principal,
     get_db_session,
+    get_source_integration_service,
     get_token_encryption_service,
     require_project_permission,
 )
@@ -27,6 +28,7 @@ from app.models.integration import (
 )
 from app.models.job import BackgroundJob
 from app.schemas.common import BaseSchema
+from app.services.integrations.service import SourceIntegrationService
 from app.services.rbac import AuthenticatedPrincipal, ProjectContext
 from app.services.token_encryption import TokenEncryptionService
 
@@ -43,8 +45,13 @@ router = APIRouter(tags=["Connected Sources"])
 class CreateSourceConnectionRequest(BaseSchema):
     provider: str
     account_identifier: str
-    secret_token: str
-    scopes: list[str] = Field(default_factory=list)
+    secret_token: str = Field(
+        validation_alias=AliasChoices("secret_token", "access_token", "token")
+    )
+    scopes: list[str] = Field(
+        default_factory=list,
+        validation_alias=AliasChoices("scopes", "granted_scopes"),
+    )
     is_shared: bool = False
     display_name: str | None = None
 
@@ -66,8 +73,13 @@ class SourceConnectionListResponse(BaseSchema):
 
 class CreateSourceMappingRequest(BaseSchema):
     source_connection_id: uuid.UUID
-    external_resource_id: str
-    external_resource_name: str
+    external_resource_id: str = Field(
+        validation_alias=AliasChoices("external_resource_id", "external_resource_key")
+    )
+    external_resource_name: str = Field(
+        default="",
+        validation_alias=AliasChoices("external_resource_name", "display_label"),
+    )
 
 
 class SourceMappingItemResponse(BaseSchema):
@@ -297,12 +309,19 @@ def create_project_source_mapping(
     visibility = "project_members_verified" if is_shared else "restricted_fail_closed"
     allowed_users = [] if is_shared else [str(project_ctx.principal.user.id)]
 
+    clean_resource_id = (
+        "/".join(part.strip() for part in payload.external_resource_id.split("/") if part.strip())
+        if "/" in payload.external_resource_id
+        else payload.external_resource_id.strip()
+    )
+    clean_resource_name = payload.external_resource_name.strip() or clean_resource_id
+
     policy = SourceAccessPolicy(
         organisation_id=conn.organisation_id,
         project_id=project_id,
         source_connection_id=conn.id,
         provider=conn.provider,
-        scope_identifier=payload.external_resource_id,
+        scope_identifier=clean_resource_id,
         visibility_policy=visibility,
         sync_permission_status="verified",
         allowed_user_ids=allowed_users,
@@ -319,12 +338,19 @@ def create_project_source_mapping(
         provider=conn.provider,
         resource_type=resource_type,
         external_site_id="github.com" if conn.provider == "github" else "atlassian.net",
-        external_resource_id=payload.external_resource_id,
-        external_resource_key=payload.external_resource_id,
-        external_resource_name=payload.external_resource_name,
+        external_resource_id=clean_resource_id,
+        external_resource_key=clean_resource_id,
+        external_resource_name=clean_resource_name,
         status="active",
         created_by_user_id=project_ctx.principal.user.id,
         source_access_policy_id=policy.id,
+        sync_config_json={
+            "include_issues": True,
+            "include_pull_requests": True,
+            "include_commits": True,
+            "include_docs": True,
+            "include_discussions": True,
+        },
     )
     session.add(mapping)
     session.commit()
@@ -411,7 +437,11 @@ def trigger_source_mapping_sync(
         triggered_by_user_id=project_ctx.principal.user.id,
         job_type=BackgroundJobType.SOURCE_SYNC.value,
         status=BackgroundJobStatus.QUEUED.value,
-        payload_json={"mapping_id": str(mapping.id), "provider": mapping.provider},
+        payload_json={
+            "mapping_id": str(mapping.id),
+            "source_connection_id": str(mapping.source_connection_id),
+            "provider": mapping.provider,
+        },
     )
     session.add(job)
     session.commit()

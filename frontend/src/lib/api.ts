@@ -514,17 +514,29 @@ export const api = {
     async connectSource(orgId: string, data: { provider: "github" | "jira"; access_token: string; account_identifier: string; granted_scopes?: string[] }): Promise<SourceConnection> {
       return request<SourceConnection>(`/organisations/${orgId}/sources`, {
         method: "POST",
-        body: JSON.stringify(data),
+        body: JSON.stringify({
+          provider: data.provider,
+          account_identifier: data.account_identifier.trim(),
+          secret_token: data.access_token.trim(),
+          access_token: data.access_token.trim(),
+          scopes: data.granted_scopes || (data.provider === "github" ? ["repo", "read:org"] : ["read:jira-work"]),
+        }),
       });
     },
     async listProjectMappings(projectId: string): Promise<ProjectSourceMapping[]> {
       const res = await request<unknown>(`/projects/${projectId}/sources/mappings`);
       return unwrapList<ProjectSourceMapping>(res);
     },
-    async createProjectMapping(projectId: string, data: { source_connection_id: string; external_resource_key: string; external_resource_name: string; external_resource_url?: string }): Promise<ProjectSourceMapping> {
+    async createProjectMapping(projectId: string, data: { source_connection_id: string; external_resource_key?: string; external_resource_id?: string; external_resource_name: string; external_resource_url?: string }): Promise<ProjectSourceMapping> {
+      const resId = (data.external_resource_id || data.external_resource_key || "").trim();
       return request<ProjectSourceMapping>(`/projects/${projectId}/sources/mappings`, {
         method: "POST",
-        body: JSON.stringify(data),
+        body: JSON.stringify({
+          source_connection_id: data.source_connection_id,
+          external_resource_id: resId,
+          external_resource_key: resId,
+          external_resource_name: (data.external_resource_name || resId).trim(),
+        }),
       });
     },
     async triggerSync(projectId: string, mappingId: string): Promise<{ job_id: string; status: string; message: string }> {

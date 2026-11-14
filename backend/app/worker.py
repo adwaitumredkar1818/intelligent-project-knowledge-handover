@@ -104,7 +104,27 @@ class SyncWorker:
                 session.commit()
                 return 0
 
-            git_service = GitHubIntegrationService()
+            from app.models.integration import UserSourceAuthorisation
+            from app.services.token_encryption import LocalTokenEncryptionService
+
+            auth = session.execute(
+                select(UserSourceAuthorisation).where(
+                    UserSourceAuthorisation.source_connection_id == mapping.source_connection_id,
+                    UserSourceAuthorisation.status == "active",
+                ).order_by(UserSourceAuthorisation.created_at.desc())
+            ).scalars().first()
+
+            token = ""
+            if auth and auth.encrypted_access_token:
+                try:
+                    enc_svc = LocalTokenEncryptionService(
+                        token_encryption_key=self.settings.security.token_encryption_key.get_secret_value()
+                    )
+                    token = enc_svc.decrypt_token(auth.encrypted_access_token)
+                except Exception as exc:
+                    logger.warning("Failed to decrypt access token for mapping %s: %s", mapping.id, exc)
+
+            git_service = GitHubIntegrationService(token=token)
             records = git_service.sync_repository(mapping.external_resource_id)
 
             policy = mapping.source_access_policy

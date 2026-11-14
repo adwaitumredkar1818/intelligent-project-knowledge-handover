@@ -5,7 +5,7 @@ import { X, PlugZap, ShieldAlert, ArrowRight, AlertCircle } from "lucide-react";
 import { useLiveApp } from "../../context/LiveAppContext";
 
 export function ConnectSourceModal() {
-  const { isAddSourceModalOpen, setIsAddSourceModalOpen, connectSource, createMapping } = useLiveApp();
+  const { isAddSourceModalOpen, setIsAddSourceModalOpen, connectSource, createMapping, triggerSync } = useLiveApp();
   const [provider, setProvider] = useState<"github" | "jira">("github");
   const [accountIdentifier, setAccountIdentifier] = useState("");
   const [token, setToken] = useState("");
@@ -25,15 +25,27 @@ export function ConnectSourceModal() {
     setError(null);
     setIsSubmitting(true);
     try {
+      const cleanResourceKey = resourceKey.includes("/")
+        ? resourceKey.split("/").map((s) => s.trim()).filter(Boolean).join("/")
+        : resourceKey.trim();
+
       // 1. Connect source at organisation level
       const conn = await connectSource(provider, token.trim(), accountIdentifier.trim());
       // 2. Map resource to project workspace
-      await createMapping({
+      const mapping = await createMapping({
         source_connection_id: conn.id,
-        external_resource_key: resourceKey.trim(),
-        external_resource_name: resourceName.trim() || resourceKey.trim(),
-        external_resource_url: provider === "github" ? `https://github.com/${resourceKey.trim()}` : undefined,
+        external_resource_key: cleanResourceKey,
+        external_resource_name: resourceName.trim() || cleanResourceKey,
+        external_resource_url: provider === "github" ? `https://github.com/${cleanResourceKey}` : undefined,
       });
+      // 3. Automatically trigger initial sync to retrieve README, documentation & repository items
+      if (mapping?.id) {
+        try {
+          await triggerSync(mapping.id);
+        } catch {
+          // Sync queued or deferred
+        }
+      }
       setAccountIdentifier("");
       setToken("");
       setResourceKey("");
@@ -107,14 +119,14 @@ export function ConnectSourceModal() {
 
           <div>
             <label className="block text-xs font-semibold text-[#25334B] mb-1">
-              Account Identifier / Username <span className="text-rose-500">*</span>
+              {provider === "github" ? "GitHub Username / Account Identifier" : "Atlassian Account Email"} <span className="text-rose-500">*</span>
             </label>
             <input
               type="text"
               required
               value={accountIdentifier}
               onChange={(e) => setAccountIdentifier(e.target.value)}
-              placeholder={provider === "github" ? "e.g. octocat or company-eng" : "user@company.atlassian.net"}
+              placeholder={provider === "github" ? "e.g. shubham392007-sketch" : "user@company.com"}
               className="w-full px-3 py-2 rounded-lg border border-[#DCE3EB] text-xs focus:outline-none focus:ring-2 focus:ring-[#4774A9] text-[#25334B]"
             />
           </div>
@@ -128,11 +140,13 @@ export function ConnectSourceModal() {
               required
               value={token}
               onChange={(e) => setToken(e.target.value)}
-              placeholder="ghp_••••••••••••••••••••••••••••••••••••"
+              placeholder={provider === "github" ? "ghp_•••••••••••• or github_pat_••••••••••••" : "API token from id.atlassian.com"}
               className="w-full px-3 py-2 rounded-lg border border-[#DCE3EB] text-xs focus:outline-none focus:ring-2 focus:ring-[#4774A9] text-[#25334B]"
             />
             <div className="text-[11px] text-[#69778D] mt-1">
-              Read-only token scopes required: {provider === "github" ? "repo, read:org" : "read:jira-work"}. Stored encrypted with AES-256-GCM.
+              {provider === "github"
+                ? "Read-only token scopes required: repo, read:org. Reads repository README, docs, issues, PRs and commits."
+                : "Read-only scopes required: read:jira-work. Stored encrypted with AES-256-GCM."}
             </div>
           </div>
 
@@ -148,9 +162,14 @@ export function ConnectSourceModal() {
                 setResourceKey(e.target.value);
                 if (!resourceName) setResourceName(e.target.value);
               }}
-              placeholder={provider === "github" ? "e.g. acme-corp/payment-service" : "PAY"}
+              placeholder={provider === "github" ? "e.g. shubham392007-sketch/HackMatrix-5.0-MISC02" : "e.g. PAY or PROJ"}
               className="w-full px-3 py-2 rounded-lg border border-[#DCE3EB] text-xs focus:outline-none focus:ring-2 focus:ring-[#4774A9] text-[#25334B]"
             />
+            {provider === "github" && (
+              <div className="text-[11px] text-[#69778D] mt-1">
+                Format must be <span className="font-mono text-[#25334B]">owner/repo</span> (e.g. <span className="font-mono text-[#25334B]">shubham392007-sketch/HackMatrix-5.0-MISC02</span>).
+              </div>
+            )}
           </div>
 
           <div>
