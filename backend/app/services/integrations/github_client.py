@@ -35,6 +35,24 @@ _DOC_PATH_KEYWORDS = (
     "doc/",
 )
 _DOC_EXTENSIONS = (".md", ".mdx", ".rst", ".txt", ".adoc")
+_CODE_EXTENSIONS = (
+    ".py",
+    ".ts",
+    ".tsx",
+    ".js",
+    ".jsx",
+    ".json",
+    ".yaml",
+    ".yml",
+    ".toml",
+    ".sql",
+    ".sh",
+    ".html",
+    ".css",
+    ".go",
+    ".rs",
+    ".java",
+)
 _MAX_DOC_FILE_BYTES = 200 * 1024
 
 _EXCLUDED_PATH_DIRS = frozenset(
@@ -50,6 +68,10 @@ _EXCLUDED_PATH_DIRS = frozenset(
         "target",
         "coverage",
         ".next",
+        "get-shit-done",
+        ".turbo",
+        ".idea",
+        ".vscode",
     }
 )
 _EXCLUDED_BINARY_OR_GENERATED_SUFFIXES = (
@@ -155,15 +177,23 @@ def _repo_candidate_from_json(raw: dict[str, Any]) -> GitHubRepositoryCandidate:
     )
 
 
-def _is_candidate_doc_path(path: str) -> bool:
+def _is_candidate_doc_path(path: str, include_code: bool = False) -> bool:
     if is_excluded_binary_or_generated_path(path):
         return False
     lowered = path.lower().strip("/")
-    if not lowered.endswith(_DOC_EXTENSIONS):
+    parts = [p for p in lowered.split("/") if p]
+    if any(p in _EXCLUDED_PATH_DIRS for p in parts):
         return False
-    if lowered.count("/") == 0:
-        return any(kw in lowered for kw in _DOC_PATH_KEYWORDS)
-    return any(kw in lowered for kw in _DOC_PATH_KEYWORDS)
+    basename = parts[-1] if parts else lowered
+    if basename in {"dockerfile", "makefile", "procfile", "caddyfile"}:
+        return include_code
+    if lowered.endswith(_DOC_EXTENSIONS):
+        if not include_code and lowered.count("/") == 0:
+            return any(kw in lowered for kw in _DOC_PATH_KEYWORDS)
+        return True
+    if include_code and lowered.endswith(_CODE_EXTENSIONS):
+        return True
+    return False
 
 
 class GitHubClient:
@@ -514,8 +544,9 @@ class GitHubClient:
         repo: str,
         default_branch: str | None = None,
         max_docs: int = 20,
+        include_code: bool = False,
     ) -> tuple[list[dict[str, Any]], list[str]]:
-        """Fetch README and markdown/ADR documentation files via read-only REST API."""
+        """Fetch README, documentation, and repository code files via read-only REST API."""
         docs: list[dict[str, Any]] = []
         warnings: list[str] = []
         seen_paths: set[str] = set()
@@ -565,9 +596,29 @@ class GitHubClient:
                     and entry.get("type") == "blob"
                     and isinstance(entry.get("path"), str)
                     and int(entry.get("size") or 0) <= _MAX_DOC_FILE_BYTES
-                    and _is_candidate_doc_path(str(entry["path"]))
+                    and _is_candidate_doc_path(str(entry["path"]), include_code=include_code)
                     and str(entry["path"]).lower() not in seen_paths
                 ]
+
+                def _path_priority(p: str) -> tuple[int, str]:
+                    low = p.lower()
+                    if "readme" in low:
+                        return (0, p)
+                    if any(kw in low for kw in ("architecture", "adr", "design", "decision", "handover", "onboarding")):
+                        return (1, p)
+                    if low.startswith("docs/") or "/docs/" in low:
+                        return (2, p)
+                    if "/src/" in low or low.startswith("src/"):
+                        return (3, p)
+                    if "/app/" in low or low.startswith("app/"):
+                        return (4, p)
+                    if "/lib/" in low or low.startswith("lib/"):
+                        return (5, p)
+                    if "test" in low:
+                        return (7, p)
+                    return (6, p)
+
+                candidate_paths.sort(key=_path_priority)
                 for path in candidate_paths[: max(0, max_docs - len(docs))]:
                     file_resp = client.get(
                         f"{self._base()}/repos/{owner}/{repo}/contents/{path}",

@@ -526,19 +526,30 @@ export function LiveAppProvider({ children }: { children: ReactNode }) {
       setEvidenceMetrics(null);
       return;
     }
+    const currentProjectId = activeProject.id;
     setIsLoadingEvidence(true);
     try {
       const [items, metrics] = await Promise.all([
-        api.evidence.list(activeProject.id, {
+        api.evidence.list(currentProjectId, {
           q: evidenceFilter.q || undefined,
           provider: evidenceFilter.provider !== "all" ? evidenceFilter.provider : undefined,
+          limit: 100,
         }),
-        api.evidence.getMetrics(activeProject.id),
+        api.evidence.getMetrics(currentProjectId),
       ]);
       setEvidenceList(items);
       setEvidenceMetrics(metrics);
-      if (items.length > 0 && !selectedEvidenceId && items[0]) {
-        setSelectedEvidenceId(items[0].id);
+      if (items.length > 0 && items[0]) {
+        const firstId = items[0].id;
+        setSelectedEvidenceId((prev) => {
+          if (!prev || !items.some((it) => it.id === prev)) {
+            return firstId;
+          }
+          return prev;
+        });
+      } else {
+        setSelectedEvidenceId(null);
+        setSelectedEvidence(null);
       }
     } catch (err: unknown) {
       if (err instanceof ApiError && err.status === 401) return;
@@ -546,7 +557,7 @@ export function LiveAppProvider({ children }: { children: ReactNode }) {
     } finally {
       setIsLoadingEvidence(false);
     }
-  }, [user, activeProject, evidenceFilter, selectedEvidenceId]);
+  }, [user?.id, activeProject?.id, evidenceFilter.provider, evidenceFilter.q]);
 
   // Load evidence detail when selectedEvidenceId changes
   useEffect(() => {
@@ -568,7 +579,7 @@ export function LiveAppProvider({ children }: { children: ReactNode }) {
       }
     }
     loadDetail();
-  }, [user, selectedEvidenceId]);
+  }, [user?.id, selectedEvidenceId]);
 
   // Downstream Intelligence Handlers
   const refreshFindings = useCallback(async () => {
@@ -590,7 +601,7 @@ export function LiveAppProvider({ children }: { children: ReactNode }) {
     } finally {
       setIsLoadingFindings(false);
     }
-  }, [user, activeProject]);
+  }, [user?.id, activeProject?.id]);
 
   const triggerReconstruction = useCallback(async () => {
     if (!activeProject) return;
@@ -631,7 +642,7 @@ export function LiveAppProvider({ children }: { children: ReactNode }) {
     } finally {
       setIsLoadingVerification(false);
     }
-  }, [user, activeProject]);
+  }, [user?.id, activeProject?.id]);
 
   const approveVerificationCase = useCallback(async (caseId: string, notes?: string) => {
     if (!activeProject) return;
@@ -686,7 +697,7 @@ export function LiveAppProvider({ children }: { children: ReactNode }) {
     } finally {
       setIsLoadingHandovers(false);
     }
-  }, [user, activeProject]);
+  }, [user?.id, activeProject?.id]);
 
   const createHandoverCase = useCallback(async (data: { title: string; description?: string }) => {
     if (!activeProject) throw new Error("No active project");
@@ -702,15 +713,17 @@ export function LiveAppProvider({ children }: { children: ReactNode }) {
 
 
   // Trigger data refreshes when active project changes
+  const activeProjectId = activeProject?.id;
+  const currentUserId = user?.id;
+
   useEffect(() => {
-    if (!user || !activeProject) return;
+    if (!currentUserId || !activeProjectId) return;
     let active = true;
     void Promise.resolve().then(() => {
       if (!active) return;
       void refreshOverview();
       void refreshMembers();
       void refreshSources();
-      void refreshEvidence();
       void refreshFindings();
       void refreshVerification();
       void refreshHandovers();
@@ -718,7 +731,29 @@ export function LiveAppProvider({ children }: { children: ReactNode }) {
     return () => {
       active = false;
     };
-  }, [user, activeProject, refreshOverview, refreshMembers, refreshSources, refreshEvidence, refreshFindings, refreshVerification, refreshHandovers]);
+  }, [
+    currentUserId,
+    activeProjectId,
+    refreshOverview,
+    refreshMembers,
+    refreshSources,
+    refreshFindings,
+    refreshVerification,
+    refreshHandovers,
+  ]);
+
+  // Load evidence only when active project or filters change
+  useEffect(() => {
+    if (!currentUserId || !activeProjectId) return;
+    let active = true;
+    void Promise.resolve().then(() => {
+      if (!active) return;
+      void refreshEvidence();
+    });
+    return () => {
+      active = false;
+    };
+  }, [currentUserId, activeProjectId, refreshEvidence]);
 
   // Auth actions
   const login = async (email: string, password: string) => {

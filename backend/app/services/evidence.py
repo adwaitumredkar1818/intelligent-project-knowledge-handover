@@ -119,6 +119,13 @@ def to_evidence_summary_response(item: EvidenceItem) -> EvidenceSummaryResponse:
     latest_indexing_job = (
         to_background_job_response(indexing_job) if indexing_job is not None else None
     )
+    if item.source_type == "document_upload" or item.source_provider in ("local_upload", "upload"):
+        if item.category and item.category.endswith("_document"):
+            canonical_provider = item.category.replace("_document", "")
+        else:
+            canonical_provider = "upload"
+    else:
+        canonical_provider = item.source_provider or item.source_type
     return EvidenceSummaryResponse(
         id=item.id,
         organisation_id=item.organisation_id,
@@ -126,6 +133,7 @@ def to_evidence_summary_response(item: EvidenceItem) -> EvidenceSummaryResponse:
         uploaded_by_user_id=item.uploaded_by_user_id,
         source_type=item.source_type,
         source_provider=item.source_provider,
+        provider=canonical_provider,
         category=item.category,
         source_external_id=item.source_external_id,
         source_url=item.source_url,
@@ -196,11 +204,11 @@ def to_evidence_detail_response(item: EvidenceItem) -> EvidenceDetailResponse:
             content_text=c.chunk_text,
             content_preview=c.chunk_text,
             chunk_type=c.chunk_type,
-            section_title=c.section_title,
-            page_number=c.page_number,
+            section_title=c.section_title or f"Section {c.chunk_index + 1}",
+            page_number=c.page_number or (c.chunk_index + 1),
             char_length=c.char_count,
             character_count=c.char_count,
-            word_count=c.token_estimate,
+            word_count=c.token_estimate or len((c.chunk_text or "").split()),
         )
         for c in (item.chunks or [])
     ]
@@ -766,6 +774,63 @@ class EvidenceService:
                             self._session.refresh(evidence)
             except Exception as exc:
                 logger.warning("On-demand chunk extraction skipped: %s", exc)
+
+        # Ensure chunks are generated for external evidence (GitHub code/docs/issues/PRs) or plain text content
+        if (not evidence.chunks or len(evidence.chunks) == 0) and evidence.content and evidence.content.extracted_text:
+            try:
+                import hashlib
+                from app.models.evidence import EvidenceChunk
+                txt = evidence.content.extracted_text.strip()
+                if txt:
+                    lines = txt.split("\n")
+                    chunks_text: list[str] = []
+                    curr: list[str] = []
+                    curr_len = 0
+                    for line in lines:
+                        curr.append(line)
+                        curr_len += len(line) + 1
+                        if curr_len >= 1200:
+                            chunks_text.append("\n".join(curr))
+                            curr = []
+                            curr_len = 0
+                    if curr:
+                        chunks_text.append("\n".join(curr))
+
+                    created = []
+                    meta = evidence.metadata_json or {}
+                    is_code = meta.get("github_item_type") == "code" or (evidence.original_filename or "").endswith(
+                        (".py", ".ts", ".tsx", ".js", ".jsx", ".json", ".yaml", ".yml", ".toml", ".sql", ".sh")
+                    )
+                    chunk_type = "code_segment" if is_code else "text_segment"
+                    for c_idx, c_txt in enumerate(chunks_text):
+                        c_lines = [l.strip() for l in c_txt.split("\n") if l.strip()]
+                        sec = c_lines[0] if c_lines else f"Segment {c_idx + 1}"
+                        if len(sec) > 80:
+                            sec = sec[:80] + "..."
+                        chunk = EvidenceChunk(
+                            organisation_id=evidence.organisation_id,
+                            project_id=evidence.project_id,
+                            evidence_id=evidence.id,
+                            chunk_index=c_idx,
+                            chunk_type=chunk_type,
+                            chunk_text=c_txt,
+                            chunk_content_hash=hashlib.sha256(c_txt.encode("utf-8")).hexdigest(),
+                            char_count=len(c_txt),
+                            token_estimate=len(c_txt.split()),
+                            page_number=c_idx + 1,
+                            section_title=sec,
+                            source_type=evidence.source_type,
+                            acl_scope=evidence.acl_scope,
+                        )
+                        self._session.add(chunk)
+                        created.append(chunk)
+                    if created:
+                        evidence.chunk_count = len(created)
+                        self._session.commit()
+                        self._session.refresh(evidence)
+            except Exception as exc:
+                self._session.rollback()
+                logger.warning("On-demand text chunking skipped: %s", exc)
 
         return to_evidence_detail_response(evidence)
 

@@ -202,6 +202,14 @@ class EvidenceRepository:
             prov_lower = provider.strip().lower()
             if prov_lower in ("pdf", "docx"):
                 filters.append(EvidenceItem.category == f"{prov_lower}_document")
+            elif prov_lower in ("upload", "uploads", "document_upload", "local_upload"):
+                filters.append(
+                    or_(
+                        EvidenceItem.source_type == "document_upload",
+                        EvidenceItem.source_provider == "local_upload",
+                        EvidenceItem.category.in_(("pdf_document", "docx_document")),
+                    )
+                )
             else:
                 filters.append(
                     or_(

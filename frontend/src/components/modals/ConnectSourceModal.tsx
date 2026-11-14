@@ -50,6 +50,7 @@ export function ConnectSourceModal() {
       setToken("");
       setResourceKey("");
       setResourceName("");
+      setIsAddSourceModalOpen(false);
     } catch (err: unknown) {
       setError(err instanceof Error ? err.message : "Failed to connect source and map resource");
     } finally {

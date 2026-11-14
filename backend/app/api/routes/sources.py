@@ -8,7 +8,8 @@ from datetime import datetime
 from typing import Annotated
 
 from fastapi import APIRouter, Depends, status
-from pydantic import AliasChoices, Field
+from pydantic import AliasChoices, Field, field_validator, model_validator
+from sqlalchemy import select
 from sqlalchemy.orm import Session
 
 from app.api.deps import (
@@ -46,7 +47,8 @@ class CreateSourceConnectionRequest(BaseSchema):
     provider: str
     account_identifier: str
     secret_token: str = Field(
-        validation_alias=AliasChoices("secret_token", "access_token", "token")
+        default="",
+        validation_alias=AliasChoices("secret_token", "access_token", "token"),
     )
     scopes: list[str] = Field(
         default_factory=list,
@@ -54,6 +56,28 @@ class CreateSourceConnectionRequest(BaseSchema):
     )
     is_shared: bool = False
     display_name: str | None = None
+
+    @model_validator(mode="before")
+    @classmethod
+    def _extract_token_and_scopes(cls, data: Any) -> Any:
+        if isinstance(data, dict):
+            tok = (
+                data.get("secret_token")
+                or data.get("access_token")
+                or data.get("token")
+                or ""
+            )
+            data["secret_token"] = str(tok).strip()
+            if "scopes" not in data and "granted_scopes" in data:
+                data["scopes"] = data["granted_scopes"]
+        return data
+
+    @field_validator("secret_token")
+    @classmethod
+    def _validate_token_not_empty(cls, v: str) -> str:
+        if not v or not v.strip():
+            raise ValueError("Personal Access Token or API Token is required.")
+        return v.strip()
 
 
 class SourceConnectionItemResponse(BaseSchema):
@@ -149,34 +173,76 @@ def create_organisation_source(
     display_name = payload.display_name or (
         f"{payload.provider.capitalize()} ({payload.account_identifier})"
     )
-    conn = SourceConnection(
-        organisation_id=organisation_id,
-        provider=payload.provider.lower(),
-        display_name=display_name,
-        external_workspace_id=payload.account_identifier,
-        status="active",
-        created_by_user_id=principal.user.id,
-        metadata_json={
+    # Check if connection already exists for this provider and identifier in this organisation
+    stmt = select(SourceConnection).where(
+        SourceConnection.organisation_id == organisation_id,
+        SourceConnection.provider == payload.provider.lower(),
+        SourceConnection.external_workspace_id == payload.account_identifier,
+        SourceConnection.status == "active",
+    )
+    existing_conn = session.execute(stmt).scalars().first()
+
+    if existing_conn:
+        conn = existing_conn
+        conn.display_name = display_name
+        conn.metadata_json = {
             "scopes": payload.scopes,
             "is_shared": payload.is_shared,
             "account_identifier": payload.account_identifier,
-        },
-    )
-    session.add(conn)
-    session.flush()
+        }
+        # Update or create user authorization
+        auth_stmt = select(UserSourceAuthorisation).where(
+            UserSourceAuthorisation.source_connection_id == conn.id,
+            UserSourceAuthorisation.user_id == principal.user.id,
+        )
+        existing_auth = session.execute(auth_stmt).scalars().first()
+        if existing_auth:
+            existing_auth.encrypted_access_token = encrypted_payload.ciphertext
+            existing_auth.status = "active"
+            existing_auth.granted_scopes = payload.scopes
+        else:
+            user_auth = UserSourceAuthorisation(
+                source_connection_id=conn.id,
+                organisation_id=organisation_id,
+                user_id=principal.user.id,
+                provider=payload.provider.lower(),
+                external_user_id=payload.account_identifier,
+                external_username=payload.account_identifier,
+                encrypted_access_token=encrypted_payload.ciphertext,
+                status="active",
+                granted_scopes=payload.scopes,
+            )
+            session.add(user_auth)
+    else:
+        conn = SourceConnection(
+            organisation_id=organisation_id,
+            provider=payload.provider.lower(),
+            display_name=display_name,
+            external_workspace_id=payload.account_identifier,
+            status="active",
+            created_by_user_id=principal.user.id,
+            metadata_json={
+                "scopes": payload.scopes,
+                "is_shared": payload.is_shared,
+                "account_identifier": payload.account_identifier,
+            },
+        )
+        session.add(conn)
+        session.flush()
 
-    user_auth = UserSourceAuthorisation(
-        source_connection_id=conn.id,
-        organisation_id=organisation_id,
-        user_id=principal.user.id,
-        provider=payload.provider.lower(),
-        external_user_id=payload.account_identifier,
-        external_username=payload.account_identifier,
-        encrypted_access_token=encrypted_payload.ciphertext,
-        status="active",
-        granted_scopes=payload.scopes,
-    )
-    session.add(user_auth)
+        user_auth = UserSourceAuthorisation(
+            source_connection_id=conn.id,
+            organisation_id=organisation_id,
+            user_id=principal.user.id,
+            provider=payload.provider.lower(),
+            external_user_id=payload.account_identifier,
+            external_username=payload.account_identifier,
+            encrypted_access_token=encrypted_payload.ciphertext,
+            status="active",
+            granted_scopes=payload.scopes,
+        )
+        session.add(user_auth)
+
     session.commit()
     session.refresh(conn)
 
@@ -421,6 +487,9 @@ def trigger_source_mapping_sync(
     session: Annotated[Session, Depends(get_db_session)],
 ) -> SourceSyncTriggerResponse:
     from sqlalchemy import select
+
+    from app.models.integration import SourceSyncRun, UserSourceAuthorisation
+    from app.models.enums import SourceSyncRunStatus
 
     mapping = session.execute(
         select(ProjectSourceMapping).where(

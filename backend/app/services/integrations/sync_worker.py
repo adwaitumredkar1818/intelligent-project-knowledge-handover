@@ -25,7 +25,7 @@ from app.models.enums import (
     SourceSyncRunStatus,
     UserSourceAuthorisationStatus,
 )
-from app.models.integration import ProjectSourceMapping
+from app.models.integration import ProjectSourceMapping, SourceSyncRun, UserSourceAuthorisation
 from app.repositories.audit import AuditLogRepository
 from app.repositories.evidence import EvidenceRepository
 from app.repositories.integration import IntegrationRepository
@@ -218,24 +218,88 @@ class SourceSyncWorkerService:
                 return None
 
             payload = job.payload_json or {}
+            mapping_id_raw = payload.get("mapping_id")
+            if not mapping_id_raw:
+                job.status = BackgroundJobStatus.FAILED.value
+                job.completed_at = now
+                job.error_code = "INVALID_SYNC_JOB_PAYLOAD"
+                job.error_message = "Source sync job payload is missing mapping_id."
+                session.commit()
+                return None
+
             try:
-                sync_run_id = uuid.UUID(str(payload.get("sync_run_id")))
-                mapping_id = uuid.UUID(str(payload.get("mapping_id")))
-                auth_id = uuid.UUID(str(payload.get("authorisation_id")))
-                sync_mode = str(payload.get("sync_mode") or "incremental")
+                mapping_id = uuid.UUID(str(mapping_id_raw))
             except (ValueError, TypeError):
                 job.status = BackgroundJobStatus.FAILED.value
                 job.completed_at = now
                 job.error_code = "INVALID_SYNC_JOB_PAYLOAD"
-                job.error_message = "Source sync job payload is malformed."
-                job.locked_by = None
-                job.lease_expires_at = None
+                job.error_message = "Source sync job mapping_id is invalid."
                 session.commit()
                 return None
 
-            sync_run = int_repo.get_sync_run_by_id(sync_run_id)
             mapping = int_repo.get_mapping_by_id(mapping_id)
-            auth = int_repo.get_authorisation_by_id(auth_id)
+            if mapping is None:
+                job.status = BackgroundJobStatus.FAILED.value
+                job.completed_at = now
+                job.error_code = "MAPPING_NOT_FOUND"
+                job.error_message = "Mapping not found"
+                session.commit()
+                return None
+
+            # Resolve or create sync_run
+            sync_run_id_raw = payload.get("sync_run_id")
+            sync_run = None
+            if sync_run_id_raw:
+                try:
+                    sync_run = int_repo.get_sync_run_by_id(uuid.UUID(str(sync_run_id_raw)))
+                except Exception:
+                    sync_run = None
+
+            if sync_run is None:
+                sync_run = SourceSyncRun(
+                    organisation_id=mapping.organisation_id,
+                    project_id=mapping.project_id,
+                    project_source_mapping_id=mapping.id,
+                    source_connection_id=mapping.source_connection_id,
+                    triggered_by_user_id=job.triggered_by_user_id,
+                    provider=mapping.provider,
+                    sync_mode="manual",
+                    status=SourceSyncRunStatus.QUEUED.value,
+                )
+                session.add(sync_run)
+                session.flush()
+
+            sync_run_id = sync_run.id
+
+            # Resolve authorization
+            auth_id_raw = payload.get("authorisation_id")
+            auth = None
+            if auth_id_raw:
+                try:
+                    auth = int_repo.get_authorisation_by_id(uuid.UUID(str(auth_id_raw)))
+                except Exception:
+                    auth = None
+
+            if auth is None:
+                from app.models.integration import UserSourceAuthorisation
+                from sqlalchemy import select
+                auth = session.execute(
+                    select(UserSourceAuthorisation).where(
+                        UserSourceAuthorisation.source_connection_id == mapping.source_connection_id,
+                        UserSourceAuthorisation.status == "active",
+                    ).order_by(UserSourceAuthorisation.created_at.desc())
+                ).scalars().first()
+
+            if auth is None:
+                job.status = BackgroundJobStatus.FAILED.value
+                job.completed_at = now
+                job.error_code = "AUTHORISATION_MISSING"
+                job.error_message = "No active source authorization found for connection."
+                session.commit()
+                return None
+
+            auth_id = auth.id
+            sync_mode = str(payload.get("sync_mode") or "full")
 
             if (
                 sync_run is None

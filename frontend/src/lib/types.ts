@@ -177,12 +177,19 @@ export interface EvidenceSummary {
   id: UUID;
   project_id: UUID;
   source_type: string;
+  source_provider?: string;
   provider: string;
+  category: string;
   title: string;
+  original_filename?: string | null;
+  file_size_bytes?: number | null;
+  page_count?: number | null;
   source_url: string | null;
   author_name: string | null;
+  source_author_identity?: string | null;
   content_hash: string;
   indexing_status: string;
+  processing_status?: string;
   created_at: string;
   source_created_at: string | null;
 }
@@ -219,6 +226,12 @@ export interface EvidenceDetail {
   source_updated_at?: string | null;
   extracted_at?: string | null;
   extracted_text_preview?: string | null;
+  extracted_content?: {
+    char_count?: number;
+    word_count?: number;
+    extraction_warnings?: string[];
+    extracted_text?: string;
+  } | null;
   metadata_json?: Record<string, unknown>;
   can_download: boolean;
   download_url?: string | null;

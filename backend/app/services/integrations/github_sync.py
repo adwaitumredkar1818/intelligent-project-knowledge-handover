@@ -396,10 +396,13 @@ class GitHubSyncOrchestrator:
                     record=record,
                 )
 
-        # 5. README and Markdown documentation / ADRs
+        # 5. README, Markdown documentation, ADRs, and repository code files
+        include_code = bool(config.get("include_code", False))
         if config.get("include_docs", True) and report.items_discovered < max_items:
             docs_limit = min(
-                self._settings.integrations.default_github_docs_limit,
+                max(self._settings.integrations.default_github_docs_limit, 150)
+                if include_code
+                else self._settings.integrations.default_github_docs_limit,
                 max_items - report.items_discovered,
             )
             docs, doc_warns = self._client.fetch_readme_and_docs(
@@ -408,6 +411,7 @@ class GitHubSyncOrchestrator:
                 repo=repo_name,
                 default_branch=repo_candidate.default_branch,
                 max_docs=docs_limit,
+                include_code=include_code,
             )
             report.warnings.extend(doc_warns)
             if doc_warns:
@@ -845,6 +849,10 @@ class GitHubSyncOrchestrator:
     ) -> NormalizedSourceEvidence:
         path = str(doc["path"])
         text = str(doc.get("text") or "").strip()
+        is_code = path.lower().endswith(
+            (".py", ".ts", ".tsx", ".js", ".jsx", ".json", ".yaml", ".yml", ".toml", ".sql", ".sh", ".html", ".css")
+        )
+        item_type = "code" if is_code else "documentation"
         return NormalizedSourceEvidence(
             source_type=EvidenceSourceType.GITHUB.value,
             source_provider="github",
@@ -859,11 +867,11 @@ class GitHubSyncOrchestrator:
             acl_scope=acl_scope,
             source_access_policy_id=policy_id,
             extracted_text=text,
-            pages=(_page(1, text, f"doc:{path}"),),
+            pages=(_page(1, text, f"{item_type}:{path}"),),
             original_filename=path.split("/")[-1][:255],
             metadata_json={
                 "mapping_id": str(mapping_id),
-                "github_item_type": "documentation",
+                "github_item_type": item_type,
                 "repository": owner_repo,
                 "path": path,
                 "git_blob_sha": doc.get("sha"),

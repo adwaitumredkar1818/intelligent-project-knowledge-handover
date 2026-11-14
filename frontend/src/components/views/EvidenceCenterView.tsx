@@ -25,6 +25,50 @@ import {
 } from "lucide-react";
 import { useLiveApp } from "../../context/LiveAppContext";
 
+// Helper to render category badges consistently
+function getCategoryBadge(category?: string, sourceType?: string) {
+  const cat = (category || sourceType || "").toLowerCase();
+  if (cat.includes("pdf")) {
+    return { label: "PDF Document", bg: "bg-rose-50 text-rose-700 border-rose-200" };
+  }
+  if (cat.includes("docx") || cat.includes("doc")) {
+    return { label: "DOCX Document", bg: "bg-blue-50 text-blue-700 border-blue-200" };
+  }
+  if (cat.includes("commit")) {
+    return { label: "Git Commit", bg: "bg-slate-100 text-slate-700 border-slate-200" };
+  }
+  if (cat.includes("pull_request") || cat.includes("pr")) {
+    return { label: "Pull Request", bg: "bg-purple-50 text-purple-700 border-purple-200" };
+  }
+  if (cat.includes("design") || cat.includes("architecture")) {
+    return { label: "Architecture / Design", bg: "bg-amber-50 text-amber-800 border-amber-200" };
+  }
+  if (cat.includes("issue")) {
+    return { label: "Issue", bg: "bg-emerald-50 text-emerald-700 border-emerald-200" };
+  }
+  if (cat.includes("code")) {
+    return { label: "Source Code", bg: "bg-cyan-50 text-cyan-800 border-cyan-200" };
+  }
+  if (cat.includes("discussion")) {
+    return { label: "Discussion", bg: "bg-indigo-50 text-indigo-700 border-indigo-200" };
+  }
+  return { label: category || "Document", bg: "bg-gray-100 text-gray-700 border-gray-200" };
+}
+
+function getProviderBadge(provider?: string, sourceType?: string) {
+  const prov = (provider || sourceType || "").toLowerCase();
+  if (prov === "upload" || prov === "document_upload" || prov === "local_upload") {
+    return { label: "UPLOAD", bg: "bg-emerald-50 text-emerald-700 border-emerald-200" };
+  }
+  if (prov === "github") {
+    return { label: "GITHUB", bg: "bg-sky-50 text-sky-700 border-sky-200" };
+  }
+  if (prov === "jira") {
+    return { label: "JIRA", bg: "bg-indigo-50 text-indigo-700 border-indigo-200" };
+  }
+  return { label: prov.toUpperCase(), bg: "bg-gray-100 text-gray-700 border-gray-200" };
+}
+
 export function EvidenceCenterView() {
   const {
     activeProject,
@@ -313,6 +357,10 @@ export function EvidenceCenterView() {
             ) : (
               evidenceList.map((item) => {
                 const isSelected = selectedEvidenceId === item.id;
+                const provBadge = getProviderBadge(item.provider, item.source_type);
+                const catBadge = getCategoryBadge(item.category, item.source_type);
+                const isUpload = provBadge.label === "UPLOAD";
+
                 return (
                   <div
                     key={item.id}
@@ -324,21 +372,41 @@ export function EvidenceCenterView() {
                     }`}
                   >
                     <div className="min-w-0 flex-1">
-                      <div className="flex items-center gap-1.5 mb-1">
-                        <span className="text-[9px] uppercase font-bold px-1.5 py-0.5 rounded bg-[#E8EEF5] text-[#4774A9]">
-                          {item.provider}
+                      <div className="flex items-center gap-1.5 mb-1 flex-wrap">
+                        <span className={`text-[9px] uppercase font-bold px-1.5 py-0.5 rounded border ${provBadge.bg}`}>
+                          {provBadge.label}
+                        </span>
+                        <span className={`text-[9px] font-semibold px-1.5 py-0.5 rounded border ${catBadge.bg}`}>
+                          {catBadge.label}
                         </span>
                         <span className="text-[10px] text-[#69778D] font-mono">
                           {item.content_hash.slice(0, 8)}...
                         </span>
                       </div>
-                      <div className="font-semibold text-xs text-[#25334B] truncate">
+                      <div className="font-semibold text-xs text-[#25334B] truncate" title={item.title}>
                         {item.title}
                       </div>
-                      <div className="text-[10px] text-[#69778D] mt-0.5 flex items-center gap-2">
-                        <span>{item.author_name || "Unknown Author"}</span>
+                      {item.original_filename && item.original_filename !== item.title && (
+                        <div className="text-[10px] text-[#4774A9] font-mono truncate mt-0.5">
+                          {item.original_filename}
+                        </div>
+                      )}
+                      <div className="text-[10px] text-[#69778D] mt-1 flex items-center gap-2 flex-wrap">
+                        <span>{item.author_name || item.source_author_identity || (isUpload ? "Uploaded Document" : "System Ingested")}</span>
                         <span>·</span>
                         <span>{new Date(item.created_at).toLocaleDateString()}</span>
+                        {item.page_count != null && item.page_count > 0 ? (
+                          <>
+                            <span>·</span>
+                            <span>{item.page_count} {item.page_count === 1 ? "page" : "pages"}</span>
+                          </>
+                        ) : null}
+                        {item.file_size_bytes != null && item.file_size_bytes > 0 ? (
+                          <>
+                            <span>·</span>
+                            <span>{(item.file_size_bytes / 1024).toFixed(1)} KB</span>
+                          </>
+                        ) : null}
                       </div>
                     </div>
                     <ChevronRight className={`w-4 h-4 shrink-0 mt-2 ${isSelected ? "text-[#249E91]" : "text-[#DCE3EB]"}`} />
@@ -384,20 +452,45 @@ export function EvidenceCenterView() {
             <div className="flex-1 overflow-y-auto p-4 space-y-4">
               {/* Item Overview */}
               <div>
-                <div className="flex items-center gap-2 mb-1.5">
-                  <span className="text-[10px] uppercase font-bold px-2 py-0.5 rounded bg-[#E8EEF5] text-[#4774A9]">
-                    {selectedEvidence.source_type}
+                <div className="flex items-center gap-2 mb-1.5 flex-wrap">
+                  <span className={`text-[10px] uppercase font-bold px-2 py-0.5 rounded border ${getProviderBadge(selectedEvidence.provider, selectedEvidence.source_type).bg}`}>
+                    {getProviderBadge(selectedEvidence.provider, selectedEvidence.source_type).label}
                   </span>
-                  <span className="text-[10px] uppercase font-bold px-2 py-0.5 rounded bg-emerald-50 text-emerald-700">
-                    {selectedEvidence.indexing_status}
+                  <span className={`text-[10px] font-semibold px-2 py-0.5 rounded border ${getCategoryBadge(selectedEvidence.category, selectedEvidence.source_type).bg}`}>
+                    {getCategoryBadge(selectedEvidence.category, selectedEvidence.source_type).label}
+                  </span>
+                  <span className="text-[10px] uppercase font-bold px-2 py-0.5 rounded bg-emerald-50 text-emerald-700 border border-emerald-200">
+                    {selectedEvidence.processing_status || "extracted"}
+                  </span>
+                  <span className="text-[10px] uppercase font-bold px-2 py-0.5 rounded bg-sky-50 text-sky-700 border border-sky-200">
+                    {selectedEvidence.indexing_status || "indexed"}
                   </span>
                 </div>
                 <h2 className="text-sm font-bold text-[#25334B] leading-snug">
                   {selectedEvidence.title}
                 </h2>
-                <div className="text-[11px] text-[#69778D] mt-1 flex items-center gap-3">
-                  <span>Author: {selectedEvidence.author_name || "Internal Document"}</span>
+                {selectedEvidence.original_filename && (
+                  <div className="text-xs text-[#4774A9] font-mono mt-1 flex items-center gap-1.5">
+                    <FileText className="w-3.5 h-3.5 shrink-0" />
+                    <span className="truncate">{selectedEvidence.original_filename}</span>
+                  </div>
+                )}
+                <div className="text-[11px] text-[#69778D] mt-1.5 flex items-center gap-2 flex-wrap">
+                  <span>Author: {selectedEvidence.author_name || selectedEvidence.source_author_identity || "Internal Document"}</span>
+                  <span>·</span>
                   <span>Ingested: {new Date(selectedEvidence.created_at).toLocaleString()}</span>
+                  {selectedEvidence.file_size_bytes != null && selectedEvidence.file_size_bytes > 0 && (
+                    <>
+                      <span>·</span>
+                      <span>{(selectedEvidence.file_size_bytes / 1024).toFixed(1)} KB</span>
+                    </>
+                  )}
+                  {selectedEvidence.page_count != null && selectedEvidence.page_count > 0 && (
+                    <>
+                      <span>·</span>
+                      <span>{selectedEvidence.page_count} {selectedEvidence.page_count === 1 ? "page" : "pages"}</span>
+                    </>
+                  )}
                 </div>
               </div>
 
@@ -451,13 +544,19 @@ export function EvidenceCenterView() {
                 <div className="space-y-3">
                   {!selectedEvidence.chunks || selectedEvidence.chunks.length === 0 ? (
                     <div className="p-6 rounded-xl bg-[#F4F6F9] border border-[#DCE3EB] text-center text-xs text-[#69778D]">
-                      {selectedEvidence.extracted_text_preview ? (
+                      {(selectedEvidence.extracted_content?.extracted_text || selectedEvidence.extracted_text_preview) ? (
                         <div>
-                          <div className="text-[11px] font-semibold text-[#25334B] mb-2 uppercase tracking-wide">
-                            Direct Extraction Preview
+                          <div className="text-[11px] font-semibold text-[#25334B] mb-2 uppercase tracking-wide text-left flex items-center justify-between">
+                            <span className="flex items-center gap-1.5">
+                              <FileText className="w-3.5 h-3.5 text-[#249E91]" />
+                              <span>Extracted Text Content</span>
+                            </span>
+                            <span className="text-[10px] text-[#69778D] font-mono">
+                              {(selectedEvidence.extracted_content?.char_count || (selectedEvidence.extracted_text_preview || "").length).toLocaleString()} chars
+                            </span>
                           </div>
-                          <div className="text-left font-mono text-[11px] whitespace-pre-wrap leading-relaxed text-[#25334B] bg-white p-3.5 rounded-lg border border-[#DCE3EB]">
-                            {selectedEvidence.extracted_text_preview}
+                          <div className="text-left font-mono text-[11px] whitespace-pre-wrap leading-relaxed text-[#25334B] bg-white p-3.5 rounded-lg border border-[#DCE3EB] max-h-96 overflow-y-auto">
+                            {selectedEvidence.extracted_content?.extracted_text || selectedEvidence.extracted_text_preview}
                           </div>
                         </div>
                       ) : (
@@ -485,7 +584,7 @@ export function EvidenceCenterView() {
                           <div className="px-3.5 py-2.5 bg-[#F8FAFC] border-b border-[#E2E8F0] flex items-center justify-between text-xs">
                             <div className="flex items-center gap-2">
                               <span className="font-bold font-mono text-[#203653] bg-[#E8EEF5] px-2 py-0.5 rounded text-[11px]">
-                                Chunk #{chk.chunk_index}
+                                Chunk #{chk.chunk_index + 1}
                               </span>
                               {chk.page_number && (
                                 <span className="text-[10px] font-semibold bg-emerald-50 text-emerald-700 border border-emerald-200 px-1.5 py-0.5 rounded">
