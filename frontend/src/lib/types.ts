@@ -163,8 +163,14 @@ export interface ProjectSourceMapping {
 export interface EvidenceChunkDetail {
   id: UUID;
   chunk_index: number;
-  content_preview: string;
-  character_count: number;
+  content_text?: string;
+  content_preview?: string;
+  char_length?: number;
+  character_count?: number;
+  word_count?: number;
+  chunk_type?: string;
+  section_title?: string | null;
+  page_number?: number | null;
 }
 
 export interface EvidenceSummary {
@@ -184,16 +190,36 @@ export interface EvidenceSummary {
 export interface EvidenceDetail {
   id: UUID;
   project_id: UUID;
+  organisation_id?: UUID;
   source_type: string;
+  source_provider?: string;
   provider: string;
+  category?: string;
+  source_external_id?: string;
   title: string;
+  original_filename?: string | null;
+  mime_type?: string | null;
+  file_size_bytes?: number | null;
   source_url: string | null;
   author_name: string | null;
+  source_author_identity?: string | null;
   content_hash: string;
+  acl_scope?: string;
   indexing_status: string;
+  processing_status?: string;
+  extraction_method?: string | null;
+  page_count?: number | null;
+  ocr_pages_count?: number;
+  truncated_pages_count?: number;
+  embedding_model?: string | null;
+  index_version?: string | null;
   created_at: string;
+  updated_at?: string;
   source_created_at: string | null;
+  source_updated_at?: string | null;
+  extracted_at?: string | null;
   extracted_text_preview?: string | null;
+  metadata_json?: Record<string, unknown>;
   can_download: boolean;
   download_url?: string | null;
   chunks: EvidenceChunkDetail[];

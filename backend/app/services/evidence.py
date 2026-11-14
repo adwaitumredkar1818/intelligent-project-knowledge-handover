@@ -193,10 +193,12 @@ def to_evidence_detail_response(item: EvidenceItem) -> EvidenceDetailResponse:
             id=c.id,
             chunk_index=c.chunk_index,
             content_text=c.chunk_text,
+            content_preview=c.chunk_text,
             chunk_type=c.chunk_type,
             section_title=c.section_title,
             page_number=c.page_number,
             char_length=c.char_count,
+            character_count=c.char_count,
             word_count=c.token_estimate,
         )
         for c in (item.chunks or [])
@@ -614,8 +616,17 @@ class EvidenceService:
             require_read_permission=True,
         )
 
-        if (not evidence.chunks or len(evidence.chunks) == 0) and evidence.storage_object_key:
+        # Check if chunks are missing or if a single monolithic chunk was created for a multi-page document
+        needs_page_chunking = (
+            not evidence.chunks
+            or len(evidence.chunks) == 0
+            or (len(evidence.chunks) == 1 and (evidence.page_count or 1) > 1 and evidence.chunks[0].char_count > 2500)
+        )
+        if needs_page_chunking and evidence.storage_object_key:
             try:
+                import hashlib
+                from app.models.evidence import EvidenceChunk
+
                 raw_bytes = self._storage.read_decrypted_bytes(
                     storage_object_key=evidence.storage_object_key,
                     organisation_id=evidence.organisation_id,
@@ -623,50 +634,133 @@ class EvidenceService:
                     key_id=evidence.encryption_key_id,
                     expected_plaintext_size=evidence.file_size_bytes,
                 )
-                text = ""
                 if evidence.category == EvidenceCategory.PDF_DOCUMENT.value or (
                     evidence.mime_type or ""
                 ).endswith("pdf"):
                     import pymupdf
 
-                    with pymupdf.Document(  # type: ignore[no-untyped-call]
+                    with pymupdf.Document(
                         stream=raw_bytes,
                         filetype="pdf",
                     ) as doc:
-                        text = "\n".join(page.get_text() for page in doc).strip()
+                        if evidence.chunks:
+                            for c in list(evidence.chunks):
+                                self._session.delete(c)
+                            self._session.flush()
+
+                        created_chunks: list[EvidenceChunk] = []
+                        for idx, page in enumerate(doc):
+                            txt = page.get_text().strip()
+                            if txt:
+                                lines = [l.strip() for l in txt.split("\n") if l.strip()]
+                                section = lines[0] if lines else f"Page {idx + 1}"
+                                if len(section) > 80:
+                                    section = section[:80] + "..."
+                                chunk = EvidenceChunk(
+                                    organisation_id=evidence.organisation_id,
+                                    project_id=evidence.project_id,
+                                    evidence_id=evidence.id,
+                                    chunk_index=len(created_chunks),
+                                    chunk_type="page_segment",
+                                    chunk_text=txt,
+                                    chunk_content_hash=hashlib.sha256(txt.encode("utf-8")).hexdigest(),
+                                    char_count=len(txt),
+                                    token_estimate=len(txt.split()),
+                                    page_number=idx + 1,
+                                    section_title=section,
+                                    source_type=evidence.source_type,
+                                    acl_scope=evidence.acl_scope,
+                                )
+                                self._session.add(chunk)
+                                created_chunks.append(chunk)
+
+                        if created_chunks:
+                            evidence.page_count = len(doc)
+                            evidence.chunk_count = len(created_chunks)
+                            evidence.extraction_method = "pymupdf"
+                            evidence.processing_status = "extracted"
+                            self._session.commit()
+                            self._session.refresh(evidence)
                 elif (
                     evidence.category == EvidenceCategory.DOCX_DOCUMENT.value
                     or "wordprocessing" in (evidence.mime_type or "")
                 ):
                     import io
-
                     import docx
 
                     parsed = docx.Document(io.BytesIO(raw_bytes))
-                    text = "\n".join(p.text for p in parsed.paragraphs if p.text).strip()
+                    paragraphs = [p.text.strip() for p in parsed.paragraphs if p.text.strip()]
+                    if paragraphs and (not evidence.chunks or len(evidence.chunks) <= 1):
+                        if evidence.chunks:
+                            for c in list(evidence.chunks):
+                                self._session.delete(c)
+                            self._session.flush()
 
-                if text:
-                    import hashlib
+                        created_chunks = []
+                        current_block: list[str] = []
+                        current_len = 0
+                        block_idx = 0
 
-                    from app.models.evidence import EvidenceChunk
+                        for p in paragraphs:
+                            current_block.append(p)
+                            current_len += len(p)
+                            if current_len >= 800:
+                                b_text = "\n\n".join(current_block)
+                                lines = [l.strip() for l in b_text.split("\n") if l.strip()]
+                                section = lines[0] if lines else f"Section {block_idx + 1}"
+                                if len(section) > 80:
+                                    section = section[:80] + "..."
+                                chunk = EvidenceChunk(
+                                    organisation_id=evidence.organisation_id,
+                                    project_id=evidence.project_id,
+                                    evidence_id=evidence.id,
+                                    chunk_index=block_idx,
+                                    chunk_type="section_segment",
+                                    chunk_text=b_text,
+                                    chunk_content_hash=hashlib.sha256(b_text.encode("utf-8")).hexdigest(),
+                                    char_count=len(b_text),
+                                    token_estimate=len(b_text.split()),
+                                    page_number=None,
+                                    section_title=section,
+                                    source_type=evidence.source_type,
+                                    acl_scope=evidence.acl_scope,
+                                )
+                                self._session.add(chunk)
+                                created_chunks.append(chunk)
+                                current_block = []
+                                current_len = 0
+                                block_idx += 1
 
-                    chunk = EvidenceChunk(
-                        organisation_id=evidence.organisation_id,
-                        project_id=evidence.project_id,
-                        evidence_id=evidence.id,
-                        chunk_index=0,
-                        chunk_type="text_segment",
-                        chunk_text=text,
-                        chunk_content_hash=hashlib.sha256(text.encode("utf-8")).hexdigest(),
-                        char_count=len(text),
-                        token_estimate=len(text.split()),
-                        page_number=1,
-                        source_type=evidence.source_type,
-                        acl_scope=evidence.acl_scope,
-                    )
-                    self._session.add(chunk)
-                    self._session.commit()
-                    self._session.refresh(evidence)
+                        if current_block:
+                            b_text = "\n\n".join(current_block)
+                            lines = [l.strip() for l in b_text.split("\n") if l.strip()]
+                            section = lines[0] if lines else f"Section {block_idx + 1}"
+                            if len(section) > 80:
+                                section = section[:80] + "..."
+                            chunk = EvidenceChunk(
+                                organisation_id=evidence.organisation_id,
+                                project_id=evidence.project_id,
+                                evidence_id=evidence.id,
+                                chunk_index=block_idx,
+                                chunk_type="section_segment",
+                                chunk_text=b_text,
+                                chunk_content_hash=hashlib.sha256(b_text.encode("utf-8")).hexdigest(),
+                                char_count=len(b_text),
+                                token_estimate=len(b_text.split()),
+                                page_number=None,
+                                section_title=section,
+                                source_type=evidence.source_type,
+                                acl_scope=evidence.acl_scope,
+                            )
+                            self._session.add(chunk)
+                            created_chunks.append(chunk)
+
+                        if created_chunks:
+                            evidence.chunk_count = len(created_chunks)
+                            evidence.extraction_method = "python-docx"
+                            evidence.processing_status = "extracted"
+                            self._session.commit()
+                            self._session.refresh(evidence)
             except Exception as exc:
                 logger.warning("On-demand chunk extraction skipped: %s", exc)
 

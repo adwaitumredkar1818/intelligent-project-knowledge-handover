@@ -41,10 +41,13 @@ class RelationshipWorkerService:
 
     def process_next_job(self) -> bool:
         """Claim and process one relationship reconstruction job from the PostgreSQL queue."""
+        now = utc_now()
         with self.session_factory() as session:
             job_repo = BackgroundJobRepository(session)
             job = job_repo.claim_next_job(
                 worker_id=self.worker_id,
+                lease_seconds=60,
+                now=now,
                 job_types=[BackgroundJobType.RELATIONSHIP_RECONSTRUCTION.value],
             )
             if job is None:

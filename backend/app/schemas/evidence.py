@@ -122,11 +122,23 @@ class EvidenceChunkDetailResponse(BaseSchema):
     id: uuid.UUID
     chunk_index: int
     content_text: str
+    content_preview: str = ""
     chunk_type: str = "text_segment"
     section_title: str | None = None
     page_number: int | None = None
     char_length: int = 0
+    character_count: int = 0
     word_count: int = 0
+
+    @model_validator(mode="before")
+    @classmethod
+    def _populate_aliases(cls, data: Any) -> Any:
+        if isinstance(data, dict):
+            if not data.get("content_preview") and data.get("content_text"):
+                data["content_preview"] = data["content_text"]
+            if not data.get("character_count") and data.get("char_length"):
+                data["character_count"] = data["char_length"]
+        return data
 
 
 class EvidenceDetailResponse(EvidenceSummaryResponse):

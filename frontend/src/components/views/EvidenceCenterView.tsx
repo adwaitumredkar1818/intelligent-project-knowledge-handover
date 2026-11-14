@@ -21,6 +21,7 @@ import {
   Copy,
   Check,
   Lock,
+  ChevronDown,
 } from "lucide-react";
 import { useLiveApp } from "../../context/LiveAppContext";
 
@@ -47,7 +48,33 @@ export function EvidenceCenterView() {
 
   const [activeTab, setActiveTab] = useState<"chunks" | "metadata">("chunks");
   const [copiedHash, setCopiedHash] = useState(false);
+  const [copiedChunkId, setCopiedChunkId] = useState<string | null>(null);
+  const [copiedMetadataKey, setCopiedMetadataKey] = useState<string | null>(null);
+  const [expandedChunkIds, setExpandedChunkIds] = useState<Record<string, boolean>>({});
   const [syncingMappingId, setSyncingMappingId] = useState<string | null>(null);
+
+  const formatBytes = (bytes?: number | null) => {
+    if (!bytes || bytes <= 0) return "—";
+    if (bytes < 1024) return `${bytes} B`;
+    if (bytes < 1024 * 1024) return `${(bytes / 1024).toFixed(1)} KB (${bytes.toLocaleString()} bytes)`;
+    return `${(bytes / (1024 * 1024)).toFixed(2)} MB (${bytes.toLocaleString()} bytes)`;
+  };
+
+  const copyChunk = (id: string, text: string) => {
+    navigator.clipboard.writeText(text);
+    setCopiedChunkId(id);
+    setTimeout(() => setCopiedChunkId(null), 2000);
+  };
+
+  const copyMetadata = (key: string, text: string) => {
+    navigator.clipboard.writeText(text);
+    setCopiedMetadataKey(key);
+    setTimeout(() => setCopiedMetadataKey(null), 2000);
+  };
+
+  const toggleChunkExpand = (id: string) => {
+    setExpandedChunkIds((prev) => ({ ...prev, [id]: !prev[id] }));
+  };
 
   const handleSync = async (mappingId: string) => {
     setSyncingMappingId(mappingId);
@@ -421,56 +448,350 @@ export function EvidenceCenterView() {
 
               {/* Tab Content */}
               {activeTab === "chunks" ? (
-                <div className="space-y-2.5">
+                <div className="space-y-3">
                   {!selectedEvidence.chunks || selectedEvidence.chunks.length === 0 ? (
-                    <div className="p-4 rounded-lg bg-[#F4F6F9] text-center text-xs text-[#69778D]">
+                    <div className="p-6 rounded-xl bg-[#F4F6F9] border border-[#DCE3EB] text-center text-xs text-[#69778D]">
                       {selectedEvidence.extracted_text_preview ? (
-                        <div className="text-left font-mono text-[11px] whitespace-pre-wrap leading-relaxed text-[#25334B]">
-                          {selectedEvidence.extracted_text_preview}
+                        <div>
+                          <div className="text-[11px] font-semibold text-[#25334B] mb-2 uppercase tracking-wide">
+                            Direct Extraction Preview
+                          </div>
+                          <div className="text-left font-mono text-[11px] whitespace-pre-wrap leading-relaxed text-[#25334B] bg-white p-3.5 rounded-lg border border-[#DCE3EB]">
+                            {selectedEvidence.extracted_text_preview}
+                          </div>
                         </div>
                       ) : (
-                        "Text extraction in progress or raw binary asset."
+                        <div className="flex flex-col items-center justify-center gap-1.5 py-4">
+                          <FileText className="w-8 h-8 text-[#69778D]/40" />
+                          <span className="font-semibold text-[#25334B]">No text chunks generated yet</span>
+                          <span className="text-[11px]">Text extraction in progress or document is being indexed.</span>
+                        </div>
                       )}
                     </div>
                   ) : (
-                    selectedEvidence.chunks.map((chk) => (
-                      <div
-                        key={chk.id}
-                        className="p-3 rounded-lg border border-[#DCE3EB] bg-[#F4F6F9]/50 text-xs"
-                      >
-                        <div className="flex items-center justify-between text-[10px] text-[#69778D] mb-1 font-mono">
-                          <span>Chunk #{chk.chunk_index}</span>
-                          <span>{chk.character_count} chars</span>
+                    selectedEvidence.chunks.map((chk, idx) => {
+                      const text = chk.content_text || chk.content_preview || "";
+                      const charCount = chk.char_length ?? chk.character_count ?? text.length;
+                      const wordCount = chk.word_count ?? (text ? text.split(/\s+/).filter(Boolean).length : 0);
+                      const isLong = text.length > 500;
+                      const isExpanded = expandedChunkIds[chk.id];
+
+                      return (
+                        <div
+                          key={chk.id || idx}
+                          className="rounded-xl border border-[#DCE3EB] bg-white shadow-2xs overflow-hidden transition-all hover:border-[#B5C6D8]"
+                        >
+                          {/* Chunk Header */}
+                          <div className="px-3.5 py-2.5 bg-[#F8FAFC] border-b border-[#E2E8F0] flex items-center justify-between text-xs">
+                            <div className="flex items-center gap-2">
+                              <span className="font-bold font-mono text-[#203653] bg-[#E8EEF5] px-2 py-0.5 rounded text-[11px]">
+                                Chunk #{chk.chunk_index}
+                              </span>
+                              {chk.page_number && (
+                                <span className="text-[10px] font-semibold bg-emerald-50 text-emerald-700 border border-emerald-200 px-1.5 py-0.5 rounded">
+                                  Page {chk.page_number}
+                                </span>
+                              )}
+                              {chk.section_title && (
+                                <span className="text-[11px] font-medium text-[#4774A9] truncate max-w-[200px]" title={chk.section_title}>
+                                  {chk.section_title}
+                                </span>
+                              )}
+                            </div>
+                            <div className="flex items-center gap-2 font-mono text-[11px] text-[#69778D]">
+                              <span>{charCount.toLocaleString()} chars</span>
+                              <span>•</span>
+                              <span>{wordCount.toLocaleString()} words</span>
+                              <button
+                                type="button"
+                                onClick={() => copyChunk(chk.id, text)}
+                                className="p-1 hover:text-[#25334B] text-[#69778D] rounded transition-colors"
+                                title="Copy chunk text"
+                              >
+                                {copiedChunkId === chk.id ? (
+                                  <Check className="w-3.5 h-3.5 text-emerald-600" />
+                                ) : (
+                                  <Copy className="w-3.5 h-3.5" />
+                                )}
+                              </button>
+                            </div>
+                          </div>
+
+                          {/* Chunk Body */}
+                          <div className="p-3.5">
+                            <div
+                              className={`text-[12px] text-[#25334B] font-mono whitespace-pre-wrap leading-relaxed select-text ${
+                                isLong && !isExpanded ? "max-h-48 overflow-hidden relative" : "max-h-96 overflow-y-auto"
+                              }`}
+                            >
+                              {text || <span className="text-[#94A3B8] italic">Empty chunk text</span>}
+                              {isLong && !isExpanded && (
+                                <div className="absolute inset-x-0 bottom-0 h-16 bg-gradient-to-t from-white to-transparent pointer-events-none" />
+                              )}
+                            </div>
+
+                            {isLong && (
+                              <button
+                                type="button"
+                                onClick={() => toggleChunkExpand(chk.id)}
+                                className="mt-2 text-[11px] font-semibold text-[#4774A9] hover:text-[#203653] flex items-center gap-1 cursor-pointer"
+                              >
+                                <span>{isExpanded ? "Show Less" : "Show Full Chunk Text"}</span>
+                                <ChevronDown className={`w-3.5 h-3.5 transition-transform ${isExpanded ? "rotate-180" : ""}`} />
+                              </button>
+                            )}
+                          </div>
                         </div>
-                        <p className="text-[11px] text-[#25334B] font-mono whitespace-pre-wrap leading-relaxed">
-                          {chk.content_preview}
-                        </p>
-                      </div>
-                    ))
+                      );
+                    })
                   )}
                 </div>
               ) : (
-                <div className="space-y-2 text-xs font-mono">
-                  <div className="p-2.5 rounded-lg bg-[#F4F6F9] border border-[#DCE3EB]">
-                    <div className="text-[10px] text-[#69778D] uppercase font-bold">Evidence ID</div>
-                    <div className="text-[#25334B] mt-0.5">{selectedEvidence.id}</div>
+                <div className="space-y-3 text-xs">
+                  {/* Identity & Origin Card */}
+                  <div className="rounded-xl border border-[#DCE3EB] bg-white overflow-hidden shadow-2xs">
+                    <div className="px-3.5 py-2 bg-[#F8FAFC] border-b border-[#E2E8F0] font-semibold text-[#25334B] flex items-center gap-1.5 text-[11px] uppercase tracking-wide">
+                      <Layers className="w-3.5 h-3.5 text-[#4774A9]" />
+                      <span>Evidence Identity &amp; Origin</span>
+                    </div>
+                    <div className="p-3.5 space-y-2.5 font-mono text-[11px]">
+                      <div className="flex items-center justify-between gap-2 border-b border-[#F1F5F9] pb-2">
+                        <span className="text-[#69778D]">Evidence ID</span>
+                        <div className="flex items-center gap-1 text-[#25334B]">
+                          <span className="truncate max-w-[240px]">{selectedEvidence.id}</span>
+                          <button
+                            type="button"
+                            onClick={() => copyMetadata("id", selectedEvidence.id)}
+                            className="p-0.5 text-[#69778D] hover:text-[#25334B]"
+                            title="Copy Evidence ID"
+                          >
+                            {copiedMetadataKey === "id" ? <Check className="w-3 h-3 text-emerald-600" /> : <Copy className="w-3 h-3" />}
+                          </button>
+                        </div>
+                      </div>
+
+                      <div className="flex items-center justify-between gap-2 border-b border-[#F1F5F9] pb-2">
+                        <span className="text-[#69778D]">Platform &amp; Provider</span>
+                        <span className="font-semibold text-[#203653]">
+                          {selectedEvidence.source_type} ({selectedEvidence.provider || selectedEvidence.source_provider || "upload"})
+                        </span>
+                      </div>
+
+                      <div className="flex items-center justify-between gap-2 border-b border-[#F1F5F9] pb-2">
+                        <span className="text-[#69778D]">Category</span>
+                        <span className="px-2 py-0.5 rounded bg-[#E8EEF5] text-[#203653] font-semibold text-[10px]">
+                          {selectedEvidence.category || selectedEvidence.source_type}
+                        </span>
+                      </div>
+
+                      {selectedEvidence.original_filename && (
+                        <div className="flex items-center justify-between gap-2 border-b border-[#F1F5F9] pb-2">
+                          <span className="text-[#69778D]">Original File</span>
+                          <span className="text-[#25334B] truncate max-w-[220px]" title={selectedEvidence.original_filename}>
+                            {selectedEvidence.original_filename}
+                          </span>
+                        </div>
+                      )}
+
+                      {selectedEvidence.source_external_id && (
+                        <div className="flex items-center justify-between gap-2 border-b border-[#F1F5F9] pb-2">
+                          <span className="text-[#69778D]">External ID</span>
+                          <span className="text-[#25334B] truncate max-w-[220px]">
+                            {selectedEvidence.source_external_id}
+                          </span>
+                        </div>
+                      )}
+
+                      <div className="flex items-center justify-between gap-2 border-b border-[#F1F5F9] pb-2">
+                        <span className="text-[#69778D]">Author / Owner</span>
+                        <span className="text-[#25334B]">
+                          {selectedEvidence.source_author_identity || selectedEvidence.author_name || "Internal Document"}
+                        </span>
+                      </div>
+
+                      {selectedEvidence.source_url && (
+                        <div className="flex items-center justify-between gap-2">
+                          <span className="text-[#69778D]">Source URL</span>
+                          <a
+                            href={selectedEvidence.source_url}
+                            target="_blank"
+                            rel="noreferrer"
+                            className="text-[#4774A9] hover:underline flex items-center gap-1 truncate max-w-[220px]"
+                          >
+                            <span className="truncate">{selectedEvidence.source_url}</span>
+                            <ExternalLink className="w-3 h-3 shrink-0" />
+                          </a>
+                        </div>
+                      )}
+                    </div>
                   </div>
-                  <div className="p-2.5 rounded-lg bg-[#F4F6F9] border border-[#DCE3EB]">
-                    <div className="text-[10px] text-[#69778D] uppercase font-bold">Platform Provider</div>
-                    <div className="text-[#25334B] mt-0.5">{selectedEvidence.provider}</div>
+
+                  {/* Document & Processing Details */}
+                  <div className="rounded-xl border border-[#DCE3EB] bg-white overflow-hidden shadow-2xs">
+                    <div className="px-3.5 py-2 bg-[#F8FAFC] border-b border-[#E2E8F0] font-semibold text-[#25334B] flex items-center gap-1.5 text-[11px] uppercase tracking-wide">
+                      <FileCode className="w-3.5 h-3.5 text-[#249E91]" />
+                      <span>Document &amp; Extraction Details</span>
+                    </div>
+                    <div className="p-3.5 space-y-2.5 font-mono text-[11px]">
+                      <div className="flex items-center justify-between gap-2 border-b border-[#F1F5F9] pb-2">
+                        <span className="text-[#69778D]">Processing Status</span>
+                        <span className="px-2 py-0.5 rounded font-semibold text-[10px] bg-emerald-50 text-emerald-700 border border-emerald-200">
+                          {selectedEvidence.processing_status || "extracted"}
+                        </span>
+                      </div>
+
+                      <div className="flex items-center justify-between gap-2 border-b border-[#F1F5F9] pb-2">
+                        <span className="text-[#69778D]">Extraction Method</span>
+                        <span className="text-[#25334B]">
+                          {selectedEvidence.extraction_method || (selectedEvidence.provider === "pdf" ? "PyMuPDF Digital Parsing" : "Direct Ingestion")}
+                        </span>
+                      </div>
+
+                      {selectedEvidence.file_size_bytes != null && (
+                        <div className="flex items-center justify-between gap-2 border-b border-[#F1F5F9] pb-2">
+                          <span className="text-[#69778D]">File Size</span>
+                          <span className="text-[#25334B]">{formatBytes(selectedEvidence.file_size_bytes)}</span>
+                        </div>
+                      )}
+
+                      {selectedEvidence.mime_type && (
+                        <div className="flex items-center justify-between gap-2 border-b border-[#F1F5F9] pb-2">
+                          <span className="text-[#69778D]">MIME Type</span>
+                          <span className="text-[#25334B]">{selectedEvidence.mime_type}</span>
+                        </div>
+                      )}
+
+                      {selectedEvidence.page_count != null && (
+                        <div className="flex items-center justify-between gap-2 border-b border-[#F1F5F9] pb-2">
+                          <span className="text-[#69778D]">Page Count</span>
+                          <span className="text-[#25334B] font-semibold">{selectedEvidence.page_count} pages</span>
+                        </div>
+                      )}
+
+                      <div className="flex items-center justify-between gap-2">
+                        <span className="text-[#69778D]">OCR Processing</span>
+                        <span className="text-[#25334B]">
+                          {selectedEvidence.ocr_pages_count && selectedEvidence.ocr_pages_count > 0
+                            ? `${selectedEvidence.ocr_pages_count} pages OCR scanned (GLM-OCR)`
+                            : "0 OCR pages (Digital native vector text)"}
+                        </span>
+                      </div>
+                    </div>
                   </div>
-                  {selectedEvidence.source_url && (
-                    <div className="p-2.5 rounded-lg bg-[#F4F6F9] border border-[#DCE3EB]">
-                      <div className="text-[10px] text-[#69778D] uppercase font-bold">Source URL</div>
-                      <a
-                        href={selectedEvidence.source_url}
-                        target="_blank"
-                        rel="noreferrer"
-                        className="text-[#4774A9] hover:underline flex items-center gap-1 mt-0.5"
-                      >
-                        <span>{selectedEvidence.source_url}</span>
-                        <ExternalLink className="w-3 h-3" />
-                      </a>
+
+                  {/* Security, ACL & Integrity */}
+                  <div className="rounded-xl border border-[#DCE3EB] bg-white overflow-hidden shadow-2xs">
+                    <div className="px-3.5 py-2 bg-[#F8FAFC] border-b border-[#E2E8F0] font-semibold text-[#25334B] flex items-center gap-1.5 text-[11px] uppercase tracking-wide">
+                      <Lock className="w-3.5 h-3.5 text-amber-600" />
+                      <span>Security, ACL &amp; Integrity</span>
+                    </div>
+                    <div className="p-3.5 space-y-2.5 font-mono text-[11px]">
+                      <div className="flex items-center justify-between gap-2 border-b border-[#F1F5F9] pb-2">
+                        <span className="text-[#69778D]">ACL Scope</span>
+                        <span className="px-2 py-0.5 rounded bg-amber-50 text-amber-900 border border-amber-200 text-[10px] font-semibold">
+                          {selectedEvidence.acl_scope || "project_members"}
+                        </span>
+                      </div>
+
+                      <div className="flex items-center justify-between gap-2 border-b border-[#F1F5F9] pb-2">
+                        <span className="text-[#69778D]">Encryption at Rest</span>
+                        <span className="text-[#25334B] text-[10.5px]">AES-256-GCM Envelope Encryption</span>
+                      </div>
+
+                      <div className="flex items-start justify-between gap-2">
+                        <span className="text-[#69778D] shrink-0 mt-0.5">SHA-256 Hash</span>
+                        <div className="flex items-center gap-1 text-[#25334B] text-[10px] break-all">
+                          <span className="max-w-[230px]">{selectedEvidence.content_hash}</span>
+                          <button
+                            type="button"
+                            onClick={() => copyHash(selectedEvidence.content_hash)}
+                            className="p-0.5 text-[#69778D] hover:text-[#25334B] shrink-0"
+                            title="Copy SHA-256 Hash"
+                          >
+                            {copiedHash ? <Check className="w-3 h-3 text-emerald-600" /> : <Copy className="w-3 h-3" />}
+                          </button>
+                        </div>
+                      </div>
+                    </div>
+                  </div>
+
+                  {/* Vector Store & Retrieval Metadata */}
+                  <div className="rounded-xl border border-[#DCE3EB] bg-white overflow-hidden shadow-2xs">
+                    <div className="px-3.5 py-2 bg-[#F8FAFC] border-b border-[#E2E8F0] font-semibold text-[#25334B] flex items-center gap-1.5 text-[11px] uppercase tracking-wide">
+                      <Database className="w-3.5 h-3.5 text-[#315FBA]" />
+                      <span>Vector Store &amp; Retrieval Metadata</span>
+                    </div>
+                    <div className="p-3.5 space-y-2.5 font-mono text-[11px]">
+                      <div className="flex items-center justify-between gap-2 border-b border-[#F1F5F9] pb-2">
+                        <span className="text-[#69778D]">Indexing Status</span>
+                        <span className={`px-2 py-0.5 rounded text-[10px] font-semibold ${
+                          selectedEvidence.indexing_status === "indexed"
+                            ? "bg-emerald-50 text-emerald-700 border border-emerald-200"
+                            : selectedEvidence.indexing_status === "in_progress"
+                            ? "bg-blue-50 text-blue-700 border border-blue-200"
+                            : "bg-slate-100 text-slate-700 border border-slate-200"
+                        }`}>
+                          {selectedEvidence.indexing_status}
+                        </span>
+                      </div>
+
+                      <div className="flex items-center justify-between gap-2 border-b border-[#F1F5F9] pb-2">
+                        <span className="text-[#69778D]">Extracted Chunks</span>
+                        <span className="font-semibold text-[#203653]">
+                          {selectedEvidence.chunks?.length || 0} chunks
+                        </span>
+                      </div>
+
+                      <div className="flex items-center justify-between gap-2">
+                        <span className="text-[#69778D]">Embedding Model</span>
+                        <span className="text-[#25334B]">{selectedEvidence.embedding_model || "nomic-embed-text (768-dim)"}</span>
+                      </div>
+                    </div>
+                  </div>
+
+                  {/* Lifecycle Timestamps */}
+                  <div className="rounded-xl border border-[#DCE3EB] bg-white overflow-hidden shadow-2xs">
+                    <div className="px-3.5 py-2 bg-[#F8FAFC] border-b border-[#E2E8F0] font-semibold text-[#25334B] flex items-center gap-1.5 text-[11px] uppercase tracking-wide">
+                      <Clock className="w-3.5 h-3.5 text-[#69778D]" />
+                      <span>Lifecycle Timestamps</span>
+                    </div>
+                    <div className="p-3.5 space-y-2 font-mono text-[11px]">
+                      <div className="flex items-center justify-between gap-2 border-b border-[#F1F5F9] pb-1.5">
+                        <span className="text-[#69778D]">Ingested At</span>
+                        <span className="text-[#25334B]">{new Date(selectedEvidence.created_at).toLocaleString()}</span>
+                      </div>
+                      {selectedEvidence.source_created_at && (
+                        <div className="flex items-center justify-between gap-2 border-b border-[#F1F5F9] pb-1.5">
+                          <span className="text-[#69778D]">Source Created</span>
+                          <span className="text-[#25334B]">{new Date(selectedEvidence.source_created_at).toLocaleString()}</span>
+                        </div>
+                      )}
+                      {selectedEvidence.extracted_at && (
+                        <div className="flex items-center justify-between gap-2">
+                          <span className="text-[#69778D]">Extracted At</span>
+                          <span className="text-[#25334B]">{new Date(selectedEvidence.extracted_at).toLocaleString()}</span>
+                        </div>
+                      )}
+                    </div>
+                  </div>
+
+                  {/* Additional Metadata JSON attributes */}
+                  {selectedEvidence.metadata_json && Object.keys(selectedEvidence.metadata_json).length > 0 && (
+                    <div className="rounded-xl border border-[#DCE3EB] bg-white overflow-hidden shadow-2xs">
+                      <div className="px-3.5 py-2 bg-[#F8FAFC] border-b border-[#E2E8F0] font-semibold text-[#25334B] flex items-center gap-1.5 text-[11px] uppercase tracking-wide">
+                        <Layers className="w-3.5 h-3.5 text-[#69778D]" />
+                        <span>Connector Attributes</span>
+                      </div>
+                      <div className="p-3.5 space-y-2 font-mono text-[11px]">
+                        {Object.entries(selectedEvidence.metadata_json).map(([k, v]) => (
+                          <div key={k} className="flex items-center justify-between gap-2 border-b border-[#F1F5F9] pb-1.5 last:border-0 last:pb-0">
+                            <span className="text-[#69778D]">{k}</span>
+                            <span className="text-[#25334B] truncate max-w-[220px]">
+                              {typeof v === "object" ? JSON.stringify(v) : String(v)}
+                            </span>
+                          </div>
+                        ))}
+                      </div>
                     </div>
                   )}
                 </div>
