@@ -15,7 +15,7 @@ import { useFigmaStore as useStore, FigmaStoreProvider, FigmaCtx } from '../../l
 import { useLiveApp } from '../../context/LiveAppContext'
 import {
   evidence, personById, SOURCE_META,
-  type Evidence, type Source, type SourceType
+  type Evidence, type Source, type SourceType, type Verification
 } from '../../lib/figmaStore'
 
 import {
@@ -645,6 +645,7 @@ export function EvidenceLibrary({ projectId }: { projectId: string }) {
   const s = useStore()
   const p = useProject(projectId)
   const router = useRouter()
+  const { evidenceList, setIsUploadModalOpen } = useLiveApp()
   const loading = useFakeLoading(450, [projectId])
   const [layoutMode, setLayoutMode] = useState<'threepanel' | 'table'>('threepanel')
   const [q, setQ] = useState('')
@@ -658,9 +659,40 @@ export function EvidenceLibrary({ projectId }: { projectId: string }) {
   const [upload, setUpload] = useState(false)
   const [activeDetailTab, setActiveDetailTab] = useState<'content' | 'facts' | 'findings'>('content')
 
+  const liveItems: Evidence[] = useMemo(() => {
+    return (evidenceList || []).map((e) => {
+      let type: Evidence['type'] = 'pdf'
+      if (e.provider === 'github') type = 'commit'
+      else if (e.provider === 'jira') type = 'issue'
+      else if (e.provider === 'slack') type = 'message'
+      else if (e.source_type?.toLowerCase().includes('doc')) type = 'docx'
+
+      let verification: Verification = 'needs_review'
+      if (e.indexing_status === 'indexed') verification = 'verified'
+      else if (e.indexing_status === 'failed') verification = 'rejected'
+
+      return {
+        id: e.id,
+        projectId: e.project_id || p?.id || '',
+        type,
+        title: e.title || 'Evidence Record',
+        sourceId: e.provider || 'docs',
+        authorId: e.author_name || 'system',
+        date: e.source_created_at ? e.source_created_at.split('T')[0]! : 'Today',
+        memberId: 'user',
+        processing: e.indexing_status === 'indexed' ? 'processed' : e.indexing_status === 'failed' ? 'failed' : 'processing',
+        verification,
+        ref: e.id.slice(0, 8),
+        content: e.original_filename ? `File: ${e.original_filename}` : 'Decrypted source content available in Evidence Workspace.',
+        extracted: [],
+      }
+    })
+  }, [evidenceList, p?.id])
+
   if (!p) return <ProjectNotFound />
 
-  const all = evidence.filter((e) => e.projectId === p.id)
+  const storeItems = evidence.filter((e) => e.projectId === p.id)
+  const all = storeItems.length > 0 ? storeItems : liveItems
   const cutoff = range === '30' ? '2025-05-19' : range === '90' ? '2025-03-20' : '0'
   const list = all.filter(
     (e) =>
@@ -709,7 +741,7 @@ export function EvidenceLibrary({ projectId }: { projectId: string }) {
               ]}
             />
             {p.role !== 'incoming' && (
-              <Button icon={FileUp} onClick={() => setUpload(true)}>
+              <Button icon={FileUp} onClick={() => setIsUploadModalOpen(true)}>
                 Upload evidence
               </Button>
             )}
@@ -1999,10 +2031,17 @@ function KnowledgePageInner({
   evidenceId,
 }: KnowledgePageProps) {
   const params = useParams() as { id?: string; sourceId?: string; evidenceId?: string } | null
-  const { activeProject } = useLiveApp()
+  const { activeProject, projects } = useLiveApp()
   const s = useStore()
 
-  const pid = projectId || params?.id || activeProject?.id || s.currentProject?.id || 'atlas'
+  const pid =
+    projectId ||
+    params?.id ||
+    activeProject?.id ||
+    s.currentProject?.id ||
+    (projects.length > 0 ? projects[0]?.id : undefined) ||
+    (s.projects.length > 0 ? s.projects[0]?.id : undefined) ||
+    ''
   const sid = sourceId || params?.sourceId || 'src-github-atlas'
   const eid = evidenceId || params?.evidenceId || 'e-settle-adr'
 

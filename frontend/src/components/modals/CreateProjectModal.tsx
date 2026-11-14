@@ -1,11 +1,13 @@
 "use client";
 
 import React from "react";
+import { useRouter } from "next/navigation";
 import { X } from "lucide-react";
 import { useLiveApp } from "../../context/LiveAppContext";
 import { ProjectCreationWizard } from "../project-workspace/ProjectCreationWizard";
 
 export function CreateProjectModal() {
+  const router = useRouter();
   const { isCreateProjectModalOpen, setIsCreateProjectModalOpen } = useLiveApp();
 
   if (!isCreateProjectModalOpen) return null;
@@ -27,7 +29,12 @@ export function CreateProjectModal() {
         <div className="p-6 sm:p-8 overflow-y-auto">
           <ProjectCreationWizard
             isModal={true}
-            onSuccess={() => setIsCreateProjectModalOpen(false)}
+            onSuccess={(newProj) => {
+              setIsCreateProjectModalOpen(false);
+              if (newProj?.id) {
+                router.push(`/projects/${newProj.id}/evidence`);
+              }
+            }}
             onCancel={() => setIsCreateProjectModalOpen(false)}
           />
         </div>

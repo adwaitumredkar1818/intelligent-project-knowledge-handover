@@ -3,6 +3,7 @@
 import { useEffect, useState, type ReactNode } from 'react'
 import { AlertOctagon, AlertTriangle, ArrowRight, ExternalLink, Flag, Lock, MessageSquare, Send, ShieldCheck, Sparkles, Link2 } from 'lucide-react'
 import { useFigmaStore } from '../../lib/figmaStore'
+import { useLiveApp } from '../../context/LiveAppContext'
 import {
   decisions, dependencies, evidence, personById, risks, tasks, ROLE_LABEL, ME,
   type FindingBase, type Verification, type Project, type Handover,
@@ -30,11 +31,133 @@ function navigate(to: string) {
 
 export function useProject(projectId?: string) {
   const s = useFigmaStore()
-  const project = s.projects.find((p) => p.id === projectId)
+  const { activeProject, projects: liveProjects } = useLiveApp()
+
+  // 1. If explicit projectId matches activeProject from LiveAppContext
+  if (activeProject && (!projectId || activeProject.id === projectId || activeProject.name.toLowerCase() === projectId.toLowerCase())) {
+    const existing = s.projects.find((p) => p.id === activeProject.id)
+    if (existing) return existing
+    return {
+      id: activeProject.id,
+      workspaceId: activeProject.organisation_id || 'sandbox',
+      name: activeProject.name,
+      code: activeProject.name.slice(0, 4).toUpperCase(),
+      description: activeProject.description || 'Project managed in The Handover',
+      category: 'General',
+      status: 'active',
+      health: 92,
+      ownerId: 'user',
+      role: 'manager',
+      lastActivity: 'Just now',
+      coverage: 85,
+      startDate: '2026-01-01',
+      endDate: '2026-12-31',
+      color: '#315FBA',
+    } as Project
+  }
+
+  // 2. Try exact ID match in s.projects
+  let project = projectId ? s.projects.find((p) => p.id === projectId) : undefined
+
+  // 3. Try slug / name / code match in s.projects
+  if (!project && projectId && projectId !== 'atlas' && projectId !== 'all') {
+    const norm = projectId.toLowerCase().replace(/[^a-z0-9]/g, '')
+    project = s.projects.find(
+      (p) =>
+        p.id.toLowerCase() === projectId.toLowerCase() ||
+        p.name.toLowerCase().replace(/[^a-z0-9]/g, '') === norm ||
+        p.code.toLowerCase() === norm
+    )
+  }
+
+  // 4. Try match in liveProjects
+  if (!project && projectId && projectId !== 'atlas' && projectId !== 'all') {
+    const norm = projectId.toLowerCase().replace(/[^a-z0-9]/g, '')
+    const liveMatch = liveProjects.find(
+      (p) =>
+        p.id.toLowerCase() === projectId.toLowerCase() ||
+        p.name.toLowerCase().replace(/[^a-z0-9]/g, '') === norm
+    )
+    if (liveMatch) {
+      project = s.projects.find((p) => p.id === liveMatch.id) || {
+        id: liveMatch.id,
+        workspaceId: liveMatch.organisation_id || 'sandbox',
+        name: liveMatch.name,
+        code: liveMatch.name.slice(0, 4).toUpperCase(),
+        description: liveMatch.description || 'Project managed in The Handover',
+        category: 'General',
+        status: 'active',
+        health: 92,
+        ownerId: 'user',
+        role: 'manager',
+        lastActivity: 'Just now',
+        coverage: 85,
+        startDate: '2026-01-01',
+        endDate: '2026-12-31',
+        color: '#315FBA',
+      } as Project
+    }
+  }
+
+  // 5. Fallback to activeProject from live context
+  if (!project && activeProject) {
+    project = s.projects.find((p) => p.id === activeProject.id) || {
+      id: activeProject.id,
+      workspaceId: activeProject.organisation_id || 'sandbox',
+      name: activeProject.name,
+      code: activeProject.name.slice(0, 4).toUpperCase(),
+      description: activeProject.description || 'Project managed in The Handover',
+      category: 'General',
+      status: 'active',
+      health: 92,
+      ownerId: 'user',
+      role: 'manager',
+      lastActivity: 'Just now',
+      coverage: 85,
+      startDate: '2026-01-01',
+      endDate: '2026-12-31',
+      color: '#315FBA',
+    } as Project
+  }
+
+  // 6. Fallback to current project in store
+  if (!project && s.currentProject) {
+    project = s.currentProject
+  }
+
+  // 7. Fallback to first project in store or liveProjects
+  if (!project) {
+    if (s.projects.length > 0) {
+      project = s.projects[0]
+    } else if (liveProjects.length > 0 && liveProjects[0]) {
+      const p0 = liveProjects[0]
+      project = {
+        id: p0.id,
+        workspaceId: p0.organisation_id || 'sandbox',
+        name: p0.name,
+        code: p0.name.slice(0, 4).toUpperCase(),
+        description: p0.description || 'Project managed in The Handover',
+        category: 'General',
+        status: 'active',
+        health: 92,
+        ownerId: 'user',
+        role: 'manager',
+        lastActivity: 'Just now',
+        coverage: 85,
+        startDate: '2026-01-01',
+        endDate: '2026-12-31',
+        color: '#315FBA',
+      } as Project
+    }
+  }
+
   useEffect(() => {
-    if (project && s.currentProject?.id !== project.id) s.switchProject(project.id, true)
+    if (project && s.currentProject?.id !== project.id) {
+      s.switchProject(project.id, true)
+    }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [project?.id])
+
   return project
 }
 

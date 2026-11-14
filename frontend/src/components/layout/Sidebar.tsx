@@ -378,7 +378,7 @@ function SidebarContent({
   onOpenSearch?: () => void;
 }) {
   const pathname = usePathname();
-  const { activeProject, user, members, logout } = useLiveApp();
+  const { projects, activeProject, user, members, logout } = useLiveApp();
 
   const [mounted, setMounted] = React.useState(false);
   React.useEffect(() => {
@@ -427,6 +427,8 @@ function SidebarContent({
           label: "Evidence Center",
           to: activeProject
             ? `/projects/${activeProject.id}/evidence`
+            : projects.length > 0 && projects[0]
+            ? `/projects/${projects[0].id}/evidence`
             : "/evidence",
           icon: FileSearch,
           match: "^/projects/.+/evidence|^/evidence",
@@ -435,6 +437,8 @@ function SidebarContent({
           label: "Knowledge Intelligence",
           to: activeProject
             ? `/projects/${activeProject.id}/knowledge`
+            : projects.length > 0 && projects[0]
+            ? `/projects/${projects[0].id}/knowledge`
             : "/knowledge",
           icon: BrainCircuit,
           match: "^/projects/.+/knowledge|^/knowledge",
