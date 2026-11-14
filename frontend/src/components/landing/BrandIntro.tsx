@@ -41,17 +41,7 @@ const BRAND_PALETTE = [
 ];
 
 export function BrandIntro() {
-  const [stage, setStage] = useState<IntroStage>(() => {
-    if (typeof window === "undefined") return "intro";
-    const params = new URLSearchParams(window.location.search);
-    if (params.get("replay") === "1" || params.get("intro") === "1") return "intro";
-    // In strict production, skip if already seen in this session
-    if (process.env.NODE_ENV === "production") {
-      const seen = sessionStorage.getItem("handover_intro_seen") === "1";
-      if (seen) return "complete";
-    }
-    return "intro";
-  });
+  const [stage, setStage] = useState<IntroStage>("intro");
 
   const [reducedMotion, setReducedMotion] = useState(false);
   const [showDevReplay, setShowDevReplay] = useState(false);

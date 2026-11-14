@@ -76,10 +76,15 @@ const scrollToSection = (id: string) => {
 export function LandingNav() {
   const { user } = useLiveApp();
   const router = useRouter();
+  const [mounted, setMounted] = useState(false);
   const [scrolled, setScrolled] = useState(false);
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
   const [productOpen, setProductOpen] = useState(false);
   const [solutionsOpen, setSolutionsOpen] = useState(false);
+
+  useEffect(() => {
+    setMounted(true);
+  }, []);
 
   useEffect(() => {
     const handleScroll = () => {
@@ -252,7 +257,7 @@ export function LandingNav() {
 
         {/* Action CTAs */}
         <div className="ml-auto hidden items-center gap-2.5 lg:ml-0 lg:flex">
-          {user ? (
+          {mounted && user ? (
             <button
               onClick={() => router.push("/overview")}
               className="inline-flex h-10 items-center gap-1.5 rounded-[10px] bg-[#315FBA] px-4 text-[14.5px] font-semibold text-white shadow-xs transition hover:bg-[#203653] cursor-pointer"
@@ -351,7 +356,7 @@ export function LandingNav() {
             </div>
 
             <div className="mt-auto pt-6 border-t border-[#D9E1F0] space-y-2.5">
-              {user ? (
+              {mounted && user ? (
                 <button
                   onClick={() => {
                     setMobileMenuOpen(false);

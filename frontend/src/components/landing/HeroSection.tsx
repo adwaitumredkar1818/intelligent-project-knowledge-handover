@@ -1,6 +1,6 @@
 "use client";
 
-import React from "react";
+import React, { useState, useEffect } from "react";
 import { ArrowDown, ArrowRight, Plug, ShieldCheck } from "lucide-react";
 import { OrganicScene } from "../brand/OrganicScene";
 import { useLiveApp } from "../../context/LiveAppContext";
@@ -9,6 +9,11 @@ import { useRouter } from "next/navigation";
 export function HeroSection() {
   const { user } = useLiveApp();
   const router = useRouter();
+  const [mounted, setMounted] = useState(false);
+
+  useEffect(() => {
+    setMounted(true);
+  }, []);
 
   const handleGetStarted = () => {
     if (user) {
@@ -82,7 +87,7 @@ export function HeroSection() {
               onClick={handleGetStarted}
               className="group inline-flex h-12 items-center gap-2 rounded-[10px] bg-[#203653] px-6 text-[15px] font-semibold text-white shadow-[0_1px_0_rgba(255,255,255,0.1)_inset,0_8px_20px_-8px_rgba(32,54,83,0.5)] transition-all duration-200 hover:bg-[#2a4467] active:scale-[0.98] cursor-pointer"
             >
-              <span>{user ? "Go to Workspace" : "Get started"}</span>
+              <span>{mounted && user ? "Go to Workspace" : "Get started"}</span>
               <ArrowRight className="size-4 transition-transform duration-200 group-hover:translate-x-0.5" />
             </button>
 
