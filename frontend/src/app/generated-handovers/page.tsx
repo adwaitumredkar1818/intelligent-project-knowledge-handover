@@ -1,7 +1,8 @@
-"use client";
+'use client'
 
-import { Phase2ModuleView } from "../../components/views/Phase2ModuleView";
+import React from 'react'
+import { HandoversPage } from '../../components/figma-pages/HandoversPage'
 
-export default function GeneratedHandoversPage() {
-  return <Phase2ModuleView moduleKey="generated-handovers" />;
+export default function GeneratedHandoversRoute() {
+  return <HandoversPage view="generated" />
 }

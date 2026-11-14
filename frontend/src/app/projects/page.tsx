@@ -1,7 +1,7 @@
 "use client";
 
-import { ProjectsView } from "../../components/views/ProjectsView";
+import { ProjectsPage } from "../../components/figma-pages/ProjectsPage";
 
-export default function ProjectsPage() {
-  return <ProjectsView />;
+export default function Page() {
+  return <ProjectsPage view="list" />;
 }

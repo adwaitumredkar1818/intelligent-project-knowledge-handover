@@ -1,15 +1,10 @@
-import { Suspense } from "react";
-import { LoginPage } from "../../components/auth/LoginPage";
+import { AuthPage } from '../../components/figma-pages/AuthPage'
 
 export const metadata = {
-  title: "Sign In · The Handover",
-  description: "Sign in to your Handover project knowledge workspace.",
-};
+  title: 'Sign In · The Handover',
+  description: 'Sign in to your Handover project knowledge workspace.',
+}
 
-export default function Page() {
-  return (
-    <Suspense fallback={<div className="min-h-screen bg-white" />}>
-      <LoginPage />
-    </Suspense>
-  );
+export default function LoginRoute() {
+  return <AuthPage view="login" />
 }

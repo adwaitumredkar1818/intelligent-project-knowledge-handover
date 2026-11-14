@@ -1,15 +1,10 @@
-import { Suspense } from "react";
-import { ForgotPasswordPage } from "../../components/auth/ForgotPasswordPage";
+import { AuthPage } from '../../components/figma-pages/AuthPage'
 
 export const metadata = {
-  title: "Reset Password · The Handover",
-  description: "Reset your Handover workspace password.",
-};
+  title: 'Reset Password · The Handover',
+  description: 'Reset your Handover workspace password.',
+}
 
-export default function Page() {
-  return (
-    <Suspense fallback={<div className="min-h-screen bg-white" />}>
-      <ForgotPasswordPage />
-    </Suspense>
-  );
+export default function ForgotPasswordRoute() {
+  return <AuthPage view="forgot-password" />
 }

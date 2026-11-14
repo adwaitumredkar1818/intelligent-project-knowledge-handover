@@ -1,7 +1,8 @@
-"use client";
+'use client'
 
-import { EvidenceCenterView } from "../../components/views/EvidenceCenterView";
+import React from 'react'
+import { KnowledgePage } from '../../components/figma-pages/KnowledgePage'
 
-export default function EvidencePage() {
-  return <EvidenceCenterView />;
+export default function EvidenceRoute() {
+  return <KnowledgePage view="evidence" />
 }

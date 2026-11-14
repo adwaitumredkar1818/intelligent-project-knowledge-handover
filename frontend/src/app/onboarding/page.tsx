@@ -1,15 +1,10 @@
-import { Suspense } from "react";
-import { OnboardingPage } from "../../components/auth/OnboardingPage";
+import { AuthPage } from '../../components/figma-pages/AuthPage'
 
 export const metadata = {
-  title: "Get Started · Handover Onboarding",
-  description: "Set up your profile, workspace, and experience Handover knowledge reconstruction.",
-};
+  title: 'Get Started · Handover Onboarding',
+  description: 'Set up your profile, workspace, and experience Handover knowledge reconstruction.',
+}
 
-export default function Page() {
-  return (
-    <Suspense fallback={<div className="min-h-screen bg-[#F6F8FC]" />}>
-      <OnboardingPage />
-    </Suspense>
-  );
+export default function OnboardingRoute() {
+  return <AuthPage view="onboarding" />
 }

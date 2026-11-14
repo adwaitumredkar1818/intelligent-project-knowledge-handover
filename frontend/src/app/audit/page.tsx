@@ -1,7 +1,10 @@
-"use client";
+import { AdminPage } from '../../components/figma-pages/AdminPage'
 
-import { Phase2ModuleView } from "../../components/views/Phase2ModuleView";
+export const metadata = {
+  title: 'Audit Logs · The Handover',
+  description: 'Immutable record of access, verification, publication and configuration changes.',
+}
 
-export default function AuditPage() {
-  return <Phase2ModuleView moduleKey="audit" />;
+export default function AuditRoute() {
+  return <AdminPage view="audit" />
 }

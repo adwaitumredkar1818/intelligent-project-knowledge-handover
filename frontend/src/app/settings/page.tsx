@@ -1,7 +1,10 @@
-"use client";
+import { AdminPage } from '../../components/figma-pages/AdminPage'
 
-import { Phase2ModuleView } from "../../components/views/Phase2ModuleView";
+export const metadata = {
+  title: 'Settings · The Handover',
+  description: 'Workspace-wide configuration, AI, retention, privacy and permissions.',
+}
 
-export default function SettingsPage() {
-  return <Phase2ModuleView moduleKey="settings" />;
+export default function SettingsRoute() {
+  return <AdminPage view="settings" />
 }

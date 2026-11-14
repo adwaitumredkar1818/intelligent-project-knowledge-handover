@@ -1,7 +1,8 @@
-"use client";
+'use client'
 
-import { Phase2ModuleView } from "../../components/views/Phase2ModuleView";
+import React from 'react'
+import { IntelligencePage } from '../../components/figma-pages/IntelligencePage'
 
-export default function RelationshipsPage() {
-  return <Phase2ModuleView moduleKey="relationships" />;
+export default function RelationshipsRoute() {
+  return <IntelligencePage view="relationships" />
 }
