@@ -370,8 +370,9 @@ export function EvidenceCenterView() {
                 </span>
                 <span>Evidence Library</span>
               </div>
-              <span className="text-[11px] text-[#69778D] font-medium">
-                {filteredEvidenceList.length} items
+              <span className="text-[11px] text-[#69778D] font-medium flex items-center gap-1.5">
+                {isLoadingEvidence && <RefreshCw className="w-3 h-3 animate-spin text-[#4774A9]" />}
+                <span>{filteredEvidenceList.length} items</span>
               </span>
             </div>
 
@@ -408,7 +409,7 @@ export function EvidenceCenterView() {
 
           {/* Evidence List */}
           <div className="flex-1 overflow-y-auto divide-y divide-[#DCE3EB]">
-            {isLoadingEvidence ? (
+            {isLoadingEvidence && evidenceList.length === 0 ? (
               <div className="p-8 text-center text-xs text-[#69778D]">
                 <RefreshCw className="w-6 h-6 animate-spin mx-auto mb-2 text-[#4774A9]" />
                 <span>Loading evidence items...</span>

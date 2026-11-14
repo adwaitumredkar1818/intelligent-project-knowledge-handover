@@ -143,12 +143,19 @@ export function FigmaLiveBridge() {
 
   // 4. Sync Sources into store.setSources
   useEffect(() => {
-    if (sourceMappings && activeProject) {
-      const syncKey = `${activeProject.id}:` + sourceMappings.map((sm) => `${sm.id}:${sm.status}:${sm.last_synced_at}`).join('|')
+    if (activeProject) {
+      const syncKey = `${activeProject.id}:${sourceMappings?.length || 0}:${evidenceList?.length || 0}:` +
+        (sourceMappings || []).map((sm) => `${sm.id}:${sm.status}:${sm.last_synced_at}`).join('|')
       if (syncKey !== lastSourcesSyncRef.current) {
         lastSourcesSyncRef.current = syncKey
-        const mapped: Source[] = sourceMappings.map((sm) => {
+        const mapped: Source[] = (sourceMappings || []).map((sm) => {
           const type = (sm.provider || 'docs') as SourceType
+          const recordsCount = (evidenceList || []).filter(
+            (e) => (e.provider || '').toLowerCase() === (sm.provider || '').toLowerCase() ||
+                   (e.source_type || '').toLowerCase() === (sm.provider || '').toLowerCase() ||
+                   (e.source_provider || '').toLowerCase() === (sm.provider || '').toLowerCase()
+          ).length
+
           return {
             id: sm.id,
             projectId: activeProject.id,
@@ -156,17 +163,49 @@ export function FigmaLiveBridge() {
             name: sm.external_resource_name || sm.provider,
             account: sm.external_resource_key || 'authorized',
             status: sm.status === 'failed' ? 'error' : sm.status === 'syncing' ? 'syncing' : 'connected',
-            lastSync: sm.last_synced_at ? new Date(sm.last_synced_at).toLocaleTimeString() : 'Never',
-            records: 0,
+            lastSync: sm.last_synced_at ? new Date(sm.last_synced_at).toLocaleTimeString() : 'Recent',
+            records: recordsCount,
             scope: [sm.resource_type || 'repository'],
             frequency: 'Real-time / Webhook',
             volume: 'Normal',
           }
         })
+
+        // Check for uploaded documents in evidenceList
+        const uploadedDocs = (evidenceList || []).filter((e) => {
+          const cat = (e.category || '').toLowerCase()
+          const prov = (e.provider || '').toLowerCase()
+          const st = (e.source_type || '').toLowerCase()
+          const sp = (e.source_provider || '').toLowerCase()
+          return (
+            cat.includes('pdf') ||
+            cat.includes('docx') ||
+            prov.includes('upload') ||
+            st.includes('upload') ||
+            sp.includes('upload')
+          )
+        })
+
+        if (uploadedDocs.length > 0) {
+          mapped.push({
+            id: `docs-${activeProject.id}`,
+            projectId: activeProject.id,
+            type: 'docs',
+            name: 'Uploaded Specifications & Runbooks',
+            account: `${uploadedDocs.length} documents`,
+            status: 'connected',
+            lastSync: 'OCR processed',
+            records: uploadedDocs.length,
+            scope: ['PDF & DOCX Architecture specs', 'Runbooks'],
+            frequency: 'On-demand upload',
+            volume: `${uploadedDocs.length} files`,
+          })
+        }
+
         setSources(mapped)
       }
     }
-  }, [sourceMappings, activeProject?.id, setSources])
+  }, [sourceMappings, evidenceList, activeProject?.id, setSources])
 
   // 5. Sync Evidence into global `evidence` array in figmaStore
   useEffect(() => {

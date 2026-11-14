@@ -511,7 +511,13 @@ export const api = {
       const res = await request<unknown>(`/organisations/${orgId}/sources`);
       return unwrapList<SourceConnection>(res);
     },
-    async connectSource(orgId: string, data: { provider: "github" | "jira"; access_token: string; account_identifier: string; granted_scopes?: string[] }): Promise<SourceConnection> {
+    async connectSource(orgId: string, data: { provider: "github" | "jira" | "slack"; access_token: string; account_identifier: string; granted_scopes?: string[] }): Promise<SourceConnection> {
+      const defaultScopes =
+        data.provider === "github"
+          ? ["repo", "read:org"]
+          : data.provider === "slack"
+          ? ["channels:read", "channels:history"]
+          : ["read:jira-work"];
       return request<SourceConnection>(`/organisations/${orgId}/sources`, {
         method: "POST",
         body: JSON.stringify({
@@ -519,7 +525,7 @@ export const api = {
           account_identifier: data.account_identifier.trim(),
           secret_token: data.access_token.trim(),
           access_token: data.access_token.trim(),
-          scopes: data.granted_scopes || (data.provider === "github" ? ["repo", "read:org"] : ["read:jira-work"]),
+          scopes: data.granted_scopes || defaultScopes,
         }),
       });
     },

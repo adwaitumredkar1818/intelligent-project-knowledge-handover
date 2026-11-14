@@ -291,6 +291,7 @@ export function DataSources({ projectId }: { projectId: string }) {
   const p = useProject(projectId)
   const router = useRouter()
   const [connecting, setConnecting] = useState<SourceType | null>(null)
+  const { openConnectSourceModal, setIsUploadModalOpen, sourceMappings, triggerSync } = useLiveApp()
 
   if (!p) return <ProjectNotFound />
   const canManage = p.role === 'manager'
@@ -360,16 +361,50 @@ export function DataSources({ projectId }: { projectId: string }) {
               )}
               <div className="mt-4 flex gap-2">
                 {connected ? (
-                  <Button variant="secondary" className="flex-1" onClick={() => router.push(`/projects/${p.id}/sources/${src.id}`)}>
-                    Manage
+                  <Button
+                    variant="secondary"
+                    className="flex-1"
+                    onClick={() => {
+                      if (t === 'docs') {
+                        router.push(`/projects/${p.id}/evidence?provider=upload`)
+                      } else {
+                        const map = sourceMappings.find((m) => m.provider === t || m.id === src?.id)
+                        if (map) {
+                          void triggerSync(map.id)
+                        } else {
+                          router.push(`/projects/${p.id}/evidence?provider=${t}`)
+                        }
+                      }
+                    }}
+                  >
+                    {t === 'docs' ? 'View Evidence' : 'Sync Now'}
                   </Button>
                 ) : (
-                  <Button className="flex-1" icon={t === 'docs' ? Upload : Plug} disabled={!canManage} onClick={() => setConnecting(t)}>
+                  <Button
+                    className="flex-1"
+                    icon={t === 'docs' ? Upload : Plug}
+                    disabled={!canManage}
+                    onClick={() => {
+                      if (t === 'docs') {
+                        setIsUploadModalOpen(true)
+                      } else if (t === 'github') {
+                        openConnectSourceModal('github')
+                      } else if (t === 'jira') {
+                        openConnectSourceModal('jira')
+                      } else if (t === 'slack') {
+                        openConnectSourceModal('slack')
+                      } else if (t === 'confluence') {
+                        openConnectSourceModal('jira')
+                      } else if (t === 'gdrive') {
+                        setIsUploadModalOpen(true)
+                      }
+                    }}
+                  >
                     {t === 'docs' ? 'Upload files' : 'Connect'}
                   </Button>
                 )}
                 {connected && t === 'docs' && canManage && (
-                  <Button variant="subtle" icon={Upload} onClick={() => setConnecting(t)}>
+                  <Button variant="subtle" icon={Upload} onClick={() => setIsUploadModalOpen(true)}>
                     Upload
                   </Button>
                 )}

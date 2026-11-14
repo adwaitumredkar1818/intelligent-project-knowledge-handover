@@ -77,7 +77,7 @@ interface LiveAppContextType {
   sourceMappings: ProjectSourceMapping[];
   orgConnections: SourceConnection[];
   isLoadingSources: boolean;
-  connectSource: (provider: "github" | "jira", token: string, accountId: string) => Promise<SourceConnection>;
+  connectSource: (provider: "github" | "jira" | "slack", token: string, accountId: string) => Promise<SourceConnection>;
   createMapping: (data: { source_connection_id: string; external_resource_key: string; external_resource_name: string; external_resource_url?: string }) => Promise<ProjectSourceMapping>;
   triggerSync: (mappingId: string) => Promise<void>;
   refreshSources: () => Promise<void>;
@@ -130,6 +130,9 @@ interface LiveAppContextType {
   setIsCreateProjectModalOpen: (open: boolean) => void;
   isAddSourceModalOpen: boolean;
   setIsAddSourceModalOpen: (open: boolean) => void;
+  initialSourceProvider: "github" | "jira" | "slack";
+  setInitialSourceProvider: (provider: "github" | "jira" | "slack") => void;
+  openConnectSourceModal: (provider?: "github" | "jira" | "slack") => void;
   isUploadModalOpen: boolean;
   setIsUploadModalOpen: (open: boolean) => void;
   isAddMemberModalOpen: boolean;
@@ -250,6 +253,11 @@ export function LiveAppProvider({ children }: { children: ReactNode }) {
   const [isCreateOrgModalOpen, setIsCreateOrgModalOpen] = useState(false);
   const [isCreateProjectModalOpen, setIsCreateProjectModalOpen] = useState(false);
   const [isAddSourceModalOpen, setIsAddSourceModalOpen] = useState(false);
+  const [initialSourceProvider, setInitialSourceProvider] = useState<"github" | "jira" | "slack">("github");
+  const openConnectSourceModal = useCallback((prov: "github" | "jira" | "slack" = "github") => {
+    setInitialSourceProvider(prov);
+    setIsAddSourceModalOpen(true);
+  }, []);
   const [isUploadModalOpen, setIsUploadModalOpen] = useState(false);
   const [isAddMemberModalOpen, setIsAddMemberModalOpen] = useState(false);
   const [isMobileSidebarOpen, setIsMobileSidebarOpen] = useState(false);
@@ -535,9 +543,7 @@ export function LiveAppProvider({ children }: { children: ReactNode }) {
     try {
       const [items, metrics] = await Promise.all([
         api.evidence.list(currentProjectId, {
-          q: evidenceFilter.q || undefined,
-          provider: evidenceFilter.provider !== "all" ? evidenceFilter.provider : undefined,
-          limit: 100,
+          limit: 200,
         }),
         api.evidence.getMetrics(currentProjectId),
       ]);
@@ -562,7 +568,7 @@ export function LiveAppProvider({ children }: { children: ReactNode }) {
       setIsLoadingEvidence(false);
       isFetchingEvidenceRef.current = false;
     }
-  }, [user?.id, activeProject?.id, evidenceFilter.provider, evidenceFilter.q]);
+  }, [user?.id, activeProject?.id]);
 
   // Load evidence detail when selectedEvidenceId changes
   useEffect(() => {
@@ -747,19 +753,18 @@ export function LiveAppProvider({ children }: { children: ReactNode }) {
     refreshHandovers,
   ]);
 
-  // Load evidence only when active project or filters change with debouncing for search
+  // Load evidence only when active project changes
   useEffect(() => {
     if (!currentUserId || !activeProjectId) return;
     let active = true;
-    const timer = setTimeout(() => {
+    void Promise.resolve().then(async () => {
       if (!active) return;
-      void refreshEvidence();
-    }, evidenceFilter.q ? 250 : 0);
+      await refreshEvidence();
+    });
     return () => {
       active = false;
-      clearTimeout(timer);
     };
-  }, [currentUserId, activeProjectId, evidenceFilter.provider, evidenceFilter.q, refreshEvidence]);
+  }, [currentUserId, activeProjectId, refreshEvidence]);
 
   // Auth actions
   const login = async (email: string, password: string) => {
@@ -880,7 +885,7 @@ export function LiveAppProvider({ children }: { children: ReactNode }) {
   };
 
   // Source actions
-  const connectSource = async (provider: "github" | "jira", token: string, accountId: string) => {
+  const connectSource = async (provider: "github" | "jira" | "slack", token: string, accountId: string) => {
     if (!activeOrg) throw new Error("No active organisation");
     const conn = await api.sources.connectSource(activeOrg.id, {
       provider,
@@ -1041,6 +1046,9 @@ export function LiveAppProvider({ children }: { children: ReactNode }) {
     setIsCreateProjectModalOpen,
     isAddSourceModalOpen,
     setIsAddSourceModalOpen,
+    initialSourceProvider,
+    setInitialSourceProvider,
+    openConnectSourceModal,
     isUploadModalOpen,
     setIsUploadModalOpen,
     isAddMemberModalOpen,

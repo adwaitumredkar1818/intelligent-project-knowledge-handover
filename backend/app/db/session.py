@@ -34,6 +34,10 @@ def build_db_connect_args(
         connect_args["connect_timeout"] = db_cfg.connect_timeout_seconds
     if "sslmode" not in query_params:
         connect_args["sslmode"] = db_cfg.ssl_mode
+    if "prepare_threshold" not in query_params:
+        # Supabase transaction pooler (port 6543) requires disabling statement preparation
+        if parsed.port == 6543 or "pooler" in (parsed.hostname or ""):
+            connect_args["prepare_threshold"] = None
     return connect_args
 
 
