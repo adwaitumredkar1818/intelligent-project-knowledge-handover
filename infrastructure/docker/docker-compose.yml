@@ -46,6 +46,41 @@ services:
     networks:
       - ipkrh_network
 
+  redis:
+    image: redis:7.2-alpine
+    container_name: ipkrh-redis
+    restart: unless-stopped
+    command: >
+      sh -c '
+        if [ -n "$${REDIS_PASSWORD}" ]; then
+          redis-server --requirepass "$${REDIS_PASSWORD}" --maxmemory $${REDIS_MAX_MEMORY:-256mb} --maxmemory-policy allkeys-lru --save "" --appendonly no
+        else
+          redis-server --maxmemory $${REDIS_MAX_MEMORY:-256mb} --maxmemory-policy allkeys-lru --save "" --appendonly no
+        fi
+      '
+    environment:
+      REDIS_PASSWORD: ${REDIS_PASSWORD:-}
+      REDIS_MAX_MEMORY: ${REDIS_MAX_MEMORY:-256mb}
+    ports:
+      - "127.0.0.1:${REDIS_PORT:-6379}:6379"
+    volumes:
+      - redis_data:/data
+    healthcheck:
+      test: >
+        sh -c '
+          if [ -n "$${REDIS_PASSWORD}" ]; then
+            redis-cli -a "$${REDIS_PASSWORD}" ping | grep PONG
+          else
+            redis-cli ping | grep PONG
+          fi
+        '
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 5s
+    networks:
+      - ipkrh_network
+
 networks:
   ipkrh_network:
     name: ipkrh_network
@@ -56,3 +91,5 @@ volumes:
     name: ipkrh_postgres_data
   chroma_data:
     name: ipkrh_chroma_data
+  redis_data:
+    name: ipkrh_redis_data

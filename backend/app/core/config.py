@@ -392,6 +392,25 @@ class JiraIntegrationSettings(BaseModel):
         return self
 
 
+class RedisSettings(BaseModel):
+    """Centralized Redis connection and caching configuration."""
+
+    model_config = ConfigDict(frozen=True)
+
+    enabled: bool = True
+    url: SecretStr | None = None
+    host: str = "127.0.0.1"
+    port: int = Field(default=6379, ge=1, le=65535)
+    password: SecretStr | None = None
+    db: int = Field(default=0, ge=0, le=15)
+    max_connections: int = Field(default=20, ge=1, le=200)
+    socket_timeout: float = Field(default=2.0, ge=0.1, le=30.0)
+    connect_timeout: float = Field(default=2.0, ge=0.1, le=30.0)
+    cache_prefix: str = "ipkrh:cache:"
+    default_ttl: int = Field(default=300, ge=1, le=86400)
+    max_memory: str = "256mb"
+
+
 class IntegrationsSettings(BaseModel):
     """Grouped configuration for Phase 2.4B GitHub & Jira connectors and sync bounds."""
 
@@ -563,6 +582,20 @@ class Settings(BaseSettings):
     supabase_storage_max_retries: int = Field(default=2, ge=0, le=5)
     supabase_storage_retry_backoff_seconds: float = Field(default=0.5, ge=0.0, le=10.0)
     supabase_storage_verify_ciphertext_size: bool = True
+
+    # Redis Caching Layer (`settings.redis`)
+    redis_enabled: bool = True
+    redis_url: SecretStr | None = None
+    redis_host: str = "127.0.0.1"
+    redis_port: int = Field(default=6379, ge=1, le=65535)
+    redis_password: SecretStr | None = None
+    redis_db: int = Field(default=0, ge=0, le=15)
+    redis_max_connections: int = Field(default=20, ge=1, le=200)
+    redis_socket_timeout: float = Field(default=2.0, ge=0.1, le=30.0)
+    redis_connect_timeout: float = Field(default=2.0, ge=0.1, le=30.0)
+    redis_cache_prefix: str = "ipkrh:cache:"
+    redis_default_ttl: int = Field(default=300, ge=1, le=86400)
+    redis_max_memory: str = "256mb"
 
     @field_validator("storage_provider", mode="before")
     @classmethod
@@ -888,6 +921,24 @@ class Settings(BaseSettings):
             supabase_storage_max_retries=self.supabase_storage_max_retries,
             supabase_storage_retry_backoff_seconds=self.supabase_storage_retry_backoff_seconds,
             supabase_storage_verify_ciphertext_size=self.supabase_storage_verify_ciphertext_size,
+        )
+
+    @cached_property
+    def redis(self) -> RedisSettings:
+        """Centralized Redis connection and caching configuration."""
+        return RedisSettings(
+            enabled=self.redis_enabled,
+            url=self.redis_url,
+            host=self.redis_host.strip(),
+            port=self.redis_port,
+            password=self.redis_password,
+            db=self.redis_db,
+            max_connections=self.redis_max_connections,
+            socket_timeout=self.redis_socket_timeout,
+            connect_timeout=self.redis_connect_timeout,
+            cache_prefix=self.redis_cache_prefix.strip(),
+            default_ttl=self.redis_default_ttl,
+            max_memory=self.redis_max_memory.strip(),
         )
 
     @property

@@ -9,6 +9,7 @@ from dataclasses import dataclass
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 
+from app.core.cache import cache_service
 from app.core.config import Settings
 from app.core.exceptions import (
     BadRequestError,
@@ -496,6 +497,8 @@ class EvidenceService:
 
         self._session.refresh(item)
         self._session.refresh(job)
+        cache_service.invalidate_prefix(f"dash:overview:proj:{project_ctx.project.id}")
+        cache_service.invalidate_prefix(f"search:proj:{project_ctx.project.id}")
         refreshed = self._evidence_repo.get_by_id_detail(item.id) or item
         return UploadDocumentResult(
             payload=DocumentUploadResponse(
@@ -854,6 +857,8 @@ class EvidenceService:
             message="Logically deleted evidence item, purged chunks, and queued vector cleanup.",
         )
         self._session.commit()
+        cache_service.invalidate_prefix(f"dash:overview:proj:{evidence.project_id}")
+        cache_service.invalidate_prefix(f"search:proj:{evidence.project_id}")
 
         if storage_key:
             self._storage.delete_object(storage_object_key=storage_key)

@@ -7,6 +7,7 @@ import uuid
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 
+from app.core.cache import CacheKeys, CachePolicies, cache_service
 from app.core.exceptions import (
     BadRequestError,
     ConflictError,
@@ -623,6 +624,8 @@ class ProjectService:
                 ),
             )
             self._db.commit()
+            cache_service.invalidate_prefix(f"dash:overview:proj:{ctx.project.id}")
+            cache_service.delete(CacheKeys.rbac_user_project_permissions(ctx.project.id, payload.user_id))
         except IntegrityError as exc:
             self._db.rollback()
             raise ConflictError(
@@ -700,6 +703,8 @@ class ProjectService:
             ),
         )
         self._db.commit()
+        cache_service.invalidate_prefix(f"dash:overview:proj:{ctx.project.id}")
+        cache_service.delete(CacheKeys.rbac_user_project_permissions(ctx.project.id, target_user_id))
         refreshed = self._project_repo.get_active_membership(
             project_id=ctx.project.id,
             user_id=target_user_id,
@@ -749,6 +754,8 @@ class ProjectService:
             message=f"Removed user '{target_user_id}' from project '{ctx.project.id}'.",
         )
         self._db.commit()
+        cache_service.invalidate_prefix(f"dash:overview:proj:{ctx.project.id}")
+        cache_service.delete(CacheKeys.rbac_user_project_permissions(ctx.project.id, target_user_id))
         return RemoveMembershipResponse(
             message="Project member removed and project access revoked immediately.",
             user_id=target_user_id,
@@ -820,9 +827,18 @@ class ProjectService:
         return _build_project_transition_response(loaded)
 
     def get_project_overview(self, ctx: ProjectContext) -> ProjectOverviewResponse:
-        """Compile aggregated dashboard metrics for the project workspace."""
+        """Compile aggregated dashboard metrics for the project workspace with multi-layer caching."""
         self._require_active_organisation_and_project(ctx=ctx, allow_archived_project=True)
         project = ctx.project
+
+        cache_key = CacheKeys.dashboard_overview(project.id, ctx.principal.user.id)
+        cached_data = cache_service.get(cache_key)
+        if cached_data is not None:
+            try:
+                return ProjectOverviewResponse.model_validate(cached_data)
+            except Exception:
+                pass
+
         transition = self._project_repo.get_transition(project.id)
         source_metrics = self._project_repo.get_source_metrics(project.id)
         all_evidence = self._project_repo.list_active_evidence_items(project.id)
@@ -959,7 +975,7 @@ class ProjectService:
             for m in members
         ]
 
-        return ProjectOverviewResponse(
+        response = ProjectOverviewResponse(
             project_summary=summary_card,
             connected_sources=sources_card,
             evidence_overview=evidence_card,
@@ -968,6 +984,12 @@ class ProjectService:
             recent_activity=activity_cards,
             team_ownership=ownership_cards,
         )
+        cache_service.set(
+            cache_key,
+            response.model_dump(mode="json"),
+            ttl=CachePolicies.DASHBOARD_STATS,
+        )
+        return response
 
     def get_project_activity(
         self,

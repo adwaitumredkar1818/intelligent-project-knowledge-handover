@@ -14,6 +14,7 @@ import httpx
 from sqlalchemy import Engine
 from sqlalchemy.exc import DBAPIError, OperationalError
 
+from app.core.cache import CacheService, RedisConnectionManager
 from app.core.config import Settings, get_settings
 from app.core.logging import configure_logging
 from app.core.security import utc_now
@@ -231,6 +232,10 @@ def build_worker_service(
     """Assemble isolated engine, storage, encryption, OCR adapter, and composite workers."""
     engine = create_db_engine(settings)
     session_factory = create_session_factory(engine)
+    redis_mgr = RedisConnectionManager(settings)
+    redis_mgr.initialize()
+    cache_service = CacheService(settings, redis_mgr=redis_mgr)
+
     storage = build_storage_backend(settings, http_transport=storage_http_transport)
     ocr_service = OllamaGLMOCRService(
         base_url=settings.ollama.base_url,
@@ -238,6 +243,7 @@ def build_worker_service(
         num_ctx=settings.ollama.ocr_num_ctx,
         num_predict=settings.ollama.ocr_num_predict,
         timeout_seconds=settings.ollama.ocr_timeout_seconds,
+        cache_service=cache_service,
     )
     extraction = DocumentExtractionService(
         ocr_service=ocr_service,
@@ -266,6 +272,7 @@ def build_worker_service(
         batch_size=settings.embedding.batch_size,
         expected_dimensions=settings.embedding.expected_dimensions,
         timeout_seconds=settings.embedding.timeout_seconds,
+        cache_service=cache_service,
     )
     chroma_token = (
         settings.chroma.auth_token.get_secret_value()

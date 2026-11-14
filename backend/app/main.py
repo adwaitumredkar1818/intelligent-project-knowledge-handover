@@ -13,6 +13,7 @@ from fastapi.middleware.cors import CORSMiddleware
 from app import __version__
 from app.api.routes.health import root_health_router
 from app.api.v1.router import api_v1_router
+from app.core.cache import CacheService, RedisConnectionManager
 from app.core.config import Settings, get_settings
 from app.core.exceptions import register_exception_handlers
 from app.core.logging import configure_logging
@@ -32,11 +33,16 @@ def _build_lifespan(
         engine = create_db_engine(settings)
         session_factory = create_session_factory(engine)
         http_client = httpx.AsyncClient()
+        redis_mgr = RedisConnectionManager(settings)
+        redis_mgr.initialize()
+        cache_service = CacheService(settings, redis_mgr=redis_mgr)
 
         app.state.settings = settings
         app.state.db_engine = engine
         app.state.session_factory = session_factory
         app.state.http_client = http_client
+        app.state.redis_manager = redis_mgr
+        app.state.cache_service = cache_service
         if getattr(app.state, "auth_rate_limiter", None) is None:
             app.state.auth_rate_limiter = InMemorySlidingWindowRateLimiter()
 
@@ -54,6 +60,7 @@ def _build_lifespan(
             yield
         finally:
             await http_client.aclose()
+            redis_mgr.close()
             engine.dispose()
             logger.info("Backend application resources disposed cleanly")
 

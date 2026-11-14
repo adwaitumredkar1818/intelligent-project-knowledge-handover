@@ -12,6 +12,8 @@ from typing import Any, Protocol
 
 import httpx
 
+from app.core.cache import CacheKeys, CachePolicies, CacheService
+
 logger = logging.getLogger("app.services.ocr")
 
 # Local single-GPU guardrail: run OCR inference sequentially to prevent overlapping
@@ -90,6 +92,7 @@ class OllamaGLMOCRService:
         num_predict: int = 4096,
         timeout_seconds: float = 120.0,
         http_client: httpx.Client | None = None,
+        cache_service: CacheService | None = None,
     ) -> None:
         self._base_url = base_url.rstrip("/")
         self._model = model.strip()
@@ -97,12 +100,37 @@ class OllamaGLMOCRService:
         self._num_predict = max(256, num_predict)
         self._timeout_seconds = timeout_seconds
         self._http_client = http_client
+        self._cache_service = cache_service
 
     @property
     def model_name(self) -> str:
         return self._model
 
     def extract_page_text(self, request: OCRPageRequest) -> OCRPageResult:
+        import hashlib
+        img_hash = hashlib.sha256(request.image_bytes).hexdigest()
+        cache_key = CacheKeys.ocr_page(
+            content_hash=img_hash,
+            page_number=request.page_number,
+            engine=self._model,
+            preprocess_version="v1",
+        )
+
+        if self._cache_service is not None:
+            cached_data = self._cache_service.get(cache_key)
+            if cached_data is not None and isinstance(cached_data, dict):
+                return OCRPageResult(
+                    page_number=request.page_number,
+                    text=cached_data.get("text", ""),
+                    model_name=self._model,
+                    truncated=cached_data.get("truncated", False),
+                    done_reason="cached",
+                    prompt_eval_count=0,
+                    eval_count=0,
+                    duration_ms=0,
+                    warnings=tuple(cached_data.get("warnings", ())),
+                )
+
         encoded_image = base64.b64encode(request.image_bytes).decode("ascii")
         prompt = (
             "Transcribe all readable text, headings, lists, and table rows from this "
@@ -228,7 +256,7 @@ class OllamaGLMOCRService:
             },
         )
 
-        return OCRPageResult(
+        result = OCRPageResult(
             page_number=request.page_number,
             text=text,
             model_name=self._model,
@@ -239,3 +267,16 @@ class OllamaGLMOCRService:
             duration_ms=elapsed_ms,
             warnings=tuple(warnings),
         )
+
+        if self._cache_service is not None and not truncated:
+            self._cache_service.set(
+                cache_key,
+                {
+                    "text": text,
+                    "truncated": truncated,
+                    "warnings": list(warnings),
+                },
+                policy=CachePolicies.OCR_RESULT,
+            )
+
+        return result

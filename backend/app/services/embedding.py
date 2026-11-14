@@ -10,6 +10,8 @@ from typing import Any, Protocol
 
 import httpx
 
+from app.core.cache import CacheKeys, CachePolicies, CacheService
+
 from app.services.ocr import _OLLAMA_INFERENCE_LOCK
 
 logger = logging.getLogger("app.services.embedding")
@@ -56,6 +58,7 @@ class OllamaEmbeddingService:
         timeout_seconds: float = 60.0,
         http_client: httpx.Client | None = None,
         http_transport: httpx.BaseTransport | None = None,
+        cache_service: CacheService | None = None,
     ) -> None:
         self._base_url = base_url.rstrip("/")
         self._model = model.strip()
@@ -64,6 +67,7 @@ class OllamaEmbeddingService:
         self._timeout_seconds = max(1.0, float(timeout_seconds))
         self._http_client = http_client
         self._http_transport = http_transport
+        self._cache_service = cache_service
 
     @property
     def model_name(self) -> str:
@@ -88,6 +92,8 @@ class OllamaEmbeddingService:
         if not texts:
             return []
 
+        import hashlib
+
         cleaned_inputs: list[str] = []
         for idx, raw in enumerate(texts):
             item = raw.strip()
@@ -99,11 +105,53 @@ class OllamaEmbeddingService:
                 )
             cleaned_inputs.append(item)
 
-        all_vectors: list[list[float]] = []
-        for start in range(0, len(cleaned_inputs), self._batch_size):
-            batch = cleaned_inputs[start : start + self._batch_size]
+        # Chunk-level cache lookup
+        cached_vectors: dict[int, list[float]] = {}
+        missing_indices: list[int] = []
+        missing_texts: list[str] = []
+
+        if self._cache_service is not None:
+            for idx, text in enumerate(cleaned_inputs):
+                chash = hashlib.sha256(text.encode("utf-8")).hexdigest()
+                key = CacheKeys.chunk_embedding(
+                    chunk_hash=chash,
+                    model_name=self._model,
+                    expected_dimensions=self._expected_dimensions,
+                )
+                vec = self._cache_service.get(key)
+                if vec is not None and isinstance(vec, list) and len(vec) == self._expected_dimensions:
+                    cached_vectors[idx] = vec
+                else:
+                    missing_indices.append(idx)
+                    missing_texts.append(text)
+        else:
+            missing_indices = list(range(len(cleaned_inputs)))
+            missing_texts = cleaned_inputs
+
+        newly_computed: list[list[float]] = []
+        for start in range(0, len(missing_texts), self._batch_size):
+            batch = missing_texts[start : start + self._batch_size]
             batch_vectors = self._embed_batch(batch)
-            all_vectors.extend(batch_vectors)
+            newly_computed.extend(batch_vectors)
+
+        # Cache newly computed vectors
+        if self._cache_service is not None and newly_computed:
+            for text, vec in zip(missing_texts, newly_computed, strict=False):
+                chash = hashlib.sha256(text.encode("utf-8")).hexdigest()
+                key = CacheKeys.chunk_embedding(
+                    chunk_hash=chash,
+                    model_name=self._model,
+                    expected_dimensions=self._expected_dimensions,
+                )
+                self._cache_service.set(key, vec, policy=CachePolicies.CHUNK_EMBEDDING)
+
+        # Reassemble original sequence preserving exact order
+        all_vectors: list[list[float]] = [None] * len(cleaned_inputs)  # type: ignore[list-item]
+        for idx, vec in cached_vectors.items():
+            all_vectors[idx] = vec
+        for orig_idx, vec in zip(missing_indices, newly_computed, strict=False):
+            all_vectors[orig_idx] = vec
+
         return all_vectors
 
     def _post_embed(self, payload: dict[str, Any]) -> httpx.Response:
