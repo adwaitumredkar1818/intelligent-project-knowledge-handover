@@ -193,6 +193,15 @@ def to_evidence_detail_response(item: EvidenceItem) -> EvidenceDetailResponse:
                 for page in item.pages
             ],
         )
+    elif item.chunks:
+        combined_text = "\n\n".join(c.chunk_text for c in item.chunks if c.chunk_text)
+        extracted_content = EvidenceExtractedContentResponse(
+            char_count=len(combined_text),
+            word_count=len(combined_text.split()),
+            extraction_warnings=[],
+            extracted_text=combined_text,
+            pages=[],
+        )
 
     can_download = bool(item.storage_object_key and item.deleted_at is None)
     download_url = f"/api/v1/evidence/{item.id}/download" if can_download else None
@@ -686,10 +695,19 @@ class EvidenceService:
                                 created_chunks.append(chunk)
 
                         if created_chunks:
+                            full_extracted_txt = "\n\n".join(c.chunk_text for c in created_chunks)
+                            self._evidence_repo.replace_extracted_content(
+                                evidence_id=evidence.id,
+                                extracted_text=full_extracted_txt,
+                                warnings=(),
+                                pages=(),
+                            )
                             evidence.page_count = len(doc)
                             evidence.chunk_count = len(created_chunks)
                             evidence.extraction_method = "pymupdf"
                             evidence.processing_status = "extracted"
+                            evidence.error_code = None
+                            evidence.error_message = None
                             self._session.commit()
                             self._session.refresh(evidence)
                 elif (
@@ -767,9 +785,18 @@ class EvidenceService:
                             created_chunks.append(chunk)
 
                         if created_chunks:
+                            full_extracted_txt = "\n\n".join(c.chunk_text for c in created_chunks)
+                            self._evidence_repo.replace_extracted_content(
+                                evidence_id=evidence.id,
+                                extracted_text=full_extracted_txt,
+                                warnings=(),
+                                pages=(),
+                            )
                             evidence.chunk_count = len(created_chunks)
                             evidence.extraction_method = "python-docx"
                             evidence.processing_status = "extracted"
+                            evidence.error_code = None
+                            evidence.error_message = None
                             self._session.commit()
                             self._session.refresh(evidence)
             except Exception as exc:

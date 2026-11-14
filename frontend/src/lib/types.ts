@@ -182,6 +182,7 @@ export interface EvidenceSummary {
   category: string;
   title: string;
   original_filename?: string | null;
+  mime_type?: string | null;
   file_size_bytes?: number | null;
   page_count?: number | null;
   source_url: string | null;
@@ -190,6 +191,9 @@ export interface EvidenceSummary {
   content_hash: string;
   indexing_status: string;
   processing_status?: string;
+  error_code?: string | null;
+  error_message?: string | null;
+  extracted_text_preview?: string | null;
   created_at: string;
   source_created_at: string | null;
 }
@@ -214,6 +218,8 @@ export interface EvidenceDetail {
   acl_scope?: string;
   indexing_status: string;
   processing_status?: string;
+  error_code?: string | null;
+  error_message?: string | null;
   extraction_method?: string | null;
   page_count?: number | null;
   ocr_pages_count?: number;

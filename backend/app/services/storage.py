@@ -249,6 +249,35 @@ class LocalPrivateStorageBackend:
             raise ValueError("Storage key escaped configured private storage boundary.")
         return candidate
 
+    def _locate_existing_file(self, storage_object_key: str) -> Path | None:
+        """Locate stored artefact, checking configured root and fallback repo upload locations."""
+        try:
+            target_path = self._resolve_safe_key(storage_object_key)
+            if target_path.is_file():
+                return target_path
+        except ValueError:
+            return None
+
+        normalized = validate_storage_object_key(storage_object_key)
+        candidates: list[Path] = []
+        parts = self._root_path.parts
+        if "backend" in parts:
+            idx = parts.index("backend")
+            repo_root = Path(*parts[:idx])
+            candidates.append(repo_root / "data" / "uploads" / normalized)
+        else:
+            candidates.append(self._root_path.parent / "backend" / "data" / "uploads" / normalized)
+            candidates.append(self._root_path / "backend" / "data" / "uploads" / normalized)
+
+        for candidate in candidates:
+            try:
+                resolved = candidate.resolve()
+                if resolved.is_file():
+                    return resolved
+            except (OSError, ValueError):
+                continue
+        return None
+
     def store_encrypted_bytes(
         self,
         *,
@@ -311,7 +340,7 @@ class LocalPrivateStorageBackend:
                 code="STORAGE_KEY_UNSUPPORTED",
             )
         try:
-            target_path = self._resolve_safe_key(storage_object_key)
+            validate_storage_object_key(storage_object_key)
         except ValueError as exc:
             logger.warning("Rejected unsafe storage object key lookup.")
             raise ServiceUnavailableError(
@@ -319,14 +348,15 @@ class LocalPrivateStorageBackend:
                 code="STORAGE_KEY_INVALID",
             ) from exc
 
-        if not target_path.is_file():
+        located = self._locate_existing_file(storage_object_key)
+        if not located:
             raise ServiceUnavailableError(
                 "Stored artefact payload is missing from private storage.",
                 code="STORAGE_OBJECT_MISSING",
             )
 
         try:
-            raw = target_path.read_bytes()
+            raw = located.read_bytes()
         except OSError as exc:
             logger.exception("Failed to read stored artefact from local disk.")
             raise ServiceUnavailableError(
@@ -346,19 +376,11 @@ class LocalPrivateStorageBackend:
         )
 
     def delete_object(self, *, storage_object_key: str) -> bool:
-        try:
-            target_path = self._resolve_safe_key(storage_object_key)
-        except ValueError:
-            logger.warning("Ignored deletion for invalid storage object key.")
+        located = self._locate_existing_file(storage_object_key)
+        if not located or not located.exists():
             return False
-        if not target_path.exists():
-            return False
-        target_path.unlink()
+        located.unlink()
         return True
 
     def exists(self, *, storage_object_key: str) -> bool:
-        try:
-            target_path = self._resolve_safe_key(storage_object_key)
-        except ValueError:
-            return False
-        return target_path.is_file()
+        return self._locate_existing_file(storage_object_key) is not None

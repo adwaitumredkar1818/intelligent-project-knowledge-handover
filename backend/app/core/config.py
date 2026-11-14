@@ -47,7 +47,11 @@ class StorageSettings(BaseModel):
     model_config = ConfigDict(frozen=True)
 
     provider: StorageBackendProvider = "local_encrypted"
-    upload_storage_path: Path = Path("./data/uploads")
+    upload_storage_path: Path = (
+        _REPO_ROOT / "backend" / "data" / "uploads"
+        if (_REPO_ROOT / "backend" / "data" / "uploads").exists()
+        else _REPO_ROOT / "data" / "uploads"
+    )
     supabase_url: str | None = None
     supabase_service_role_key: SecretStr | None = None
     supabase_storage_bucket: str = "project-evidence"
@@ -531,7 +535,11 @@ class Settings(BaseSettings):
     jwt_refresh_token_expire_days: int = Field(default=7, ge=1, le=90)
     token_encryption_key: SecretStr
     file_encryption_key: SecretStr
-    upload_storage_path: Path = Path("./data/uploads")
+    upload_storage_path: Path = (
+        _REPO_ROOT / "backend" / "data" / "uploads"
+        if (_REPO_ROOT / "backend" / "data" / "uploads").exists()
+        else _REPO_ROOT / "data" / "uploads"
+    )
     cookie_secure: bool = False
     cookie_samesite: CookieSameSite = "lax"
     cookie_domain: str | None = None

@@ -601,6 +601,11 @@ export const api = {
       }
       return res.blob();
     },
+    async reprocess(projectId: string, evidenceId: string): Promise<unknown> {
+      return request<unknown>(`/projects/${projectId}/evidence/${evidenceId}/reprocess`, {
+        method: "POST",
+      });
+    },
   },
   relationships: {
     async getGraph(projectId: string, limit: number = 100): Promise<{

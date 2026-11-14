@@ -13,6 +13,7 @@ import {
 
 import { useFigmaStore as useStore, FigmaStoreProvider, FigmaCtx } from '../../lib/figmaStore'
 import { useLiveApp } from '../../context/LiveAppContext'
+import { api } from '../../lib/api'
 import {
   evidence, personById, SOURCE_META,
   type Evidence, type Source, type SourceType, type Verification
@@ -645,7 +646,16 @@ export function EvidenceLibrary({ projectId }: { projectId: string }) {
   const s = useStore()
   const p = useProject(projectId)
   const router = useRouter()
-  const { evidenceList, setIsUploadModalOpen } = useLiveApp()
+  const {
+    evidenceList,
+    selectedEvidenceId,
+    selectedEvidence: liveSelectedEvidence,
+    isLoadingEvidenceDetail,
+    setSelectedEvidenceId,
+    refreshEvidence,
+    findings: liveFindings,
+    setIsUploadModalOpen
+  } = useLiveApp()
   const loading = useFakeLoading(450, [projectId])
   const [layoutMode, setLayoutMode] = useState<'threepanel' | 'table'>('threepanel')
   const [q, setQ] = useState('')
@@ -658,18 +668,49 @@ export function EvidenceLibrary({ projectId }: { projectId: string }) {
   const [open, setOpen] = useState<Evidence | null>(null)
   const [upload, setUpload] = useState(false)
   const [activeDetailTab, setActiveDetailTab] = useState<'content' | 'facts' | 'findings'>('content')
+  const [isReprocessing, setIsReprocessing] = useState(false)
+
+  const handleReprocess = async (evId: string) => {
+    if (!p) return
+    setIsReprocessing(true)
+    try {
+      await api.evidence.reprocess(p.id, evId)
+      s.toast('Reprocessing queued', 'Document extraction has been scheduled.', 'info')
+      await refreshEvidence()
+      if (selectedEvidenceId === evId) {
+        setSelectedEvidenceId(null)
+        setTimeout(() => setSelectedEvidenceId(evId), 50)
+      }
+    } catch (err: unknown) {
+      console.error('Reprocess error:', err)
+      s.toast('Reprocessing failed', err instanceof Error ? err.message : 'Could not queue extraction', 'error')
+    } finally {
+      setIsReprocessing(false)
+    }
+  }
 
   const liveItems: Evidence[] = useMemo(() => {
     return (evidenceList || []).map((e) => {
       let type: Evidence['type'] = 'pdf'
+      const mime = (e.mime_type || '').toLowerCase()
+      const titleLower = (e.title || '').toLowerCase()
+      const origLower = (e.original_filename || '').toLowerCase()
       if (e.provider === 'github') type = 'commit'
       else if (e.provider === 'jira') type = 'issue'
       else if (e.provider === 'slack') type = 'message'
-      else if (e.source_type?.toLowerCase().includes('doc')) type = 'docx'
+      else if (mime.includes('word') || origLower.endsWith('.docx') || titleLower.endsWith('.docx') || e.category === 'docx_document') type = 'docx'
+      else if (mime.includes('pdf') || origLower.endsWith('.pdf') || titleLower.endsWith('.pdf') || e.category === 'pdf_document') type = 'pdf'
 
       let verification: Verification = 'needs_review'
-      if (e.indexing_status === 'indexed') verification = 'verified'
-      else if (e.indexing_status === 'failed') verification = 'rejected'
+      if (e.indexing_status === 'indexed' || e.processing_status === 'extracted') verification = 'verified'
+      else if (e.indexing_status === 'failed' || e.processing_status === 'failed') verification = 'rejected'
+
+      let processing: Evidence['processing'] = 'processing'
+      if (e.processing_status === 'extracted' || e.processing_status === 'ready' || e.indexing_status === 'indexed') {
+        processing = 'processed'
+      } else if (e.processing_status === 'failed' || e.indexing_status === 'failed') {
+        processing = 'failed'
+      }
 
       return {
         id: e.id,
@@ -680,10 +721,10 @@ export function EvidenceLibrary({ projectId }: { projectId: string }) {
         authorId: e.author_name || 'system',
         date: e.source_created_at ? e.source_created_at.split('T')[0]! : 'Today',
         memberId: 'user',
-        processing: e.indexing_status === 'indexed' ? 'processed' : e.indexing_status === 'failed' ? 'failed' : 'processing',
+        processing,
         verification,
         ref: e.id.slice(0, 8),
-        content: e.original_filename ? `File: ${e.original_filename}` : 'Decrypted source content available in Evidence Workspace.',
+        content: e.extracted_text_preview || (e.original_filename ? `Document: ${e.original_filename}` : 'Decrypted source content available in Evidence Workspace.'),
         extracted: [],
       }
     })
@@ -692,7 +733,7 @@ export function EvidenceLibrary({ projectId }: { projectId: string }) {
   if (!p) return <ProjectNotFound />
 
   const storeItems = evidence.filter((e) => e.projectId === p.id)
-  const all = storeItems.length > 0 ? storeItems : liveItems
+  const all = liveItems.length > 0 ? liveItems : storeItems
   const cutoff = range === '30' ? '2025-05-19' : range === '90' ? '2025-03-20' : '0'
   const list = all.filter(
     (e) =>
@@ -710,10 +751,76 @@ export function EvidenceLibrary({ projectId }: { projectId: string }) {
   const sources = s.sources.filter((x) => x.projectId === p.id)
   const authors = Array.from(new Set(all.map((e) => e.authorId)))
 
-  // Default selected evidence for 3-panel mode
-  const selectedEvidence = open || list[0] || null
-  const relatedFindings = selectedEvidence ? allFindings(p.id).filter((f) => f.evidenceIds.includes(selectedEvidence.id)) : []
+  // Active target evidence across 3-panel view and drawer
+  const activeEvidenceId = open?.id || selectedEvidenceId || (list[0]?.id ?? null)
+
+  useEffect(() => {
+    if (activeEvidenceId && selectedEvidenceId !== activeEvidenceId) {
+      setSelectedEvidenceId(activeEvidenceId)
+    }
+  }, [activeEvidenceId, selectedEvidenceId, setSelectedEvidenceId])
+
+  const selectedEvidence = list.find((x) => x.id === activeEvidenceId) || list[0] || null
   const selectedSource = selectedEvidence ? s.sources.find((x) => x.id === selectedEvidence.sourceId) : null
+
+  // Real decrypted content from backend
+  const activeContentText = useMemo(() => {
+    if (liveSelectedEvidence && liveSelectedEvidence.id === activeEvidenceId) {
+      if (liveSelectedEvidence.extracted_content?.extracted_text) {
+        return liveSelectedEvidence.extracted_content.extracted_text
+      }
+      if (liveSelectedEvidence.chunks && liveSelectedEvidence.chunks.length > 0) {
+        return liveSelectedEvidence.chunks.map((c) => c.content_text).join('\n\n')
+      }
+    }
+    return selectedEvidence?.content || 'Decrypted source content available in Evidence Workspace.'
+  }, [liveSelectedEvidence, activeEvidenceId, selectedEvidence])
+
+  // Real extracted facts derived from chunks & pages
+  const activeExtractedFacts = useMemo(() => {
+    if (liveSelectedEvidence && liveSelectedEvidence.id === activeEvidenceId) {
+      if (liveSelectedEvidence.chunks && liveSelectedEvidence.chunks.length > 0) {
+        return liveSelectedEvidence.chunks.map((c) => {
+          const prefix = c.section_title ? `[${c.section_title}] ` : (c.page_number ? `[Page ${c.page_number}] ` : '')
+          const textPreview = c.content_preview || c.content_text || ''
+          const cleanSnippet = textPreview.replace(/^---.*---\s*/, '').replace(/\n+/g, ' ').trim()
+          return `${prefix}${cleanSnippet.length > 220 ? cleanSnippet.slice(0, 220) + '...' : cleanSnippet}`
+        })
+      }
+      if (liveSelectedEvidence.extracted_content?.extracted_text) {
+        return liveSelectedEvidence.extracted_content.extracted_text
+          .split('\n')
+          .map((l) => l.trim())
+          .filter((l) => l.length > 25 && !l.startsWith('---'))
+          .slice(0, 12)
+      }
+    }
+    return selectedEvidence?.extracted || []
+  }, [liveSelectedEvidence, activeEvidenceId, selectedEvidence])
+
+  const relatedFindings = useMemo(() => {
+    if (!activeEvidenceId) return []
+    const liveMatches = (liveFindings || [])
+      .filter((f) => (f.citations || []).some((c) => c.evidence_id === activeEvidenceId))
+      .map((f) => ({
+        id: f.id,
+        kind: f.category || 'Decision',
+        title: f.title,
+        summary: f.summary || f.title,
+        verification: (f.review_status === 'approved' ? 'verified' : f.review_status === 'rejected' ? 'rejected' : 'needs_review') as Verification,
+      }))
+    if (liveMatches.length > 0) return liveMatches
+
+    return allFindings(p.id)
+      .filter((f) => f.evidenceIds.includes(activeEvidenceId))
+      .map((f) => ({
+        id: f.id,
+        kind: f.kind,
+        title: f.title,
+        summary: f.summary,
+        verification: s.verif[f.id] ?? f.verification,
+      }))
+  }, [liveFindings, activeEvidenceId, p.id, s.verif])
 
   const reset = () => {
     setQ('')
@@ -847,11 +954,14 @@ export function EvidenceLibrary({ projectId }: { projectId: string }) {
                 <EmptyState icon={Filter} title="No records match" body="Try adjusting filters or clearing your query." action={<Button variant="secondary" size="sm" onClick={reset}>Reset</Button>} />
               ) : (
                 list.map((e) => {
-                  const isSelected = selectedEvidence?.id === e.id
+                  const isSelected = activeEvidenceId === e.id
                   return (
                     <div
                       key={e.id}
-                      onClick={() => setOpen(e)}
+                      onClick={() => {
+                        setOpen(e)
+                        setSelectedEvidenceId(e.id)
+                      }}
                       className={cn(
                         'tile flex cursor-pointer flex-col gap-1.5 rounded-xl border p-3 transition',
                         isSelected ? 'border-brand bg-tint/40 shadow-sm' : 'hover:border-slate-300 hover:bg-slate-50/60'
@@ -903,10 +1013,27 @@ export function EvidenceLibrary({ projectId }: { projectId: string }) {
                   </div>
                   <div className="grid grid-cols-2 gap-2 text-xs text-muted">
                     <div><span>Ref:</span> <strong className="font-mono text-navy">{selectedEvidence.ref}</strong></div>
-                    <div><span>Author:</span> <strong className="text-navy">{personById(selectedEvidence.authorId)?.name ?? ''}</strong></div>
+                    <div><span>Author:</span> <strong className="text-navy">{personById(selectedEvidence.authorId)?.name ?? selectedEvidence.authorId}</strong></div>
                     <div><span>Date:</span> <strong className="text-navy">{selectedEvidence.date}</strong></div>
                     <div><span>Source:</span> <strong className="text-navy">{selectedSource?.name ?? 'Organisational'}</strong></div>
                   </div>
+                  {liveSelectedEvidence && liveSelectedEvidence.id === activeEvidenceId && (
+                    <div className="mt-2.5 pt-2 border-t border-slate-200/60 flex items-center justify-between text-[11px]">
+                      <span className="text-slate-500">
+                        {liveSelectedEvidence.page_count ? `${liveSelectedEvidence.page_count} pages · ` : ''}
+                        {liveSelectedEvidence.chunks ? `${liveSelectedEvidence.chunks.length} chunks` : ''}
+                      </span>
+                      <StatusBadge
+                        status={
+                          liveSelectedEvidence.processing_status === 'extracted' || liveSelectedEvidence.processing_status === 'ready'
+                            ? 'processed'
+                            : liveSelectedEvidence.processing_status === 'failed'
+                            ? 'failed'
+                            : 'processing'
+                        }
+                      />
+                    </div>
+                  )}
                 </div>
 
                 <div className="flex gap-2">
@@ -915,7 +1042,7 @@ export function EvidenceLibrary({ projectId }: { projectId: string }) {
                     onChange={setActiveDetailTab}
                     options={[
                       { id: 'content', label: 'Source Record' },
-                      { id: 'facts', label: `Facts (${selectedEvidence.extracted.length})` },
+                      { id: 'facts', label: `Facts (${activeExtractedFacts.length})` },
                       { id: 'findings', label: `Findings (${relatedFindings.length})` },
                     ]}
                   />
@@ -923,24 +1050,59 @@ export function EvidenceLibrary({ projectId }: { projectId: string }) {
 
                 {activeDetailTab === 'content' && (
                   <div>
-                    <p className="mb-1.5 text-xs font-semibold uppercase tracking-wide text-slate-400">Original Content</p>
-                    <div className="rounded-xl border-l-2 border-sky bg-slate-50 p-3 text-xs leading-relaxed text-slate-700 whitespace-pre-wrap font-sans max-h-64 overflow-y-auto">
-                      {selectedEvidence.content}
+                    <div className="flex items-center justify-between mb-1.5">
+                      <p className="text-xs font-semibold uppercase tracking-wide text-slate-400">Decrypted Content</p>
+                      {liveSelectedEvidence?.extracted_content?.char_count && (
+                        <span className="text-[11px] text-muted font-mono">{liveSelectedEvidence.extracted_content.char_count} chars</span>
+                      )}
                     </div>
+                    {isLoadingEvidenceDetail && liveSelectedEvidence?.id !== activeEvidenceId ? (
+                      <div className="space-y-2">
+                        <Skeleton className="h-20 w-full" />
+                        <Skeleton className="h-16 w-full" />
+                      </div>
+                    ) : (
+                      <div className="rounded-xl border-l-2 border-sky bg-slate-50 p-3 text-xs leading-relaxed text-slate-700 whitespace-pre-wrap font-mono max-h-64 overflow-y-auto">
+                        {activeContentText}
+                      </div>
+                    )}
                   </div>
                 )}
 
                 {activeDetailTab === 'facts' && (
                   <div>
-                    <p className="mb-1.5 text-xs font-semibold uppercase tracking-wide text-slate-400">Extracted Facts</p>
-                    <ul className="space-y-1.5 max-h-64 overflow-y-auto">
-                      {selectedEvidence.extracted.map((f, i) => (
-                        <li key={i} className="flex items-start gap-2 rounded-lg border border-dashed border-indigo-200 bg-indigo-50/30 p-2.5 text-xs text-navy">
-                          <Sparkles className="size-3.5 shrink-0 text-indigo-500 mt-0.5" />
-                          <span>{f}</span>
-                        </li>
-                      ))}
-                    </ul>
+                    <div className="flex items-center justify-between mb-1.5">
+                      <p className="text-xs font-semibold uppercase tracking-wide text-slate-400">Extracted Facts & Chunks</p>
+                      <span className="text-[11px] text-muted">{activeExtractedFacts.length} items</span>
+                    </div>
+                    {isLoadingEvidenceDetail && liveSelectedEvidence?.id !== activeEvidenceId ? (
+                      <div className="space-y-2">
+                        <Skeleton className="h-10 w-full" />
+                        <Skeleton className="h-10 w-full" />
+                        <Skeleton className="h-10 w-full" />
+                      </div>
+                    ) : activeExtractedFacts.length > 0 ? (
+                      <ul className="space-y-2 max-h-64 overflow-y-auto">
+                        {activeExtractedFacts.map((f, i) => (
+                          <li key={i} className="flex items-start gap-2.5 rounded-lg border border-dashed border-indigo-200 bg-indigo-50/30 p-2.5 text-xs text-navy">
+                            <Sparkles className="size-3.5 shrink-0 text-indigo-500 mt-0.5" />
+                            <span className="leading-relaxed">{f}</span>
+                          </li>
+                        ))}
+                      </ul>
+                    ) : (
+                      <div className="rounded-xl border border-dashed border-slate-200 p-4 text-center">
+                        <p className="text-xs text-muted mb-2">No extracted facts available yet.</p>
+                        <Button
+                          size="sm"
+                          variant="secondary"
+                          onClick={() => { if (activeEvidenceId) handleReprocess(activeEvidenceId) }}
+                          disabled={isReprocessing || !activeEvidenceId}
+                        >
+                          {isReprocessing ? 'Queueing...' : 'Re-process Document'}
+                        </Button>
+                      </div>
+                    )}
                   </div>
                 )}
 
@@ -952,7 +1114,7 @@ export function EvidenceLibrary({ projectId }: { projectId: string }) {
                         <div key={f.id} className="rounded-xl border border-line p-2.5 bg-white">
                           <div className="flex items-center justify-between mb-1">
                             <Badge tone="indigo">{f.kind}</Badge>
-                            <VerificationBadge status={s.verif[f.id] ?? f.verification} />
+                            <VerificationBadge status={f.verification as Verification} />
                           </div>
                           <p className="text-xs font-semibold text-navy">{f.title}</p>
                           <p className="text-[11px] text-muted line-clamp-1 mt-0.5">{f.summary}</p>
@@ -1063,8 +1225,13 @@ export function EvidenceLibrary({ projectId }: { projectId: string }) {
               <Button className="flex-1" iconRight={ArrowRight} onClick={() => router.push(`/projects/${p.id}/evidence/${open.id}`)}>
                 Open full evidence
               </Button>
-              <Button variant="secondary" icon={ExternalLink} onClick={() => s.toast('Opening original source', open.ref, 'info')}>
-                Original
+              <Button
+                variant="secondary"
+                icon={RefreshCw}
+                onClick={() => handleReprocess(open.id)}
+                disabled={isReprocessing}
+              >
+                {isReprocessing ? 'Processing...' : 'Re-process'}
               </Button>
             </>
           )
@@ -1072,14 +1239,48 @@ export function EvidenceLibrary({ projectId }: { projectId: string }) {
       >
         {open && (
           <div className="space-y-5">
-            <div className="flex flex-wrap gap-2">
-              <StatusBadge status={open.processing} />
+            <div className="flex flex-wrap items-center gap-2">
+              <StatusBadge
+                status={
+                  liveSelectedEvidence && liveSelectedEvidence.id === open.id
+                    ? liveSelectedEvidence.processing_status === 'extracted' || liveSelectedEvidence.processing_status === 'ready'
+                      ? 'processed'
+                      : liveSelectedEvidence.processing_status === 'failed'
+                      ? 'failed'
+                      : 'processing'
+                    : open.processing
+                }
+              />
               <VerificationBadge status={open.verification} />
+              {liveSelectedEvidence?.id === open.id && liveSelectedEvidence.page_count ? (
+                <Badge tone="gray">{liveSelectedEvidence.page_count} pages</Badge>
+              ) : null}
+              {liveSelectedEvidence?.id === open.id && liveSelectedEvidence.chunks?.length ? (
+                <Badge tone="indigo">{liveSelectedEvidence.chunks.length} chunks</Badge>
+              ) : null}
             </div>
+
+            {liveSelectedEvidence?.id === open.id && liveSelectedEvidence.processing_status === 'failed' && (
+              <div className="rounded-xl border border-red-200 bg-red-50 p-3 text-xs text-red-800">
+                <div className="flex items-center justify-between mb-1">
+                  <span className="font-semibold">Extraction Incomplete</span>
+                  <Button
+                    size="sm"
+                    variant="secondary"
+                    onClick={() => handleReprocess(open.id)}
+                    disabled={isReprocessing}
+                  >
+                    {isReprocessing ? 'Retrying...' : 'Retry Extraction'}
+                  </Button>
+                </div>
+                <p className="text-red-700">{liveSelectedEvidence.error_message || 'Document processing encountered an error.'}</p>
+              </div>
+            )}
+
             <dl className="grid grid-cols-2 gap-3 text-[13px]">
               {[
                 ['Reference', open.ref],
-                ['Author', personById(open.authorId)?.name ?? ''],
+                ['Author', personById(open.authorId)?.name ?? open.authorId],
                 ['Timestamp', open.date],
                 ['Type', EVIDENCE_TYPE_LABEL[open.type]],
               ].map(([k, v]) => (
@@ -1089,22 +1290,55 @@ export function EvidenceLibrary({ projectId }: { projectId: string }) {
                 </div>
               ))}
             </dl>
+
             <div>
-              <p className="mb-2 text-xs font-semibold uppercase tracking-wide text-slate-400">Original content</p>
-              <p className="whitespace-pre-line rounded-xl border-l-2 border-sky bg-slate-50 p-3.5 text-[13px] leading-relaxed text-slate-700">
-                {open.content}
-              </p>
+              <div className="flex items-center justify-between mb-2">
+                <p className="text-xs font-semibold uppercase tracking-wide text-slate-400">Original content</p>
+                {liveSelectedEvidence?.id === open.id && liveSelectedEvidence.extracted_content?.char_count ? (
+                  <span className="text-[11px] text-muted font-mono">{liveSelectedEvidence.extracted_content.char_count} chars</span>
+                ) : null}
+              </div>
+              {isLoadingEvidenceDetail && liveSelectedEvidence?.id !== open.id ? (
+                <Skeleton className="h-28 w-full" />
+              ) : (
+                <div className="max-h-60 overflow-y-auto whitespace-pre-line rounded-xl border-l-2 border-sky bg-slate-50 p-3.5 text-[13px] leading-relaxed text-slate-700 font-mono">
+                  {activeContentText}
+                </div>
+              )}
             </div>
+
             <div>
-              <p className="mb-2 text-xs font-semibold uppercase tracking-wide text-slate-400">Extracted information</p>
-              <ul className="space-y-1.5">
-                {open.extracted.map((x) => (
-                  <li key={x} className="flex items-start gap-2 text-[13px] text-navy">
-                    <Sparkles className="mt-0.5 size-3.5 shrink-0 text-indigo-500" />
-                    {x}
-                  </li>
-                ))}
-              </ul>
+              <div className="flex items-center justify-between mb-2">
+                <p className="text-xs font-semibold uppercase tracking-wide text-slate-400">Extracted information</p>
+                <span className="text-[11px] text-muted">{activeExtractedFacts.length} statements</span>
+              </div>
+              {isLoadingEvidenceDetail && liveSelectedEvidence?.id !== open.id ? (
+                <div className="space-y-2">
+                  <Skeleton className="h-10 w-full" />
+                  <Skeleton className="h-10 w-full" />
+                </div>
+              ) : activeExtractedFacts.length > 0 ? (
+                <ul className="space-y-2 max-h-72 overflow-y-auto">
+                  {activeExtractedFacts.map((x, idx) => (
+                    <li key={idx} className="flex items-start gap-2.5 rounded-lg border border-dashed border-indigo-200 bg-indigo-50/40 p-2.5 text-[13px] text-navy">
+                      <Sparkles className="mt-0.5 size-4 shrink-0 text-indigo-500" />
+                      <span className="leading-relaxed">{x}</span>
+                    </li>
+                  ))}
+                </ul>
+              ) : (
+                <div className="rounded-xl border border-dashed border-slate-200 p-4 text-center">
+                  <p className="text-xs text-muted mb-2">No extracted information derived yet.</p>
+                  <Button
+                    size="sm"
+                    variant="secondary"
+                    onClick={() => handleReprocess(open.id)}
+                    disabled={isReprocessing}
+                  >
+                    {isReprocessing ? 'Queueing...' : 'Trigger Extraction'}
+                  </Button>
+                </div>
+              )}
             </div>
           </div>
         )}
@@ -1195,10 +1429,85 @@ function OriginalContent({ e }: { e: Evidence }) {
 export function EvidenceDetail({ projectId, evidenceId }: { projectId: string; evidenceId: string }) {
   const s = useStore()
   const p = useProject(projectId)
-  const e = evidence.find((x) => x.id === evidenceId) || evidence.find((x) => x.projectId === projectId)
+  const { evidenceList, selectedEvidence: liveDetail, setSelectedEvidenceId } = useLiveApp()
+  const [asyncDetail, setAsyncDetail] = useState<any>(null)
   const [drawer, setDrawer] = useState<AnyFinding>()
 
-  if (!p || !e) return <ProjectNotFound />
+  useEffect(() => {
+    setSelectedEvidenceId(evidenceId)
+    let cancelled = false
+    api.evidence.getDetail(evidenceId).then((res) => {
+      if (!cancelled) setAsyncDetail(res)
+    }).catch((err) => {
+      console.error('Error fetching evidence detail in full view:', err)
+    })
+    return () => { cancelled = true }
+  }, [evidenceId, setSelectedEvidenceId])
+
+  const detail = (liveDetail && liveDetail.id === evidenceId) ? liveDetail : asyncDetail
+  const liveSummary = evidenceList.find((x) => x.id === evidenceId)
+  const storeE = evidence.find((x) => x.id === evidenceId) || evidence.find((x) => x.projectId === projectId)
+
+  if (!p) return <ProjectNotFound />
+
+  let eType: Evidence['type'] = storeE?.type || 'pdf'
+  if (detail?.provider === 'github' || liveSummary?.provider === 'github') eType = 'commit'
+  else if (detail?.provider === 'jira' || liveSummary?.provider === 'jira') eType = 'issue'
+  else if (detail?.provider === 'slack' || liveSummary?.provider === 'slack') eType = 'message'
+  else if (
+    (detail?.mime_type || '').includes('word') ||
+    (detail?.original_filename || '').endsWith('.docx') ||
+    (detail?.title || '').endsWith('.docx')
+  ) eType = 'docx'
+  else if (
+    (detail?.mime_type || '').includes('pdf') ||
+    (detail?.original_filename || '').endsWith('.pdf') ||
+    (detail?.title || '').endsWith('.pdf')
+  ) eType = 'pdf'
+
+  const extractedFacts: string[] = useMemo(() => {
+    if (detail?.chunks && detail.chunks.length > 0) {
+      return detail.chunks.map((c: any) => {
+        const prefix = c.section_title ? `[${c.section_title}] ` : (c.page_number ? `[Page ${c.page_number}] ` : '')
+        const textPreview = c.content_preview || c.content_text || ''
+        const cleanSnippet = textPreview.replace(/^---.*---\s*/, '').replace(/\n+/g, ' ').trim()
+        return `${prefix}${cleanSnippet.length > 220 ? cleanSnippet.slice(0, 220) + '...' : cleanSnippet}`
+      })
+    }
+    if (detail?.extracted_content?.extracted_text) {
+      return detail.extracted_content.extracted_text
+        .split('\n')
+        .map((l: string) => l.trim())
+        .filter((l: string) => l.length > 25 && !l.startsWith('---'))
+        .slice(0, 15)
+    }
+    return storeE?.extracted || []
+  }, [detail, storeE])
+
+  const contentText = detail?.extracted_content?.extracted_text
+    || (detail?.chunks && detail.chunks.length > 0 ? detail.chunks.map((c: any) => c.content_text).join('\n\n') : '')
+    || storeE?.content
+    || 'Decrypted source content available in Evidence Workspace.'
+
+  const e: Evidence = {
+    id: evidenceId,
+    projectId: p.id,
+    type: eType,
+    title: detail?.title || liveSummary?.title || storeE?.title || 'Evidence Record',
+    sourceId: detail?.provider || liveSummary?.provider || storeE?.sourceId || 'docs',
+    authorId: detail?.author_name || liveSummary?.author_name || storeE?.authorId || 'system',
+    date: (detail?.source_created_at || liveSummary?.source_created_at || storeE?.date || 'Today').split('T')[0],
+    memberId: 'user',
+    processing: (detail?.processing_status === 'extracted' || detail?.processing_status === 'ready' || liveSummary?.indexing_status === 'indexed')
+      ? 'processed'
+      : (detail?.processing_status === 'failed' || liveSummary?.indexing_status === 'failed')
+      ? 'failed'
+      : 'processing',
+    verification: (detail?.processing_status === 'extracted' || liveSummary?.indexing_status === 'indexed') ? 'verified' : 'needs_review',
+    ref: evidenceId.slice(0, 8),
+    content: contentText,
+    extracted: extractedFacts,
+  }
   const src = s.sources.find((x) => x.id === e.sourceId)
   const related = allFindings(p.id).filter((f) => f.evidenceIds.includes(e.id))
   const handovers = s.handovers.filter((h) => h.projectId === p.id && h.status !== 'draft')
