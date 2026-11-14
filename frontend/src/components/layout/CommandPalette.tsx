@@ -15,27 +15,33 @@ import {
   AlertTriangle,
   Workflow,
   Send,
-  Bot,
   Plug,
   ScrollText,
   Settings,
   Sparkles,
+  MessageSquareText,
+  type LucideIcon,
 } from "lucide-react";
 import { useLiveApp } from "../../context/LiveAppContext";
-import { cn } from "../../lib/utils";
+import {
+  ROLE_LABEL,
+  HANDOVER_STATUS_LABEL,
+  type ProjectRole,
+} from "../../lib/figmaStore";
+import { cn } from "../figma-ui/index";
 
-interface CommandItem {
+export interface CommandItem {
   id: string;
   title: string;
   sub: string;
   to: string;
-  icon: React.ComponentType<{ className?: string }>;
+  icon: LucideIcon | React.ComponentType<{ className?: string }>;
   action?: () => void;
 }
 
-interface CommandGroup {
+export interface CommandGroup {
   label: string;
-  icon: React.ComponentType<{ className?: string }>;
+  icon: LucideIcon | React.ComponentType<{ className?: string }>;
   items: CommandItem[];
 }
 
@@ -53,21 +59,17 @@ export function CommandPalette({
     setActiveProject,
     evidenceList,
     members,
-    setIsCreateProjectModalOpen,
   } = useLiveApp();
 
   const [q, setQ] = useState("");
 
-  // Global keyboard shortcut: ⌘K or Ctrl+K
+  // Global keyboard shortcut: ⌘K or Ctrl+K and Escape
   useEffect(() => {
     const handleKeyDown = (e: KeyboardEvent) => {
       if ((e.metaKey || e.ctrlKey) && e.key.toLowerCase() === "k") {
         e.preventDefault();
         if (open) {
           onClose();
-        } else {
-          // Open palette
-          // handled by parent or state
         }
       }
       if (e.key === "Escape" && open) {
@@ -91,12 +93,12 @@ export function CommandPalette({
         id: "nav-overview",
         title: "Overview & Dashboard",
         sub: "Cross-project command center & health",
-        to: "/overview",
+        to: "/dashboard",
         icon: LayoutDashboard,
       },
       {
         id: "nav-projects",
-        title: "My Projects",
+        title: "Projects",
         sub: "Project workspace directory & coverage",
         to: "/projects",
         icon: FolderKanban,
@@ -105,21 +107,21 @@ export function CommandPalette({
         id: "nav-team",
         title: "Team Members",
         sub: "Project memberships, roles & transitions",
-        to: "/team",
+        to: "/settings/team",
         icon: Users,
       },
       {
         id: "nav-evidence",
         title: "Evidence Center",
         sub: "Connected sources & document repository",
-        to: "/evidence",
+        to: activeProject ? `/projects/${activeProject.id}/evidence` : "/evidence",
         icon: FileSearch,
       },
       {
         id: "nav-knowledge",
         title: "Knowledge Intelligence",
         sub: "Structured reconstruction across 8 domains",
-        to: "/knowledge",
+        to: activeProject ? `/projects/${activeProject.id}/knowledge` : "/knowledge",
         icon: BrainCircuit,
       },
       {
@@ -159,10 +161,10 @@ export function CommandPalette({
       },
       {
         id: "nav-assistant",
-        title: "Project Knowledge Assistant",
+        title: "AI Assistant",
         sub: "Permission-filtered conversational assistant",
         to: "/assistant",
-        icon: Bot,
+        icon: MessageSquareText,
       },
       {
         id: "nav-sources",
@@ -175,7 +177,7 @@ export function CommandPalette({
         id: "nav-audit",
         title: "Audit Logs",
         sub: "Immutable PostgreSQL audit trail",
-        to: "/audit",
+        to: "/settings/audit-logs",
         icon: ScrollText,
       },
       {
@@ -186,49 +188,62 @@ export function CommandPalette({
         icon: Settings,
       },
     ],
-    []
+    [activeProject]
   );
 
   const groups: CommandGroup[] = useMemo(() => {
     const t = q.toLowerCase().trim();
     const has = (x: string) => !t || x.toLowerCase().includes(t);
 
-    const projectItems: CommandItem[] = projects
-      .filter((p) => has(`${p.name} ${p.slug || ""} ${p.description || ""}`))
+    // Only show live projects from context
+    const allProjects = projects;
+
+    const projectItems: CommandItem[] = allProjects
+      .filter((p) => has(`${p.name} ${(p as { slug?: string }).slug || ""} ${p.description || ""}`))
       .map((p) => ({
         id: `proj-${p.id}`,
         title: p.name,
-        sub: p.description || "Active project workspace",
-        to: "/overview",
+        sub: (p as { role?: string }).role
+          ? ROLE_LABEL[(p as { role?: string }).role as ProjectRole] || p.description || "Active project"
+          : p.description || "Active project workspace",
+        to: `/projects/${p.id}`,
         icon: FolderKanban,
-        action: () => setActiveProject(p),
+        action: () => {
+          if ("organisation_id" in p) {
+            setActiveProject(p as unknown as Parameters<typeof setActiveProject>[0]);
+          }
+        },
       }));
 
-    const navItems: CommandItem[] = baseNavItems.filter((item) =>
-      has(`${item.title} ${item.sub}`)
-    );
+    // Handovers from figmaStore
+    const handoverItems: CommandItem[] = [];
 
-    const evidenceItems: CommandItem[] = evidenceList
-      .filter((e) => has(`${e.title || ""} ${e.provider || ""} ${e.source_type || ""}`))
+    // Knowledge (Decisions, Tasks, Risks)
+    const knowledgeItems: CommandItem[] = [];
+
+    // Evidence
+    const allEvidence = evidenceList.map((e) => ({
+      id: e.id,
+      title: e.title || "Evidence record",
+      sub: `${(e.provider || "DOC").toUpperCase()} · ${e.source_type || "Source"}`,
+      to: `/evidence`,
+    }));
+
+    const matchedEvidence: CommandItem[] = allEvidence
+      .filter((e) => has(`${e.title} ${e.sub}`))
       .slice(0, 5)
       .map((e) => ({
         id: `ev-${e.id}`,
-        title: e.title || "Evidence record",
-        sub: `${(e.provider || "DOC").toUpperCase()} · ${e.source_type || "Source"}`,
-        to: "/evidence",
+        title: e.title,
+        sub: e.sub,
+        to: e.to,
         icon: FileSearch,
       }));
 
-    const memberItems: CommandItem[] = members
-      .filter((m) => has(`${m.user_full_name || ""} ${m.user_email || ""} ${m.role_name || ""}`))
-      .slice(0, 4)
-      .map((m) => ({
-        id: `mem-${m.id}`,
-        title: m.user_full_name || m.user_email || "Member",
-        sub: `${m.user_email || ""} · ${m.transition_role || m.role_name || "Member"}`,
-        to: "/team",
-        icon: Users,
-      }));
+    // Navigation & Modules
+    const navItems: CommandItem[] = baseNavItems.filter((item) =>
+      has(`${item.title} ${item.sub}`)
+    );
 
     const result: CommandGroup[] = [];
 
@@ -236,36 +251,44 @@ export function CommandPalette({
       result.push({
         label: "Projects",
         icon: FolderKanban,
-        items: projectItems.slice(0, t ? 6 : 4),
+        items: projectItems.slice(0, t ? 6 : 3),
+      });
+    }
+
+    if (handoverItems.length > 0) {
+      result.push({
+        label: "Handovers",
+        icon: Workflow,
+        items: handoverItems.slice(0, t ? 6 : 3),
+      });
+    }
+
+    if (knowledgeItems.length > 0) {
+      result.push({
+        label: "Knowledge & Intelligence",
+        icon: Sparkles,
+        items: knowledgeItems.slice(0, t ? 6 : 3),
+      });
+    }
+
+    if (matchedEvidence.length > 0) {
+      result.push({
+        label: "Evidence",
+        icon: FileSearch,
+        items: matchedEvidence.slice(0, t ? 6 : 3),
       });
     }
 
     if (navItems.length > 0) {
       result.push({
         label: "Navigation & Modules",
-        icon: Sparkles,
-        items: navItems.slice(0, t ? 8 : 5),
-      });
-    }
-
-    if (evidenceItems.length > 0) {
-      result.push({
-        label: "Evidence Records",
-        icon: FileSearch,
-        items: evidenceItems,
-      });
-    }
-
-    if (memberItems.length > 0) {
-      result.push({
-        label: "Team Members",
-        icon: Users,
-        items: memberItems,
+        icon: LayoutDashboard,
+        items: navItems.slice(0, t ? 8 : 4),
       });
     }
 
     return result;
-  }, [q, projects, baseNavItems, evidenceList, members, setActiveProject]);
+  }, [q, projects, baseNavItems, evidenceList, setActiveProject]);
 
   if (!open) return null;
 
@@ -289,7 +312,7 @@ export function CommandPalette({
         className="animate-fade w-full max-w-xl overflow-hidden rounded-2xl bg-white shadow-pop border border-line"
         onMouseDown={(e) => e.stopPropagation()}
       >
-        {/* Search Input Bar */}
+        {/* Search Input Header */}
         <div className="flex items-center gap-3 border-b border-line px-4">
           <Search className="size-5 text-slate-400 shrink-0" />
           <input
@@ -301,8 +324,8 @@ export function CommandPalette({
                 handleSelect(firstItem);
               }
             }}
-            placeholder="Search projects, handovers, evidence and navigation…"
-            className="h-14 flex-1 bg-transparent text-[15px] text-navy outline-none placeholder:text-slate-400"
+            placeholder="Search projects, handovers, knowledge and evidence…"
+            className="h-14 flex-1 bg-transparent text-[15px] text-navy outline-none placeholder:text-slate-400 font-sans"
           />
           <kbd className="rounded border border-line px-1.5 py-0.5 text-[11px] font-mono text-slate-500 bg-slate-50">
             Esc
@@ -315,7 +338,7 @@ export function CommandPalette({
             <div className="px-4 py-10 text-center">
               <p className="text-sm font-semibold text-navy">No results for “{q}”</p>
               <p className="mt-1 text-xs text-muted">
-                Try searching for a project name, evidence title, or module name.
+                Try a project name, handover code (HO-1042) or evidence reference.
               </p>
             </div>
           ) : (
@@ -330,7 +353,7 @@ export function CommandPalette({
                     onClick={() => handleSelect(item)}
                     className="group flex w-full items-center gap-3 rounded-lg px-2.5 py-2 text-left hover:bg-tint transition-colors cursor-pointer"
                   >
-                    <span className="flex size-7 items-center justify-center rounded-md bg-slate-100 text-slate-500 group-hover:bg-white group-hover:text-brand transition-colors">
+                    <span className="flex size-7 items-center justify-center rounded-md bg-slate-100 text-slate-500 group-hover:bg-white group-hover:text-brand transition-colors shrink-0">
                       <item.icon className="size-3.5" />
                     </span>
                     <span className="min-w-0 flex-1">
@@ -349,10 +372,12 @@ export function CommandPalette({
           )}
         </div>
 
-        {/* Footer Bar */}
+        {/* Footer */}
         <div className="flex items-center justify-between border-t border-line bg-slate-50/70 px-4 py-2 text-[11px] text-muted font-sans">
           <span>
-            <kbd className="font-mono bg-white px-1 py-0.5 rounded border border-line">↵</kbd>{" "}
+            <kbd className="font-mono bg-white px-1 py-0.5 rounded border border-line">
+              ↵
+            </kbd>{" "}
             open first result
           </span>
           <span>Results respect your active permissions</span>

@@ -5,7 +5,7 @@ import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { ChevronRight } from "lucide-react";
 import { useLiveApp } from "../../context/LiveAppContext";
-import { cn } from "../../lib/utils";
+import { cn } from "../figma-ui/index";
 
 export interface Crumb {
   label: string;
@@ -26,41 +26,44 @@ export function Breadcrumbs({ crumbs }: { crumbs?: Crumb[] }) {
     const list: Crumb[] = [];
 
     switch (pathname) {
+      case "/dashboard":
       case "/overview":
         if (activeProject) {
           list.push({ label: "Projects", to: "/projects" });
-          list.push({ label: activeProject.name, to: "/overview" });
+          list.push({ label: activeProject.name, to: `/projects/${activeProject.id}` });
         }
         list.push({ label: "Overview" });
         break;
       case "/projects":
-        list.push({ label: "My Projects" });
+        list.push({ label: "Workspace", to: "/dashboard" });
+        list.push({ label: "Projects" });
         break;
+      case "/settings/team":
       case "/team":
         if (activeProject) {
           list.push({ label: "Projects", to: "/projects" });
-          list.push({ label: activeProject.name, to: "/overview" });
+          list.push({ label: activeProject.name, to: `/projects/${activeProject.id}` });
         }
         list.push({ label: "Team Members" });
         break;
       case "/evidence":
         if (activeProject) {
           list.push({ label: "Projects", to: "/projects" });
-          list.push({ label: activeProject.name, to: "/overview" });
+          list.push({ label: activeProject.name, to: `/projects/${activeProject.id}` });
         }
         list.push({ label: "Evidence Center" });
         break;
       case "/knowledge":
         if (activeProject) {
           list.push({ label: "Projects", to: "/projects" });
-          list.push({ label: activeProject.name, to: "/overview" });
+          list.push({ label: activeProject.name, to: `/projects/${activeProject.id}` });
         }
         list.push({ label: "Knowledge Intelligence" });
         break;
       case "/relationships":
         if (activeProject) {
           list.push({ label: "Projects", to: "/projects" });
-          list.push({ label: activeProject.name, to: "/overview" });
+          list.push({ label: activeProject.name, to: `/projects/${activeProject.id}` });
         }
         list.push({ label: "Relationship Explorer" });
         break;
@@ -73,6 +76,7 @@ export function Breadcrumbs({ crumbs }: { crumbs?: Crumb[] }) {
         list.push({ label: "Conflicts" });
         break;
       case "/handover":
+      case "/handovers":
         list.push({ label: "Knowledge Transfer", to: "/handover" });
         list.push({ label: "Handover Workspace" });
         break;
@@ -88,6 +92,7 @@ export function Breadcrumbs({ crumbs }: { crumbs?: Crumb[] }) {
         list.push({ label: "Administration", to: "/settings" });
         list.push({ label: "Connected Sources" });
         break;
+      case "/settings/audit-logs":
       case "/audit":
         list.push({ label: "Administration", to: "/settings" });
         list.push({ label: "Audit Logs" });
@@ -96,11 +101,39 @@ export function Breadcrumbs({ crumbs }: { crumbs?: Crumb[] }) {
         list.push({ label: "Administration", to: "/settings" });
         list.push({ label: "Settings" });
         break;
+      case "/settings/profile":
+        list.push({ label: "Settings", to: "/settings" });
+        list.push({ label: "Profile & Account" });
+        break;
+      case "/flows":
+        list.push({ label: "Prototype", to: "/dashboard" });
+        list.push({ label: "Prototype Flows" });
+        break;
+      case "/brand":
+        list.push({ label: "Studio", to: "/dashboard" });
+        list.push({ label: "3D Brand Studio" });
+        break;
+      case "/design-system":
+        list.push({ label: "System", to: "/dashboard" });
+        list.push({ label: "Design System" });
+        break;
       default: {
-        const seg = pathname.replace(/^\//, "").split("/")[0];
-        if (seg) {
+        const segs = pathname.replace(/^\//, "").split("/");
+        if (segs[0] === "projects" && segs[1]) {
+          list.push({ label: "Projects", to: "/projects" });
+          if (activeProject && activeProject.id === segs[1]) {
+            list.push({ label: activeProject.name, to: `/projects/${segs[1]}` });
+          } else {
+            list.push({ label: "Project", to: `/projects/${segs[1]}` });
+          }
+          if (segs[2]) {
+            list.push({
+              label: segs[2].charAt(0).toUpperCase() + segs[2].slice(1).replace(/-/g, " "),
+            });
+          }
+        } else if (segs[0]) {
           list.push({
-            label: seg.charAt(0).toUpperCase() + seg.slice(1).replace(/-/g, " "),
+            label: segs[0].charAt(0).toUpperCase() + segs[0].slice(1).replace(/-/g, " "),
           });
         } else {
           list.push({ label: "Overview" });
@@ -113,7 +146,7 @@ export function Breadcrumbs({ crumbs }: { crumbs?: Crumb[] }) {
   }, [crumbs, pathname, activeProject]);
 
   return (
-    <nav aria-label="Breadcrumb" className="hidden min-w-0 items-center gap-1.5 text-[13px] md:flex">
+    <nav aria-label="Breadcrumb" className="hidden min-w-0 items-center gap-1.5 text-[13px] md:flex font-sans">
       {/* Workspace Root Node */}
       <span className="flex shrink-0 items-center gap-1.5 text-muted">
         <span className="flex size-[18px] items-center justify-center rounded-[5px] bg-navy text-[9px] font-bold text-white shadow-2xs">

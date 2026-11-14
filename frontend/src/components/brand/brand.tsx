@@ -84,14 +84,16 @@ export function Logo({
 export function SourceIcon({
   type,
   size = 36,
+  className,
 }: {
   type: BrandSourceType;
   size?: number;
+  className?: string;
 }) {
   const s = size * 0.55;
   const box = (bg: string, child: React.ReactNode) => (
     <span
-      className="inline-flex shrink-0 items-center justify-center rounded-[10px] border border-line"
+      className={cn("inline-flex shrink-0 items-center justify-center rounded-[10px] border border-line", className)}
       style={{ width: size, height: size, background: bg }}
     >
       {child}

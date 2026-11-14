@@ -2,7 +2,7 @@
 
 import React from "react";
 import Link from "next/link";
-import { usePathname } from "next/navigation";
+import { usePathname, useRouter } from "next/navigation";
 import {
   LayoutDashboard,
   FolderKanban,
@@ -14,7 +14,6 @@ import {
   AlertTriangle,
   Workflow,
   Send,
-  Bot,
   Plug,
   ScrollText,
   Settings,
@@ -23,33 +22,61 @@ import {
   ChevronDown,
   ChevronsUpDown,
   Search,
-  Layers,
   Plus,
   Building2,
   FileSearch,
   CheckCircle2,
   MessageSquareText,
+  type LucideIcon,
 } from "lucide-react";
-import { Logo, LogoMark } from "../brand";
+import { Logo, LogoMark } from "../figma-ui/brand";
 import {
   Avatar,
   Badge,
   Dropdown,
   MenuItem,
   Tooltip,
-  RoleBadge,
   cn,
-} from "../ui";
+} from "../figma-ui/index";
 import { useLiveApp } from "../../context/LiveAppContext";
-import type { Project } from "../../lib/types";
+import {
+  ROLE_LABEL,
+  type ProjectRole,
+} from "../../lib/figmaStore";
 
-export { RoleBadge };
+export const ROLE_TONE: Record<ProjectRole, "blue" | "amber" | "green"> = {
+  manager: "blue",
+  outgoing: "amber",
+  incoming: "green",
+};
+
+export function RoleBadge({
+  role,
+  className,
+}: {
+  role: ProjectRole | string;
+  className?: string;
+}) {
+  const norm = (
+    typeof role === "string" ? role.toLowerCase() : role
+  ) as ProjectRole;
+  const tone = ROLE_TONE[norm] || "blue";
+  const label =
+    ROLE_LABEL[norm as keyof typeof ROLE_LABEL] ||
+    (typeof role === "string" ? role : "Member");
+  return (
+    <Badge tone={tone} dot className={className}>
+      {label}
+    </Badge>
+  );
+}
 
 interface NavItem {
   label: string;
   to: string;
-  icon: React.ComponentType<{ className?: string; strokeWidth?: number }>;
-  badge?: number | string;
+  icon: LucideIcon | React.ComponentType<{ className?: string; strokeWidth?: number }>;
+  badge?: number;
+  match?: string;
   accent?: boolean;
 }
 
@@ -67,17 +94,18 @@ function WorkspaceSwitcher({ collapsed }: { collapsed: boolean }) {
   const { organisations, activeOrg, setActiveOrg, setIsCreateOrgModalOpen } =
     useLiveApp();
 
-  const isQueryOpen =
-    typeof window !== "undefined" && window.location.search.includes("openOrg=true");
+  const activeName =
+    mounted && activeOrg?.name
+      ? activeOrg.name
+      : "The Handover";
+  const initial = activeName.charAt(0).toUpperCase();
 
-  const orgName = (mounted && activeOrg?.name) || "The Handover";
-  const orgInitial = orgName.charAt(0).toUpperCase();
+  const orgList = organisations;
 
   return (
     <Dropdown
       width="w-64"
       align="left"
-      defaultOpen={isQueryOpen}
       trigger={() => (
         <button
           className={cn(
@@ -86,8 +114,11 @@ function WorkspaceSwitcher({ collapsed }: { collapsed: boolean }) {
           )}
           aria-label="Switch workspace"
         >
-          <span className="flex size-6 shrink-0 items-center justify-center rounded-md bg-navy text-[10px] font-bold text-white shadow-2xs">
-            {orgInitial}
+          <span
+            className="flex size-6 shrink-0 items-center justify-center rounded-md bg-navy text-[10px] font-bold text-white shadow-2xs"
+            suppressHydrationWarning
+          >
+            {initial}
           </span>
           {!collapsed && (
             <>
@@ -95,7 +126,7 @@ function WorkspaceSwitcher({ collapsed }: { collapsed: boolean }) {
                 className="min-w-0 flex-1 truncate text-[13px] font-medium text-navy"
                 suppressHydrationWarning
               >
-                {orgName}
+                {activeName}
               </span>
               <ChevronDown className="size-3.5 text-slate-400 shrink-0" />
             </>
@@ -106,24 +137,27 @@ function WorkspaceSwitcher({ collapsed }: { collapsed: boolean }) {
       {(close) => (
         <div>
           <p className="px-2.5 pb-1 pt-1.5 text-[11px] font-semibold uppercase tracking-wider text-slate-400">
-            Workspaces / Organisations
+            Workspaces
           </p>
-          {organisations.map((org) => (
-            <MenuItem
-              key={org.id}
-              icon={Building2}
-              active={org.id === activeOrg?.id}
-              onClick={() => {
-                setActiveOrg(org);
-                close();
-              }}
-            >
-              <span className="block truncate font-medium">{org.name}</span>
-              <span className="block text-[11px] text-muted truncate">
-                {org.slug || "Enterprise workspace"}
-              </span>
-            </MenuItem>
-          ))}
+          {orgList.map((org) => {
+            const isSelected = activeOrg?.id === org.id;
+            return (
+              <MenuItem
+                key={org.id}
+                icon={Building2}
+                active={isSelected}
+                onClick={() => {
+                  setActiveOrg(org);
+                  close();
+                }}
+              >
+                <span className="block truncate font-medium">{org.name}</span>
+                <span className="block text-[11px] text-muted truncate">
+                  {org.slug || "Workspace"}
+                </span>
+              </MenuItem>
+            );
+          })}
           <div className="my-1 border-t border-line" />
           <MenuItem
             icon={Plus}
@@ -147,6 +181,7 @@ function ProjectSwitcher({
   collapsed: boolean;
   onDone?: () => void;
 }) {
+  const router = useRouter();
   const [mounted, setMounted] = React.useState(false);
   React.useEffect(() => {
     setMounted(true);
@@ -161,42 +196,49 @@ function ProjectSwitcher({
     members,
   } = useLiveApp();
 
-  const isQueryOpen =
-    typeof window !== "undefined" && window.location.search.includes("openProject=true");
+  const effectiveProjects = projects;
 
-  if (!mounted || (!activeProject && projects.length === 0 && !isQueryOpen)) return null;
+  const currentMember = mounted
+    ? members.find((m) => m.user_id === user?.id || m.user_email === user?.email)
+    : undefined;
 
-  const currentMember = members.find(
-    (m) => m.user_id === user?.id || m.user_email === user?.email
-  );
   const currentRole =
     currentMember?.transition_role === "departing_owner"
       ? "Outgoing"
       : currentMember?.transition_role === "incoming_assignee"
       ? "Incoming"
-      : currentMember?.role_name || "Member";
+      : currentMember?.role_name || "Manager";
+
+  const effectiveProject = mounted ? activeProject : null;
 
   const projectCode =
-    activeProject?.name
+    effectiveProject?.name
       ?.replace(/[^A-Za-z]/g, "")
       .slice(0, 3)
-      .toUpperCase() || "PRJ";
+      .toUpperCase() ||
+    (effectiveProject as unknown as { settings?: { code?: string } })?.settings?.code ||
+    "PRJ";
 
-  const projectColor = "#315FBA";
+  const projectColor =
+    (effectiveProject as unknown as { settings?: { color?: string } })?.settings?.color ||
+    "#315FBA";
 
   return (
     <Dropdown
       width="w-72"
       align="left"
-      defaultOpen={isQueryOpen}
       trigger={() =>
         collapsed ? (
-          <Tooltip content={`${activeProject?.name || "Select Project"} · ${currentRole}`}>
+          <Tooltip
+            content={`${effectiveProject?.name || "All Projects"} · ${currentRole}`}
+          >
             <button
               className="mx-auto flex size-8 items-center justify-center rounded-lg text-xs font-bold text-white shadow-2xs cursor-pointer"
               style={{ background: projectColor }}
+              aria-label="Switch project"
+              suppressHydrationWarning
             >
-              {projectCode.slice(0, 2)}
+              <span suppressHydrationWarning>{projectCode.slice(0, 2)}</span>
             </button>
           </Tooltip>
         ) : (
@@ -207,6 +249,7 @@ function ProjectSwitcher({
             <span
               className="flex size-7 shrink-0 items-center justify-center rounded-[7px] text-[10px] font-bold text-white shadow-2xs"
               style={{ background: projectColor }}
+              suppressHydrationWarning
             >
               {projectCode}
             </span>
@@ -215,7 +258,7 @@ function ProjectSwitcher({
                 className="block truncate text-[13px] font-semibold text-navy"
                 suppressHydrationWarning
               >
-                {activeProject?.name || "Select Project"}
+                {effectiveProject?.name || "All Projects"}
               </span>
               <span
                 className="mt-0.5 flex items-center gap-1 text-[11px] text-muted"
@@ -240,6 +283,7 @@ function ProjectSwitcher({
               setActiveProject(null);
               close();
               onDone?.();
+              router.push("/dashboard");
             }}
             className={cn(
               "flex w-full items-center gap-2.5 rounded-lg px-2.5 py-2 text-left hover:bg-tint transition-colors cursor-pointer mb-1",
@@ -257,22 +301,30 @@ function ProjectSwitcher({
                 All projects aggregated
               </span>
             </span>
-            {!activeProject && <CheckCircle2 className="size-4 text-brand shrink-0" />}
+            {!activeProject && (
+              <CheckCircle2 className="size-4 text-brand shrink-0" />
+            )}
           </button>
-          {projects.map((p) => {
+          {effectiveProjects.map((p) => {
             const pCode =
+              (p as unknown as { settings?: { code?: string } })?.settings?.code ||
               p.name
                 ?.replace(/[^A-Za-z]/g, "")
                 .slice(0, 3)
-                .toUpperCase() || "PRJ";
+                .toUpperCase() ||
+              "PRJ";
+            const pCol =
+              (p as unknown as { settings?: { color?: string } })?.settings?.color ||
+              "#315FBA";
             const isSelected = p.id === activeProject?.id;
             return (
               <button
                 key={p.id}
                 onClick={() => {
-                  setActiveProject(p);
+                  setActiveProject(p as unknown as Parameters<typeof setActiveProject>[0]);
                   close();
                   onDone?.();
+                  router.push(`/projects/${p.id}`);
                 }}
                 className={cn(
                   "flex w-full items-center gap-2.5 rounded-lg px-2.5 py-2 text-left hover:bg-tint transition-colors cursor-pointer",
@@ -281,7 +333,7 @@ function ProjectSwitcher({
               >
                 <span
                   className="flex size-7 shrink-0 items-center justify-center rounded-md text-[10px] font-bold text-white shadow-2xs"
-                  style={{ background: projectColor }}
+                  style={{ background: pCol }}
                 >
                   {pCode}
                 </span>
@@ -293,7 +345,9 @@ function ProjectSwitcher({
                     {p.description || "Project workspace"}
                   </span>
                 </span>
-                {isSelected && <CheckCircle2 className="size-4 text-brand shrink-0" />}
+                {isSelected && (
+                  <CheckCircle2 className="size-4 text-brand shrink-0" />
+                )}
               </button>
             );
           })}
@@ -339,85 +393,166 @@ function SidebarContent({
       ? "outgoing"
       : currentMember?.transition_role === "incoming_assignee"
       ? "incoming"
-      : currentMember?.role_name?.toLowerCase() || "member";
+      : currentMember?.role_name?.toLowerCase() || "manager";
 
-  // Build Figma navigation groups dynamically
+  // Exact 6-section canonical navigation structure from AGENTS.md & Figma Make Shell
   const navGroups: NavGroup[] = [
     {
-      label: "Workspace",
+      label: "WORKSPACE",
       items: [
-        { label: "Dashboard", to: "/overview", icon: LayoutDashboard },
-        { label: "My Projects", to: "/projects", icon: FolderKanban },
-        { label: "Team", to: "/team", icon: Users },
+        {
+          label: "Overview",
+          to: "/dashboard",
+          icon: LayoutDashboard,
+          match: "^/dashboard$|^/overview$",
+        },
+        {
+          label: "Projects",
+          to: "/projects",
+          icon: FolderKanban,
+          match: "^/projects$|^/projects/new",
+        },
+        {
+          label: "Team Members",
+          to: "/settings/team",
+          icon: Users,
+          match: "^/settings/team$|^/team$",
+        },
       ],
     },
     {
-      label: "Handovers",
+      label: "PROJECT INTELLIGENCE",
       items: [
-        { label: "All Handovers", to: "/handover", icon: Workflow },
-        { label: "Generated Handovers", to: "/generated-handovers", icon: Send },
-        { label: "Verification Center", to: "/verification", icon: ClipboardCheck },
-        { label: "Conflicts", to: "/conflicts", icon: AlertTriangle },
+        {
+          label: "Evidence Center",
+          to: activeProject
+            ? `/projects/${activeProject.id}/evidence`
+            : "/evidence",
+          icon: FileSearch,
+          match: "^/projects/.+/evidence|^/evidence",
+        },
+        {
+          label: "Knowledge Intelligence",
+          to: activeProject
+            ? `/projects/${activeProject.id}/knowledge`
+            : "/knowledge",
+          icon: BrainCircuit,
+          match: "^/projects/.+/knowledge|^/knowledge",
+        },
+        {
+          label: "Relationship Explorer",
+          to: "/relationships",
+          icon: Network,
+          match: "^/relationships",
+        },
+      ],
+    },
+    {
+      label: "VALIDATION",
+      items: [
+        {
+          label: "Verification Center",
+          to: "/verification",
+          icon: ClipboardCheck,
+          match: "^/verification",
+        },
+        {
+          label: "Conflicts",
+          to: "/conflicts",
+          icon: AlertTriangle,
+          match: "^/conflicts",
+        },
+        ...(userProjectRole === "outgoing"
+          ? [
+              {
+                label: "Verify my handover",
+                to: "/verification",
+                icon: ClipboardCheck,
+                accent: true,
+              },
+            ]
+          : []),
+      ],
+    },
+    {
+      label: "KNOWLEDGE TRANSFER",
+      items: [
+        {
+          label: "Handover Workspace",
+          to: "/handover",
+          icon: Workflow,
+          match: "^/handover$|^/handovers",
+        },
+        {
+          label: "Generated Handovers",
+          to: "/generated-handovers",
+          icon: Send,
+          match: "^/generated-handovers",
+        },
+        ...(userProjectRole === "incoming"
+          ? [
+              {
+                label: "Ask assistant",
+                to: "/assistant",
+                icon: MessageSquareText,
+                accent: true,
+              },
+            ]
+          : []),
+      ],
+    },
+    {
+      label: "AI ASSISTANT",
+      items: [
+        {
+          label: "AI Assistant",
+          to: "/assistant",
+          icon: MessageSquareText,
+          match: "^/assistant",
+        },
+      ],
+    },
+    {
+      label: "ADMINISTRATION",
+      items: [
+        {
+          label: "Connected Sources",
+          to: "/sources",
+          icon: Plug,
+          match: "^/sources",
+        },
+        {
+          label: "Audit Logs",
+          to: "/settings/audit-logs",
+          icon: ScrollText,
+          match: "^/settings/audit-logs$|^/audit$",
+        },
+        {
+          label: "Settings",
+          to: "/settings",
+          icon: Settings,
+          match: "^/settings$|^/settings/profile",
+        },
       ],
     },
   ];
 
-  // Dynamic Current Project Section
-  const isProjectQueryOpen =
-    typeof window !== "undefined" && window.location.search.includes("openProject=true");
-
-  if (mounted && (activeProject || isProjectQueryOpen)) {
-    const projectItems: NavItem[] = [
-      { label: "Overview", to: "/overview", icon: Layers },
-      { label: "Knowledge Explorer", to: "/knowledge", icon: BrainCircuit },
-      { label: "Relationship Explorer", to: "/relationships", icon: Network },
-      { label: "Evidence Center", to: "/evidence", icon: FileSearch },
-      { label: "Data Sources", to: "/sources", icon: Database },
-    ];
-
-    // Role-specific action pills
-    if (userProjectRole === "outgoing") {
-      projectItems.push({
-        label: "Verify my handover",
-        to: "/verification",
-        icon: ClipboardCheck,
-        accent: true,
-      });
-    } else if (userProjectRole === "incoming") {
-      projectItems.push({
-        label: "Ask assistant",
-        to: "/assistant",
-        icon: MessageSquareText,
-        accent: true,
-      });
-    }
-
-    navGroups.push({
-      label: "Current Project",
-      items: projectItems,
-    });
-  }
-
-  // Settings & System Section
-  navGroups.push({
-    label: "Settings",
-    items: [
-      { label: "Connected Sources", to: "/sources", icon: Plug },
-      { label: "Audit Logs", to: "/audit", icon: ScrollText },
-      { label: "Settings", to: "/settings", icon: Settings },
-    ],
-  });
-
   const isActive = (item: NavItem) => {
-    if (item.to === "/overview") {
-      return pathname === "/overview";
+    if (item.match) {
+      return new RegExp(item.match).test(pathname);
+    }
+    if (item.to === "/dashboard") {
+      return pathname === "/dashboard" || pathname === "/overview";
     }
     return pathname === item.to || pathname.startsWith(item.to + "/");
   };
 
-  const userName = mounted && user ? (user.full_name || user.email?.split("@")[0] || "User") : "User";
-  const userRole = mounted && currentMember?.role_name ? currentMember.role_name : "Workspace Member";
-  const userSubtitle = mounted && user?.email ? user.email : userRole;
+  const userName =
+    mounted && user ? user.full_name || user.email?.split("@")[0] || "User" : "User";
+  const userSubtitle =
+    mounted && user?.email
+      ? user.email
+      : currentMember?.role_name || "Workspace Member";
 
   return (
     <div className="flex h-full flex-col font-sans select-none">
@@ -429,7 +564,7 @@ function SidebarContent({
         )}
       >
         <Link
-          href="/overview"
+          href="/dashboard"
           onClick={onNavigate}
           className="focus:outline-none"
           title="The Handover"
@@ -438,9 +573,10 @@ function SidebarContent({
         </Link>
       </div>
 
-      {/* Workspace Switcher & Global Search Button */}
+      {/* Switchers & Search */}
       <div className={cn("space-y-2 px-3 relative z-30", collapsed && "px-2")}>
         <WorkspaceSwitcher collapsed={collapsed} />
+        <ProjectSwitcher collapsed={collapsed} onDone={onNavigate} />
         <button
           type="button"
           onClick={onOpenSearch}
@@ -470,16 +606,7 @@ function SidebarContent({
       >
         {navGroups.map((group) => (
           <div key={group.label}>
-            {group.label === "Current Project" ? (
-              <div className="mb-2">
-                {!collapsed && (
-                  <p className="mb-1.5 px-2 text-[10.5px] font-semibold uppercase tracking-[0.12em] text-[#97a3b8]">
-                    Current project
-                  </p>
-                )}
-                <ProjectSwitcher collapsed={collapsed} onDone={onNavigate} />
-              </div>
-            ) : !collapsed ? (
+            {!collapsed ? (
               <p className="mb-1 px-2 text-[10.5px] font-semibold uppercase tracking-[0.12em] text-[#97a3b8]">
                 {group.label}
               </p>
@@ -515,7 +642,9 @@ function SidebarContent({
                       )}
                       strokeWidth={1.9}
                     />
-                    {!collapsed && <span className="flex-1 truncate">{item.label}</span>}
+                    {!collapsed && (
+                      <span className="flex-1 truncate">{item.label}</span>
+                    )}
                     {item.badge !== undefined && (
                       <span className="rounded-md bg-blue-100 px-1.5 font-mono text-[10px] font-semibold text-brand">
                         {item.badge}
@@ -547,23 +676,29 @@ function SidebarContent({
             collapsed && "justify-center"
           )}
         >
-          <Avatar name={userName} size={30} />
-          {!collapsed && (
-            <div className="min-w-0 flex-1">
-              <span
-                className="block truncate text-[13px] font-semibold text-navy leading-tight"
-                suppressHydrationWarning
-              >
-                {userName}
-              </span>
-              <span
-                className="block truncate text-[11px] text-muted"
-                suppressHydrationWarning
-              >
-                {userSubtitle}
-              </span>
-            </div>
-          )}
+          <Link
+            href="/settings/profile"
+            onClick={onNavigate}
+            className="flex items-center gap-2.5 min-w-0 flex-1 overflow-hidden"
+          >
+            <Avatar name={userName} size={30} />
+            {!collapsed && (
+              <div className="min-w-0 flex-1">
+                <span
+                  className="block truncate text-[13px] font-semibold text-navy leading-tight"
+                  suppressHydrationWarning
+                >
+                  {userName}
+                </span>
+                <span
+                  className="block truncate text-[11px] text-muted"
+                  suppressHydrationWarning
+                >
+                  {userSubtitle}
+                </span>
+              </div>
+            )}
+          </Link>
           {!collapsed && (
             <button
               type="button"
@@ -596,14 +731,11 @@ export function Sidebar({
       {/* Desktop Persistent Sidebar */}
       <aside
         className={cn(
-          "no-print hidden shrink-0 border-r border-[#dbe3f0] bg-tint transition-[width] duration-300 ease-[cubic-bezier(0.22,1,0.36,1)] lg:block",
+          "no-print hidden shrink-0 border-r border-[#dbe3f0] bg-[#EDF2FA] transition-[width] duration-300 ease-[cubic-bezier(0.22,1,0.36,1)] lg:block",
           collapsed ? "w-[64px]" : "w-[248px]"
         )}
       >
-        <SidebarContent
-          collapsed={collapsed}
-          onOpenSearch={onOpenSearch}
-        />
+        <SidebarContent collapsed={collapsed} onOpenSearch={onOpenSearch} />
       </aside>
 
       {/* Mobile Drawer (Screens < 1024px) */}

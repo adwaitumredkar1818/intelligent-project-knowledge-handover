@@ -919,7 +919,7 @@ export function OrganicScene({
     resetPulses();
 
     let rotYa = variant === "network" ? 0.75 : variant === "assemble" ? 0.38 : 0.55;
-    let tiltX = variant === "assemble" ? -0.10 : -0.18;
+    const tiltX = variant === "assemble" ? -0.10 : -0.18;
     let targetTx = 0;
     let targetTy = 0;
     let px = 0;
@@ -1964,7 +1964,7 @@ export function OrganicScene({
 
     let raf = 0;
     let last = performance.now();
-    let start = last;
+    const start = last;
     let visible = true;
     let running = true;
     const minFrame = lowPower ? 1000 / 30 : 0;

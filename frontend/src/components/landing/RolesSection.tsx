@@ -160,7 +160,6 @@ export function RolesSection() {
           <div className="reveal grid items-center gap-10 grid-cols-1 lg:grid-cols-[1.1fr_0.9fr] lg:gap-16">
             <div className="order-2 lg:order-1">
               <div className="relative mx-auto max-w-md">
-                <div className="absolute inset-x-6 -bottom-3 top-3 rounded-2xl border border-[#D9E1F0] bg-white/60 pointer-events-none" />
                 <div className="tile relative rounded-2xl border border-[#D9E1F0] bg-white p-5 shadow-card">
                   <div className="flex items-center justify-between">
                     <span className="text-[11px] font-semibold uppercase tracking-[0.1em] text-[#718096]">
@@ -212,21 +211,23 @@ export function RolesSection() {
           </div>
 
           {/* Directional Knowledge Transmission Bridge */}
-          <div className="reveal relative z-20 flex items-center justify-center py-4" aria-hidden="true">
-            <div className="relative z-20 flex items-center gap-3 rounded-full border border-[#D9E1F0] bg-white px-5 py-2 shadow-sm ring-1 ring-slate-900/5 transition hover:border-[#315FBA]/40">
-              <span className="font-mono text-[10.5px] font-semibold text-amber-700 uppercase tracking-wider">Outgoing</span>
-              <svg width="40" height="12" viewBox="0 0 40 12" fill="none" className="overflow-visible" aria-hidden="true">
-                <path d="M0 6 H34" stroke="#D9E1F0" strokeWidth="1.5" />
-                <path d="M0 6 H34" stroke="#315FBA" strokeWidth="1.5" className="animate-stream-flow" />
-                <polygon points="32,3 40,6 32,9" fill="#315FBA" />
+          <div className="reveal relative flex items-center justify-center py-4">
+            {/* Visual Continuity Spine connecting Outgoing and Incoming sections */}
+            <div className="pointer-events-none absolute inset-y-0 w-px bg-gradient-to-b from-transparent via-[#315FBA]/30 to-transparent" />
+            <div className="relative z-10 flex max-w-full items-center gap-2 sm:gap-3 overflow-x-auto rounded-full border border-[#D9E1F0] bg-white px-4 sm:px-5 py-2 shadow-sm ring-1 ring-slate-900/5 transition hover:border-[#315FBA]/40">
+              <span className="shrink-0 font-mono text-[10px] sm:text-[10.5px] font-semibold text-amber-700 uppercase tracking-wider">Outgoing</span>
+              <svg width="32" height="12" viewBox="0 0 32 12" fill="none" className="shrink-0 overflow-visible" aria-hidden="true">
+                <path d="M0 6 H26" stroke="#D9E1F0" strokeWidth="1.5" />
+                <path d="M0 6 H26" stroke="#315FBA" strokeWidth="1.5" className="animate-stream-flow" />
+                <polygon points="24,3 32,6 24,9" fill="#315FBA" />
               </svg>
-              <span className="font-mono text-[10.5px] font-semibold text-[#315FBA] uppercase tracking-wider">Continuous Handover</span>
-              <svg width="40" height="12" viewBox="0 0 40 12" fill="none" className="overflow-visible" aria-hidden="true">
-                <path d="M0 6 H34" stroke="#D9E1F0" strokeWidth="1.5" />
-                <path d="M0 6 H34" stroke="#299B80" strokeWidth="1.5" className="animate-stream-flow" />
-                <polygon points="32,3 40,6 32,9" fill="#299B80" />
+              <span className="shrink-0 font-mono text-[10px] sm:text-[10.5px] font-semibold text-[#315FBA] uppercase tracking-wider">Continuous Handover</span>
+              <svg width="32" height="12" viewBox="0 0 32 12" fill="none" className="shrink-0 overflow-visible" aria-hidden="true">
+                <path d="M0 6 H26" stroke="#D9E1F0" strokeWidth="1.5" />
+                <path d="M0 6 H26" stroke="#299B80" strokeWidth="1.5" className="animate-stream-flow" />
+                <polygon points="24,3 32,6 24,9" fill="#299B80" />
               </svg>
-              <span className="font-mono text-[10.5px] font-semibold text-teal-700 uppercase tracking-wider">Incoming</span>
+              <span className="shrink-0 font-mono text-[10px] sm:text-[10.5px] font-semibold text-teal-700 uppercase tracking-wider">Incoming</span>
             </div>
           </div>
 

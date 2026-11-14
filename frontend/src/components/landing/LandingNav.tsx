@@ -362,7 +362,7 @@ export function LandingNav() {
                     setMobileMenuOpen(false);
                     router.push("/overview");
                   }}
-                  className="flex h-12 w-full items-center justify-center gap-2 rounded-[10px] bg-[#315FBA] text-[15px] font-semibold text-white shadow-xs"
+                  className="flex h-12 w-full items-center justify-center gap-2 rounded-[10px] bg-[#315FBA] text-[15px] font-semibold text-white shadow-xs cursor-pointer"
                 >
                   Open Workspace
                   <ArrowRight className="size-4" />

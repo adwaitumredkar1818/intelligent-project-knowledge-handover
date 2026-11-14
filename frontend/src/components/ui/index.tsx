@@ -1049,7 +1049,7 @@ export function Dropdown({
   width?: string;
   defaultOpen?: boolean;
 }) {
-  const [open, setOpen] = useState(() => (typeof window !== "undefined" ? Boolean(defaultOpen) : false));
+  const [open, setOpen] = useState(false);
   const ref = useRef<HTMLDivElement>(null);
   useEffect(() => {
     if (defaultOpen) setOpen(true);

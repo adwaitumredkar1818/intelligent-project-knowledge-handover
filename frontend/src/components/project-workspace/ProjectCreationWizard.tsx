@@ -113,19 +113,15 @@ export function ProjectCreationWizard({
   // Form State
   const [name, setName] = useState("");
   const [description, setDescription] = useState("");
-  const [category, setCategory] = useState("Backend platform");
+  const [category, setCategory] = useState("");
   const [visibility, setVisibility] = useState<"private" | "organisation">("private");
   const [ownerId, setOwnerId] = useState<string>(currentUser?.id || "");
-  const [startDate, setStartDate] = useState("");
-  const [targetDate, setTargetDate] = useState("");
-
-  useEffect(() => {
-    const now = new Date();
-    setStartDate(now.toISOString().split("T")[0] || "");
+  const [startDate, setStartDate] = useState(() => new Date().toISOString().split("T")[0] || "");
+  const [targetDate, setTargetDate] = useState(() => {
     const d = new Date();
     d.setMonth(d.getMonth() + 3);
-    setTargetDate(d.toISOString().split("T")[0] || "");
-  }, []);
+    return d.toISOString().split("T")[0] || "";
+  });
 
   // Org members for team selection
   const [orgMembers, setOrgMembers] = useState<OrganisationMember[]>([]);
@@ -426,16 +422,11 @@ export function ProjectCreationWizard({
                 </Field>
 
                 <Field label="Category / Domain">
-                  <Select
+                  <Input
                     value={category}
                     onChange={(e) => setCategory(e.target.value)}
-                  >
-                    {CATEGORIES.map((c) => (
-                      <option key={c} value={c}>
-                        {c}
-                      </option>
-                    ))}
-                  </Select>
+                    placeholder="e.g. Backend platform, Mobile, Infrastructure"
+                  />
                 </Field>
 
                 <Field label="Visibility">

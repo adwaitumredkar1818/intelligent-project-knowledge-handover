@@ -50,17 +50,19 @@ function ProductIntroStory() {
         />
       ),
       ui: (
-        <div className="space-y-2 rounded-xl border border-[#D9E1F0] bg-white p-3.5 text-left shadow-card">
-          <p className="font-mono text-[10.5px] uppercase tracking-[0.1em] text-[#718096]">
+        <div className="space-y-2 rounded-xl border border-[#D9E1F0] bg-white p-3.5 text-left shadow-card min-w-0 overflow-hidden">
+          <p className="font-mono text-[10.5px] uppercase tracking-[0.1em] text-[#718096] truncate">
             2D interface · Data sources
           </p>
           {(["github", "jira", "slack", "docs"] as const).map((t, i) => (
             <div
               key={t}
-              className="flex items-center gap-2.5 rounded-lg border border-[#D9E1F0]/80 px-2.5 py-1.5 text-[12px]"
+              className="flex items-center gap-2 rounded-lg border border-[#D9E1F0]/80 px-2.5 py-1.5 text-[12px] min-w-0 overflow-hidden"
             >
-              <SourceIcon type={t} size={22} />
-              <span className="flex-1 font-medium text-[#203653]">
+              <span className="shrink-0 flex items-center">
+                <SourceIcon type={t} size={22} />
+              </span>
+              <span className="flex-1 min-w-0 truncate font-medium text-[#203653]">
                 {[
                   "atlas-settlement, atlas-ledger",
                   "PAY · Sprint records",
@@ -68,7 +70,7 @@ function ProductIntroStory() {
                   "ADR-007.pdf, Runbook v3.docx",
                 ][i]}
               </span>
-              <span className="inline-flex items-center gap-1 rounded-full bg-teal-50 px-2 py-0.5 text-[11px] font-semibold text-[#299B80]">
+              <span className="inline-flex items-center gap-1 rounded-full bg-teal-50 px-2 py-0.5 text-[11px] font-semibold text-[#299B80] shrink-0">
                 <span className="size-1.5 rounded-full bg-[#299B80]" />
                 Authorised
               </span>
@@ -90,12 +92,12 @@ function ProductIntroStory() {
         />
       ),
       ui: (
-        <div className="space-y-3 rounded-xl border border-[#D9E1F0] bg-white p-3.5 text-left shadow-card">
-          <div className="flex items-center justify-between">
-            <span className="font-mono text-[10.5px] uppercase tracking-[0.1em] text-[#718096]">
+        <div className="space-y-3 rounded-xl border border-[#D9E1F0] bg-white p-3.5 text-left shadow-card min-w-0 overflow-hidden">
+          <div className="flex items-center justify-between gap-2 min-w-0">
+            <span className="font-mono text-[10.5px] uppercase tracking-[0.1em] text-[#718096] truncate">
               2D interface · Reconstruction pipeline
             </span>
-            <span className="font-mono text-[11px] text-[#315FBA]">
+            <span className="font-mono text-[11px] text-[#315FBA] shrink-0">
               15,410 records
             </span>
           </div>
@@ -103,17 +105,17 @@ function ProductIntroStory() {
             <div className="h-full w-[68%] rounded-full bg-[#315FBA]" />
           </div>
           <ul className="space-y-1.5 text-[12px] text-[#203653]">
-            <li className="flex items-center gap-2">
-              <CheckCircle2 className="size-3.5 text-[#299B80]" />
-              Extracted 25 candidate findings from 4 sources
+            <li className="flex items-start gap-2 min-w-0">
+              <CheckCircle2 className="size-3.5 text-[#299B80] shrink-0 mt-0.5" />
+              <span className="leading-tight break-words">Extracted 25 candidate findings from 4 sources</span>
             </li>
-            <li className="flex items-center gap-2">
-              <CheckCircle2 className="size-3.5 text-[#299B80]" />
-              Linked PR #412 ↔ #payments-arch ↔ ADR-007
+            <li className="flex items-start gap-2 min-w-0">
+              <CheckCircle2 className="size-3.5 text-[#299B80] shrink-0 mt-0.5" />
+              <span className="leading-tight break-words">Linked PR #412 ↔ #payments-arch ↔ ADR-007</span>
             </li>
-            <li className="flex items-center gap-2">
-              <Sparkles className="size-3.5 text-[#315FBA]" />
-              Flagged 1 retention conflict & 3 knowledge gaps
+            <li className="flex items-start gap-2 min-w-0">
+              <Sparkles className="size-3.5 text-[#315FBA] shrink-0 mt-0.5" />
+              <span className="leading-tight break-words">Flagged 1 retention conflict & 3 knowledge gaps</span>
             </li>
           </ul>
         </div>
@@ -128,7 +130,7 @@ function ProductIntroStory() {
         <SphereVisual variant="hero" showTags className="h-52 w-full" />
       ),
       ui: (
-        <div className="grid grid-cols-2 gap-2 rounded-xl border border-[#D9E1F0] bg-white p-3.5 text-left shadow-card">
+        <div className="grid grid-cols-2 gap-2 rounded-xl border border-[#D9E1F0] bg-white p-3.5 text-left shadow-card min-w-0">
           <p className="col-span-2 font-mono text-[10.5px] uppercase tracking-[0.1em] text-[#718096]">
             2D interface · Reconstructed intelligence
           </p>
@@ -138,15 +140,13 @@ function ProductIntroStory() {
             ["Risks", "1 critical", "No retry on acquirer 504 timeouts", "#D36D72"],
             ["Dependencies", "2 blocking", "SOAP cutover blocked by PAY-1204", "#D39B43"],
           ].map(([k, m, d, c]) => (
-            <div key={k} className="rounded-lg border border-[#D9E1F0]/80 p-2.5">
-              <div className="flex items-center justify-between">
-                <span className="flex items-center gap-1.5 text-[11.5px] font-semibold text-[#203653]">
-                  <span className="size-1.5 rounded-full" style={{ background: c }} />
-                  {k}
-                </span>
-                <span className="font-mono text-[10px] text-[#718096]">{m}</span>
+            <div key={k} className="rounded-lg border border-[#D9E1F0]/80 p-2.5 min-w-0 overflow-hidden bg-white">
+              <div className="flex items-center gap-1.5 min-w-0">
+                <span className="size-1.5 shrink-0 rounded-full" style={{ background: c }} />
+                <span className="text-[11.5px] font-semibold text-[#203653] truncate">{k}</span>
               </div>
-              <p className="mt-1 truncate text-[11px] text-[#718096]">{d}</p>
+              <span className="mt-0.5 block font-mono text-[10px] text-[#718096] truncate">{m}</span>
+              <p className="mt-1 truncate text-[11px] text-[#718096]" title={d}>{d}</p>
             </div>
           ))}
         </div>
@@ -159,11 +159,11 @@ function ProductIntroStory() {
       sub: "Outgoing members inspect AI confidence against original source evidence.",
       scene: <SphereVisual variant="macro" className="h-52 w-full" />,
       ui: (
-        <div className="space-y-2.5 rounded-xl border border-[#D9E1F0] bg-white p-3.5 text-left shadow-card">
-          <p className="font-mono text-[10.5px] uppercase tracking-[0.1em] text-[#718096]">
+        <div className="space-y-2.5 rounded-xl border border-[#D9E1F0] bg-white p-3.5 text-left shadow-card min-w-0 overflow-hidden">
+          <p className="font-mono text-[10.5px] uppercase tracking-[0.1em] text-[#718096] truncate">
             2D interface · Review & verification
           </p>
-          <p className="text-[13px] font-semibold text-[#203653]">
+          <p className="text-[13px] font-semibold text-[#203653] leading-snug break-words">
             Decouple settlement from ledger using Kafka events
           </p>
           <div className="flex flex-wrap items-center gap-2">
@@ -179,7 +179,7 @@ function ProductIntroStory() {
               3 linked sources
             </span>
           </div>
-          <p className="rounded-lg bg-[#F6F8FC] px-2.5 py-1.5 text-[11.5px] text-[#718096]">
+          <p className="rounded-lg bg-[#F6F8FC] px-2.5 py-1.5 text-[11.5px] text-[#718096] leading-relaxed break-words">
             AI confidence (model certainty) is never conflated with human verification.
           </p>
         </div>
@@ -192,23 +192,23 @@ function ProductIntroStory() {
       sub: "Managers approve and publish; incoming members step in with full context.",
       scene: <SphereVisual variant="continuity" className="h-52 w-full" />,
       ui: (
-        <div className="space-y-2.5 rounded-xl border border-[#D9E1F0] bg-white p-3.5 text-left shadow-card">
-          <div className="flex items-center justify-between">
-            <span className="font-mono text-[10.5px] uppercase tracking-[0.1em] text-[#718096]">
+        <div className="space-y-2.5 rounded-xl border border-[#D9E1F0] bg-white p-3.5 text-left shadow-card min-w-0 overflow-hidden">
+          <div className="flex items-center justify-between gap-2 min-w-0">
+            <span className="font-mono text-[10.5px] uppercase tracking-[0.1em] text-[#718096] truncate">
               2D interface · Published handover
             </span>
-            <span className="inline-flex items-center gap-1 rounded-full bg-teal-50 px-2 py-0.5 text-[11px] font-semibold text-[#299B80]">
+            <span className="inline-flex items-center gap-1 rounded-full bg-teal-50 px-2 py-0.5 text-[11px] font-semibold text-[#299B80] shrink-0">
               <span className="size-1.5 rounded-full bg-[#299B80]" />
               HO-1042 · Published
             </span>
           </div>
-          <p className="text-[13px] font-semibold text-[#203653]">
+          <p className="text-[13px] font-semibold text-[#203653] leading-snug break-words">
             James Okafor → Priya Nair · Atlas Payments
           </p>
           <div className="h-1.5 w-full rounded-full bg-slate-100 overflow-hidden">
             <div className="h-full w-full rounded-full bg-[#299B80]" />
           </div>
-          <p className="text-[11.5px] text-[#718096]">
+          <p className="text-[11.5px] text-[#718096] leading-relaxed break-words">
             Includes 12-section report, interactive knowledge graph and evidence-grounded AI assistant.
           </p>
         </div>
@@ -238,16 +238,16 @@ function ProductIntroStory() {
             key={a.id}
             type="button"
             onClick={() => setAct(i)}
-            className={`rounded-xl border p-2.5 text-left transition cursor-pointer ${
+            className={`rounded-xl border p-2 text-left transition cursor-pointer min-w-0 overflow-hidden ${
               i === act
                 ? "border-[#315FBA] bg-indigo-50/60 shadow-xs"
                 : "border-[#D9E1F0] bg-white hover:bg-[#F6F8FC]"
             }`}
           >
             <a.icon
-              className={`size-4 ${i === act ? "text-[#315FBA]" : "text-[#718096]"}`}
+              className={`size-4 shrink-0 ${i === act ? "text-[#315FBA]" : "text-[#718096]"}`}
             />
-            <p className="mt-1.5 text-[11.5px] font-semibold text-[#203653]">
+            <p className="mt-1.5 text-[11px] sm:text-[11.5px] font-semibold text-[#203653] truncate">
               {["1. Sources", "2. Connect", "3. Emerge", "4. Verify", "5. Transfer"][i]}
             </p>
           </button>
@@ -256,16 +256,16 @@ function ProductIntroStory() {
 
       <div
         key={cur.id}
-        className="mt-4 grid items-center gap-4 rounded-2xl border border-[#D9E1F0] bg-[#F6F8FC]/60 p-4 sm:grid-cols-2"
+        className="mt-4 grid items-center gap-4 rounded-2xl border border-[#D9E1F0] bg-[#F6F8FC]/60 p-4 sm:grid-cols-2 min-w-0"
       >
-        <div className="flex flex-col items-center">
+        <div className="flex flex-col items-center min-w-0 w-full">
           {cur.scene}
-          <div className="mt-2 text-center">
-            <p className="text-[14px] font-semibold text-[#203653]">{cur.title}</p>
-            <p className="mt-0.5 text-[12.5px] text-[#718096]">{cur.sub}</p>
+          <div className="mt-2 text-center max-w-full px-2">
+            <p className="text-[14px] font-semibold text-[#203653] break-words">{cur.title}</p>
+            <p className="mt-0.5 text-[12.5px] text-[#718096] break-words">{cur.sub}</p>
           </div>
         </div>
-        {cur.ui}
+        <div className="min-w-0 w-full">{cur.ui}</div>
       </div>
     </div>
   );

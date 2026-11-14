@@ -202,7 +202,7 @@ export function BrandIntro() {
     }
 
     let rotY = 0.4;
-    let startTime = performance.now();
+    const startTime = performance.now();
     let lastTime = startTime;
 
     const render = (now: number) => {
@@ -380,7 +380,7 @@ export function BrandIntro() {
       return (
         <button
           onClick={handleReplay}
-          className="fixed bottom-4 left-4 z-40 flex items-center gap-1.5 rounded-full border border-[#D9E1F0] bg-white/90 px-3 py-1.5 font-mono text-[11px] font-semibold text-[#315FBA] shadow-md backdrop-blur-md hover:bg-white hover:border-[#315FBA] transition active:scale-95 cursor-pointer"
+          className="fixed bottom-4 left-16 z-40 flex items-center gap-1.5 rounded-full border border-[#D9E1F0] bg-white/90 px-3 py-1.5 font-mono text-[11px] font-semibold text-[#315FBA] shadow-md backdrop-blur-md hover:bg-white hover:border-[#315FBA] transition active:scale-95 cursor-pointer"
           title="Replay Branded Opening Animation"
         >
           <span className="size-2 rounded-full bg-[#315FBA] animate-pulse" />

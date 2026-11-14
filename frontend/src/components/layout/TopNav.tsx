@@ -15,7 +15,6 @@ import {
   Settings,
   ShieldCheck,
   LogOut,
-  Users,
   Workflow,
   ArrowRight,
   Keyboard,
@@ -23,8 +22,11 @@ import {
   BookOpen,
   CheckCircle2,
   AlertTriangle,
+  Sparkles,
+  Palette,
+  HelpCircle,
 } from "lucide-react";
-import { Logo } from "../brand";
+import { Logo } from "../figma-ui/brand";
 import {
   Avatar,
   Dropdown,
@@ -32,9 +34,10 @@ import {
   MenuItem,
   Tooltip,
   cn,
-} from "../ui";
+} from "../figma-ui/index";
 import { Breadcrumbs } from "./Breadcrumbs";
 import { useLiveApp } from "../../context/LiveAppContext";
+import { ROLE_LABEL, type ProjectRole } from "../../lib/figmaStore";
 
 function ContextChip() {
   const [mounted, setMounted] = React.useState(false);
@@ -48,21 +51,31 @@ function ContextChip() {
   const currentMember = members.find(
     (m) => m.user_id === user?.id || m.user_email === user?.email
   );
-  const currentRole =
+  const currentRole = (
     currentMember?.transition_role === "departing_owner"
-      ? "Outgoing"
+      ? "outgoing"
       : currentMember?.transition_role === "incoming_assignee"
-      ? "Incoming"
-      : currentMember?.role_name || "Member";
+      ? "incoming"
+      : currentMember?.role_name?.toLowerCase() || "manager"
+  ) as ProjectRole;
+
+  const roleLabel =
+    ROLE_LABEL[currentRole as keyof typeof ROLE_LABEL] || "Project Member";
 
   const projectCode =
+    (activeProject as unknown as { settings?: { code?: string } })?.settings?.code ||
     activeProject.name
       ?.replace(/[^A-Za-z]/g, "")
       .slice(0, 3)
-      .toUpperCase() || "PRJ";
+      .toUpperCase() ||
+    "PRJ";
 
-  const isOutgoing = currentRole.toLowerCase().includes("outgoing");
-  const isIncoming = currentRole.toLowerCase().includes("incoming");
+  const projectColor =
+    (activeProject as unknown as { settings?: { color?: string } })?.settings?.color ||
+    "#315FBA";
+
+  const isOutgoing = currentRole === "outgoing";
+  const isIncoming = currentRole === "incoming";
 
   const roleTextTone = isOutgoing
     ? "text-amber-700"
@@ -78,13 +91,13 @@ function ContextChip() {
 
   return (
     <Tooltip
-      content={`Your active role in ${activeProject.name}: ${currentRole}. Sets your perspective and verification authority.`}
+      content={`Your active role in ${activeProject.name}: ${roleLabel}. It changes navigation, widgets and actions.`}
       side="bottom"
     >
       <span className="hidden items-center gap-2 rounded-full border border-line bg-white py-1 pl-1 pr-2.5 text-[12px] font-medium text-navy 2xl:flex shadow-2xs">
         <span
           className="flex size-5 items-center justify-center rounded-full text-[8.5px] font-bold text-white shadow-2xs"
-          style={{ background: "#315FBA" }}
+          style={{ background: projectColor }}
         >
           {projectCode.slice(0, 2)}
         </span>
@@ -94,7 +107,7 @@ function ContextChip() {
         <span className="text-slate-300">·</span>
         <span className={cn("flex items-center gap-1 font-semibold", roleTextTone)}>
           <span className={cn("size-1.5 rounded-full shrink-0", roleBgTone)} />
-          {currentRole}
+          {roleLabel}
         </span>
       </span>
     </Tooltip>
@@ -104,15 +117,16 @@ function ContextChip() {
 function NotificationsMenu() {
   const router = useRouter();
   const { overview } = useLiveApp();
-  const attentionItems = overview?.attention_items || [];
+  const [mounted, setMounted] = React.useState(false);
+  React.useEffect(() => {
+    setMounted(true);
+  }, []);
 
-  const isQueryOpen =
-    typeof window !== "undefined" && window.location.search.includes("openNotifications=true");
+  const attentionItems = overview?.attention_items || [];
 
   return (
     <Dropdown
       width="w-[340px] max-w-[calc(100vw-24px)]"
-      defaultOpen={isQueryOpen}
       trigger={() => (
         <IconButton
           icon={Bell}
@@ -146,7 +160,7 @@ function NotificationsMenu() {
                   key={item.id}
                   onClick={() => {
                     close();
-                    router.push("/overview");
+                    router.push("/dashboard");
                   }}
                   className="flex w-full gap-2.5 px-3 py-2 text-left hover:bg-tint transition-colors cursor-pointer"
                 >
@@ -166,7 +180,7 @@ function NotificationsMenu() {
           <button
             onClick={() => {
               close();
-              router.push("/overview");
+              router.push("/dashboard");
             }}
             className="flex w-full items-center justify-center gap-1 border-t border-line py-2 text-[12px] font-medium text-brand hover:underline cursor-pointer bg-slate-50/50"
           >
@@ -195,7 +209,8 @@ export function TopNav({
     setMounted(true);
   }, []);
 
-  const userName = (mounted && (user?.full_name || user?.email?.split("@")[0])) || "User";
+  const userName =
+    (mounted && (user?.full_name || user?.email?.split("@")[0])) || "User";
   const userEmail = (mounted && user?.email) || "";
 
   return (
@@ -217,7 +232,7 @@ export function TopNav({
       />
 
       {/* Mobile Logo */}
-      <Link href="/overview" className="lg:hidden md:hidden">
+      <Link href="/dashboard" className="lg:hidden md:hidden">
         <Logo size={24} />
       </Link>
 
@@ -251,13 +266,27 @@ export function TopNav({
         {/* Project Role Context Chip */}
         <ContextChip />
 
+        {/* Live / Prototype Data Badge */}
+        <Tooltip
+          content="Production environment connected with live evidence ingestion and PostgreSQL canonical storage."
+          side="bottom"
+        >
+          <span className="mr-1 hidden rounded-full border border-dashed border-slate-300 px-2 py-0.5 text-[11px] font-medium text-slate-500 sm:inline">
+            Production mode
+          </span>
+        </Tooltip>
+
         {/* Notifications Menu */}
         <NotificationsMenu />
 
         {/* Help & Support Menu */}
         <Dropdown
           trigger={() => (
-            <IconButton icon={CircleHelp} label="Help & guides" className="hidden sm:inline-flex" />
+            <IconButton
+              icon={CircleHelp}
+              label="Help & guides"
+              className="hidden sm:inline-flex"
+            />
           )}
         >
           {(close) => (
@@ -266,19 +295,28 @@ export function TopNav({
                 icon={BookOpen}
                 onClick={() => {
                   close();
-                  router.push("/handover");
+                  router.push("/flows");
                 }}
               >
-                Handover workflows
+                Prototype flows
               </MenuItem>
               <MenuItem
-                icon={Workflow}
+                icon={Sparkles}
                 onClick={() => {
                   close();
-                  router.push("/knowledge");
+                  router.push("/brand");
                 }}
               >
-                Knowledge architecture
+                3D Brand & Launch Studio
+              </MenuItem>
+              <MenuItem
+                icon={Palette}
+                onClick={() => {
+                  close();
+                  router.push("/design-system");
+                }}
+              >
+                Design system
               </MenuItem>
               <MenuItem
                 icon={Keyboard}
@@ -326,8 +364,18 @@ export function TopNav({
               <div className="flex items-center gap-2.5 px-3 py-2.5">
                 <Avatar name={userName} size={34} />
                 <div className="min-w-0">
-                  <p className="truncate text-sm font-semibold text-navy" suppressHydrationWarning>{userName}</p>
-                  <p className="truncate text-xs text-muted" suppressHydrationWarning>{userEmail}</p>
+                  <p
+                    className="truncate text-sm font-semibold text-navy"
+                    suppressHydrationWarning
+                  >
+                    {userName}
+                  </p>
+                  <p
+                    className="truncate text-xs text-muted"
+                    suppressHydrationWarning
+                  >
+                    {userEmail}
+                  </p>
                 </div>
               </div>
               <div className="my-1 border-t border-line" />
@@ -335,28 +383,10 @@ export function TopNav({
                 icon={User}
                 onClick={() => {
                   close();
-                  router.push("/settings");
+                  router.push("/settings/profile");
                 }}
               >
                 Profile & account
-              </MenuItem>
-              <MenuItem
-                icon={Users}
-                onClick={() => {
-                  close();
-                  router.push("/team");
-                }}
-              >
-                Team management
-              </MenuItem>
-              <MenuItem
-                icon={ShieldCheck}
-                onClick={() => {
-                  close();
-                  router.push("/audit");
-                }}
-              >
-                Audit logs
               </MenuItem>
               <MenuItem
                 icon={Settings}
@@ -365,7 +395,25 @@ export function TopNav({
                   router.push("/settings");
                 }}
               >
-                Workspace settings
+                Settings
+              </MenuItem>
+              <MenuItem
+                icon={ShieldCheck}
+                onClick={() => {
+                  close();
+                  router.push("/settings/audit-logs");
+                }}
+              >
+                Audit logs
+              </MenuItem>
+              <MenuItem
+                icon={HelpCircle}
+                onClick={() => {
+                  close();
+                  router.push("/flows");
+                }}
+              >
+                Prototype flows
               </MenuItem>
               <div className="my-1 border-t border-line" />
               <MenuItem

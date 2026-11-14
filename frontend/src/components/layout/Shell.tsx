@@ -2,9 +2,10 @@
 
 import React, { type ReactNode } from "react";
 import { AppLayout } from "./AppLayout";
-import { RoleBadge, ROLE_TONE } from "../ui";
+import { RoleBadge, ROLE_TONE } from "./Sidebar";
+import { Toaster } from "../figma-ui/index";
 
-export { RoleBadge, ROLE_TONE };
+export { RoleBadge, ROLE_TONE, Toaster };
 
 /**
  * Shell wrapper providing full Figma Make parity.
