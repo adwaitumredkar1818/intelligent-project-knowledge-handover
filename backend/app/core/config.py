@@ -397,7 +397,7 @@ class RedisSettings(BaseModel):
 
     model_config = ConfigDict(frozen=True)
 
-    enabled: bool = True
+    enabled: bool = False
     url: SecretStr | None = None
     host: str = "127.0.0.1"
     port: int = Field(default=6379, ge=1, le=65535)

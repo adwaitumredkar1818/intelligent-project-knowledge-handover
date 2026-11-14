@@ -236,21 +236,37 @@ function useStoreValue() {
 
   const switchProject = useCallback(
     (id: string, silent = false) => {
-      setCurrentProjectId(id)
+      setCurrentProjectId((prev) => (prev === id ? prev : id))
       const p = projects.find((x) => x.id === id)
       if (p && !silent && id !== currentProjectId) toast(`Switched to ${p.name}`, `Your role here: ${ROLE_LABEL[p.role]}. Navigation and permissions updated.`, 'info')
     },
     [projects, currentProjectId, toast],
   )
 
-  return {
+  const updateHandover = useCallback((id: string, patch: Partial<Handover>) => {
+    setHandovers((hs) => hs.map((h) => (h.id === id ? { ...h, ...patch } : h)))
+  }, [])
+
+  const projectRole = useCallback(
+    (projectId: string): ProjectRole => projects.find((p) => p.id === projectId)?.role ?? 'incoming',
+    [projects],
+  )
+
+  return useMemo(() => ({
     authed, setAuthed, workspaceId, setWorkspaceId, projects: wsProjects, allProjects: projects, setProjects, currentProject, switchProject,
     members, setMembers, sources, setSources, handovers: wsHandovers, setHandovers, jobs, setJobs, notifications, setNotifications,
     verif, setVerif, edits, setEdits, comments, setComments, gapAnswers, setGapAnswers, toasts, toast,
     collapsed, setCollapsed, paletteOpen, setPaletteOpen, perspective, setPerspective,
-    updateHandover: (id: string, patch: Partial<Handover>) => setHandovers((hs) => hs.map((h) => (h.id === id ? { ...h, ...patch } : h))),
-    projectRole: (projectId: string): ProjectRole => projects.find((p) => p.id === projectId)?.role ?? 'incoming',
-  }
+    updateHandover,
+    projectRole,
+  }), [
+    authed, workspaceId, wsProjects, projects, currentProject, switchProject,
+    members, sources, wsHandovers, jobs, notifications,
+    verif, edits, comments, gapAnswers, toasts, toast,
+    collapsed, paletteOpen, perspective,
+    updateHandover,
+    projectRole,
+  ])
 }
 
 export type Store = ReturnType<typeof useStoreValue>

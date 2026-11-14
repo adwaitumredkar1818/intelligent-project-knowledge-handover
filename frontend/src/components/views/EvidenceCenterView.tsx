@@ -1,6 +1,6 @@
 "use client";
 
-import React, { useState } from "react";
+import React, { useState, useMemo, useEffect } from "react";
 import {
   Database,
   UploadCloud,
@@ -56,17 +56,29 @@ function getCategoryBadge(category?: string, sourceType?: string) {
 }
 
 function getProviderBadge(provider?: string, sourceType?: string) {
-  const prov = (provider || sourceType || "").toLowerCase();
-  if (prov === "upload" || prov === "document_upload" || prov === "local_upload") {
+  const p = (provider || "").toLowerCase();
+  const s = (sourceType || "").toLowerCase();
+  if (
+    p === "upload" ||
+    p === "document_upload" ||
+    p === "local_upload" ||
+    p === "pdf" ||
+    p === "docx" ||
+    s === "document_upload" ||
+    s === "local_upload"
+  ) {
     return { label: "UPLOAD", bg: "bg-emerald-50 text-emerald-700 border-emerald-200" };
   }
-  if (prov === "github") {
+  if (p === "github" || s === "github") {
     return { label: "GITHUB", bg: "bg-sky-50 text-sky-700 border-sky-200" };
   }
-  if (prov === "jira") {
+  if (p === "jira" || s === "jira") {
     return { label: "JIRA", bg: "bg-indigo-50 text-indigo-700 border-indigo-200" };
   }
-  return { label: prov.toUpperCase(), bg: "bg-gray-100 text-gray-700 border-gray-200" };
+  if (p === "slack" || s === "slack") {
+    return { label: "SLACK", bg: "bg-purple-50 text-purple-700 border-purple-200" };
+  }
+  return { label: (p || s || "UNKNOWN").toUpperCase(), bg: "bg-gray-100 text-gray-700 border-gray-200" };
 }
 
 export function EvidenceCenterView() {
@@ -134,6 +146,61 @@ export function EvidenceCenterView() {
     setCopiedHash(true);
     setTimeout(() => setCopiedHash(false), 2000);
   };
+
+  const filteredEvidenceList = useMemo(() => {
+    return evidenceList.filter((item) => {
+      // 1. Filter by provider tab
+      if (evidenceFilter.provider && evidenceFilter.provider !== "all") {
+        const prov = (item.provider || "").toLowerCase();
+        const srcType = (item.source_type || "").toLowerCase();
+        const srcProv = (item.source_provider || "").toLowerCase();
+        const cat = (item.category || "").toLowerCase();
+
+        if (evidenceFilter.provider === "upload") {
+          const isDocUpload =
+            prov === "upload" ||
+            prov === "pdf" ||
+            prov === "docx" ||
+            prov === "document_upload" ||
+            prov === "local_upload" ||
+            srcType === "document_upload" ||
+            srcProv === "local_upload" ||
+            cat === "pdf_document" ||
+            cat === "docx_document";
+          if (!isDocUpload) return false;
+        } else if (evidenceFilter.provider === "github") {
+          const isGithub = prov === "github" || srcType === "github" || srcProv === "github";
+          if (!isGithub) return false;
+        } else if (evidenceFilter.provider === "jira") {
+          const isJira = prov === "jira" || srcType === "jira" || srcProv === "jira";
+          if (!isJira) return false;
+        }
+      }
+
+      // 2. Filter by search query
+      if (evidenceFilter.q && evidenceFilter.q.trim()) {
+        const query = evidenceFilter.q.trim().toLowerCase();
+        const matchesTitle = item.title?.toLowerCase().includes(query);
+        const matchesFilename = item.original_filename?.toLowerCase().includes(query);
+        const matchesHash = item.content_hash?.toLowerCase().includes(query);
+        const matchesAuthor = (item.author_name || item.source_author_identity || "").toLowerCase().includes(query);
+        if (!matchesTitle && !matchesFilename && !matchesHash && !matchesAuthor) return false;
+      }
+
+      return true;
+    });
+  }, [evidenceList, evidenceFilter.provider, evidenceFilter.q]);
+
+  // Keep selectedEvidenceId synchronized with the active filtered list
+  useEffect(() => {
+    if (filteredEvidenceList.length > 0) {
+      if (!selectedEvidenceId || !filteredEvidenceList.some((it) => it.id === selectedEvidenceId)) {
+        setSelectedEvidenceId(filteredEvidenceList[0]!.id);
+      }
+    } else {
+      setSelectedEvidenceId(null);
+    }
+  }, [filteredEvidenceList, selectedEvidenceId, setSelectedEvidenceId]);
 
   if (!activeProject) {
     return (
@@ -304,7 +371,7 @@ export function EvidenceCenterView() {
                 <span>Evidence Library</span>
               </div>
               <span className="text-[11px] text-[#69778D] font-medium">
-                {evidenceList.length} items
+                {filteredEvidenceList.length} items
               </span>
             </div>
 
@@ -346,16 +413,52 @@ export function EvidenceCenterView() {
                 <RefreshCw className="w-6 h-6 animate-spin mx-auto mb-2 text-[#4774A9]" />
                 <span>Loading evidence items...</span>
               </div>
-            ) : evidenceList.length === 0 ? (
+            ) : filteredEvidenceList.length === 0 ? (
               <div className="p-8 text-center text-xs text-[#69778D] flex flex-col items-center justify-center h-48">
-                <Database className="w-8 h-8 text-[#69778D] opacity-40 mb-2" />
-                <div className="font-semibold text-[#25334B]">No Evidence Available</div>
-                <p className="text-[11px] max-w-xs mt-1">
-                  Upload an architecture document in Panel A or trigger a GitHub repository sync.
-                </p>
+                {evidenceFilter.provider === "upload" ? (
+                  <>
+                    <UploadCloud className="w-8 h-8 text-[#249E91] opacity-70 mb-2" />
+                    <div className="font-semibold text-[#25334B]">No Uploaded Documents Found</div>
+                    <p className="text-[11px] max-w-xs mt-1 text-[#69778D]">
+                      Upload PDF or DOCX architecture specifications in Panel A.
+                    </p>
+                    <button
+                      type="button"
+                      onClick={() => setIsUploadModalOpen(true)}
+                      className="mt-3 px-3 py-1.5 rounded-lg bg-[#249E91] hover:bg-[#1D8277] text-white text-[11px] font-semibold flex items-center gap-1.5 transition-colors shadow-2xs"
+                    >
+                      <UploadCloud className="w-3.5 h-3.5" />
+                      <span>Upload Document</span>
+                    </button>
+                  </>
+                ) : evidenceFilter.provider === "github" ? (
+                  <>
+                    <GitBranch className="w-8 h-8 text-[#4774A9] opacity-70 mb-2" />
+                    <div className="font-semibold text-[#25334B]">No GitHub Evidence Found</div>
+                    <p className="text-[11px] max-w-xs mt-1 text-[#69778D]">
+                      Connect a repository in Panel A or trigger a sync to ingest commits &amp; PRs.
+                    </p>
+                  </>
+                ) : evidenceFilter.provider === "jira" ? (
+                  <>
+                    <Database className="w-8 h-8 text-indigo-500 opacity-70 mb-2" />
+                    <div className="font-semibold text-[#25334B]">No Jira Evidence Found</div>
+                    <p className="text-[11px] max-w-xs mt-1 text-[#69778D]">
+                      Connect a Jira project in Panel A or trigger a sync to ingest issues.
+                    </p>
+                  </>
+                ) : (
+                  <>
+                    <Database className="w-8 h-8 text-[#69778D] opacity-40 mb-2" />
+                    <div className="font-semibold text-[#25334B]">No Evidence Available</div>
+                    <p className="text-[11px] max-w-xs mt-1">
+                      Upload an architecture document in Panel A or trigger a GitHub repository sync.
+                    </p>
+                  </>
+                )}
               </div>
             ) : (
-              evidenceList.map((item) => {
+              filteredEvidenceList.map((item) => {
                 const isSelected = selectedEvidenceId === item.id;
                 const provBadge = getProviderBadge(item.provider, item.source_type);
                 const catBadge = getCategoryBadge(item.category, item.source_type);

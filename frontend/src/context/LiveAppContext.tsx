@@ -6,6 +6,7 @@ import React, {
   useState,
   useEffect,
   useCallback,
+  useRef,
   type ReactNode,
 } from "react";
 import { api, setStoredToken, ApiError } from "../lib/api";
@@ -520,12 +521,15 @@ export function LiveAppProvider({ children }: { children: ReactNode }) {
   }, [user, activeProject, activeOrg]);
 
   // Load evidence list and metrics
+  const isFetchingEvidenceRef = useRef(false);
   const refreshEvidence = useCallback(async () => {
     if (!user || !activeProject) {
       setEvidenceList([]);
       setEvidenceMetrics(null);
       return;
     }
+    if (isFetchingEvidenceRef.current) return;
+    isFetchingEvidenceRef.current = true;
     const currentProjectId = activeProject.id;
     setIsLoadingEvidence(true);
     try {
@@ -556,6 +560,7 @@ export function LiveAppProvider({ children }: { children: ReactNode }) {
       console.error("Error loading evidence:", err);
     } finally {
       setIsLoadingEvidence(false);
+      isFetchingEvidenceRef.current = false;
     }
   }, [user?.id, activeProject?.id, evidenceFilter.provider, evidenceFilter.q]);
 
@@ -742,18 +747,19 @@ export function LiveAppProvider({ children }: { children: ReactNode }) {
     refreshHandovers,
   ]);
 
-  // Load evidence only when active project or filters change
+  // Load evidence only when active project or filters change with debouncing for search
   useEffect(() => {
     if (!currentUserId || !activeProjectId) return;
     let active = true;
-    void Promise.resolve().then(() => {
+    const timer = setTimeout(() => {
       if (!active) return;
       void refreshEvidence();
-    });
+    }, evidenceFilter.q ? 250 : 0);
     return () => {
       active = false;
+      clearTimeout(timer);
     };
-  }, [currentUserId, activeProjectId, refreshEvidence]);
+  }, [currentUserId, activeProjectId, evidenceFilter.provider, evidenceFilter.q, refreshEvidence]);
 
   // Auth actions
   const login = async (email: string, password: string) => {

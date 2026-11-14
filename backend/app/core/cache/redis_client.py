@@ -30,6 +30,7 @@ class RedisConnectionManager:
         """Initialize the shared bounded connection pool."""
         if not self._cfg.enabled or redis is None:
             logger.info("Redis cache layer is disabled via REDIS_ENABLED=false or redis library unavailable.")
+            self._initialized = True
             return
 
         try:
@@ -77,14 +78,13 @@ class RedisConnectionManager:
                 self._cfg.port,
                 exc,
             )
-            self._initialized = False
+            self._initialized = True
 
     def get_client(self) -> redis.Redis | None:
         """Return the active Redis client or None if unavailable/disabled."""
-        if not self._cfg.enabled:
+        if not self._cfg.enabled or redis is None:
             return None
-        if not self._initialized or self._client is None:
-            # Attempt lazy reconnection if previous attempt failed
+        if not self._initialized:
             try:
                 self.initialize()
             except Exception:
