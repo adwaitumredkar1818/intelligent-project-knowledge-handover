@@ -30,7 +30,7 @@ def test_db_engine_and_models_metadata_wiring() -> None:
 
     settings = build_test_settings(postgres_ssl_mode="require")
     assert build_db_connect_args(settings) == {
-        "connect_timeout": 5,
+        "connect_timeout": settings.postgres_connect_timeout_seconds,
         "sslmode": "require",
     }
     assert build_db_connect_args(
