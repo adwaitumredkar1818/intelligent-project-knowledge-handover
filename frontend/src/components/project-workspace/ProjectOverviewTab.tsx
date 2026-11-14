@@ -19,7 +19,6 @@ import {
   CardHeader,
   Button,
   Badge,
-  Avatar,
   StatusBadge,
   SeverityBadge,
   PersonCell,
